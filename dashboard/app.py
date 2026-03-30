@@ -1,4 +1,4 @@
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, send_file
 from flask_cors import CORS
 import os
 import sys
@@ -10,7 +10,7 @@ from src.orchestrator.orchestrator import Orchestrator
 from src.database.db import init_db
 from src.api.llm_provider import LLMProvider
 
-app = Flask(__name__)
+app = Flask(__name__, static_folder=os.path.dirname(__file__))
 CORS(app)
 
 orchestrator = None
@@ -23,6 +23,18 @@ def initialize():
     if orchestrator is None:
         init_db()
         orchestrator = Orchestrator()
+
+
+@app.route('/', methods=['GET'])
+def index():
+    """Serve the dashboard HTML"""
+    return send_file(os.path.join(os.path.dirname(__file__), 'index.html'))
+
+
+@app.route('/agent-detail.html', methods=['GET'])
+def agent_detail():
+    """Serve the agent detail page"""
+    return send_file(os.path.join(os.path.dirname(__file__), 'agent-detail.html'))
 
 
 @app.route('/health', methods=['GET'])
@@ -50,6 +62,59 @@ def get_agent(agent_id):
         return jsonify({'error': 'Agent not found'}), 404
 
 
+@app.route('/api/agents/<int:agent_id>/posts', methods=['GET'])
+def get_agent_posts(agent_id):
+    """Get all posts for a specific agent"""
+    try:
+        from src.database.models import Content
+        posts = orchestrator.db.query(Content).filter(Content.agent_id == agent_id).all()
+        posts_data = [
+            {
+                'id': p.id,
+                'title': p.title,
+                'body': p.body,
+                'platform': p.platform,
+                'status': p.status,
+                'hashtags': p.hashtags,
+                'mentions': p.mentions,
+                'created_at': p.created_at.isoformat() if p.created_at else None,
+                'scheduled_at': p.scheduled_at.isoformat() if p.scheduled_at else None,
+                'published_at': p.published_at.isoformat() if p.published_at else None,
+            }
+            for p in posts
+        ]
+        return jsonify({'agent_id': agent_id, 'posts': posts_data}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 400
+
+
+@app.route('/api/agents/<int:agent_id>/accounts', methods=['GET'])
+def get_agent_accounts(agent_id):
+    """Get all social media accounts connected to an agent"""
+    try:
+        from src.database.models import SocialMediaAccount
+        accounts = orchestrator.db.query(SocialMediaAccount).filter(
+            SocialMediaAccount.agent_id == agent_id
+        ).all()
+
+        accounts_data = [
+            {
+                'id': a.id,
+                'platform': a.platform,
+                'username': a.username,
+                'followers': a.followers,
+                'is_verified': a.is_verified,
+                'last_sync': a.last_sync.isoformat() if a.last_sync else None,
+                'is_connected': a.access_token is not None,
+                'created_at': a.created_at.isoformat() if a.created_at else None,
+            }
+            for a in accounts
+        ]
+        return jsonify({'agent_id': agent_id, 'accounts': accounts_data}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 400
+
+
 @app.route('/api/agents', methods=['POST'])
 def create_agent():
     """Create new agent"""
@@ -70,6 +135,38 @@ def create_agent():
     )
 
     return jsonify({'agent_id': agent_id, 'message': 'Agent created successfully'}), 201
+
+
+@app.route('/api/agents/<int:agent_id>', methods=['PUT'])
+def update_agent(agent_id):
+    """Update an existing agent"""
+    data = request.json
+
+    try:
+        # Convert fields string to list if needed
+        fields = data.get('fields')
+        if isinstance(fields, str):
+            fields = [f.strip() for f in fields.split(',') if f.strip()]
+
+        orchestrator.update_agent(
+            agent_id=agent_id,
+            name=data.get('name'),
+            brand=data.get('brand'),
+            persona=data.get('persona'),
+            tone_of_voice=data.get('tone_of_voice'),
+            fields=fields,
+            bio=data.get('bio'),
+            avatar_url=data.get('avatar_url')
+        )
+
+        return jsonify({
+            'agent_id': agent_id,
+            'message': 'Agent updated successfully'
+        }), 200
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 404
+    except Exception as e:
+        return jsonify({'error': str(e)}), 400
 
 
 # ==================== CONTENT ====================

@@ -76,7 +76,7 @@ class LLMProvider:
         ]
 
         response = self.client.messages.create(
-            model="claude-3-5-sonnet-20241022",
+            model="claude-sonnet-4-6",
             max_tokens=max_tokens,
             temperature=temperature,
             system=system_prompt or "You are a helpful social media content creator.",

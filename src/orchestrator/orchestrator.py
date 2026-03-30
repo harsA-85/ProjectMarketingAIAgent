@@ -58,6 +58,49 @@ class Orchestrator:
 
         return agent.id
 
+    def update_agent(
+        self,
+        agent_id: int,
+        name: Optional[str] = None,
+        brand: Optional[str] = None,
+        persona: Optional[str] = None,
+        tone_of_voice: Optional[str] = None,
+        fields: Optional[List[str]] = None,
+        bio: Optional[str] = None,
+        avatar_url: Optional[str] = None
+    ) -> bool:
+        """Update an existing agent"""
+        agent = self.db.query(Agent).filter(Agent.id == agent_id).first()
+        if not agent:
+            raise ValueError(f"Agent {agent_id} not found")
+
+        # Update only provided fields
+        if name is not None:
+            agent.name = name
+        if brand is not None:
+            agent.brand = brand
+        if persona is not None:
+            agent.persona = persona
+        if tone_of_voice is not None:
+            agent.tone_of_voice = tone_of_voice
+        if fields is not None:
+            agent.fields = fields
+        if bio is not None:
+            agent.bio = bio
+        if avatar_url is not None:
+            agent.avatar_url = avatar_url
+
+        # Update timestamp
+        agent.updated_at = datetime.utcnow()
+
+        self.db.commit()
+        print(f"Agent updated: {agent.name} (ID: {agent.id})")
+
+        # Reload agent in orchestrator
+        self.agents[agent_id] = BaseAgent(agent_id)
+
+        return True
+
     def get_agent(self, agent_id: int) -> Optional[BaseAgent]:
         """Get agent by ID"""
         if agent_id not in self.agents:
