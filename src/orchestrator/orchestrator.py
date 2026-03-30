@@ -101,6 +101,23 @@ class Orchestrator:
 
         return True
 
+    def delete_agent(self, agent_id: int) -> bool:
+        """Soft delete an agent (mark as inactive)"""
+        agent = self.db.query(Agent).filter(Agent.id == agent_id).first()
+        if not agent:
+            raise ValueError(f"Agent {agent_id} not found")
+
+        agent.is_active = False
+        agent.updated_at = datetime.utcnow()
+        self.db.commit()
+
+        # Remove from orchestrator
+        if agent_id in self.agents:
+            del self.agents[agent_id]
+
+        print(f"Agent deleted: {agent.name} (ID: {agent.id})")
+        return True
+
     def get_agent(self, agent_id: int) -> Optional[BaseAgent]:
         """Get agent by ID"""
         if agent_id not in self.agents:

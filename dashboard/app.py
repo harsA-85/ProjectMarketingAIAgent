@@ -169,6 +169,21 @@ def update_agent(agent_id):
         return jsonify({'error': str(e)}), 400
 
 
+@app.route('/api/agents/<int:agent_id>', methods=['DELETE'])
+def delete_agent(agent_id):
+    """Delete an agent (soft delete - marks as inactive)"""
+    try:
+        orchestrator.delete_agent(agent_id)
+        return jsonify({
+            'agent_id': agent_id,
+            'message': 'Agent deleted successfully'
+        }), 200
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 404
+    except Exception as e:
+        return jsonify({'error': str(e)}), 400
+
+
 # ==================== CONTENT ====================
 
 @app.route('/api/content/generate', methods=['POST'])
