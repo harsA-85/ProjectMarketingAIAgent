@@ -1,35 +1,36 @@
 import os
-import json
 import base64
-import requests
-from typing import List, Dict, Optional
+from typing import List, Optional
 
 
 class GeminiImageGenerator:
-    """Generates images using Google Gemini Imagen API"""
+    """Generates images using Google Gemini gemini-3.1-flash-image-preview"""
 
     def __init__(self, api_key: Optional[str] = None):
         self.api_key = api_key or os.getenv('GEMINI_API_KEY')
         if not self.api_key:
             raise ValueError("Gemini API key not found")
 
+        from google import genai
+        self.client = genai.Client(api_key=self.api_key)
+
     def generate_image(self, prompt: str) -> Optional[str]:
         """Generate a single image and return as base64 string"""
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-image-preview:generateContent?key={self.api_key}"
-
-        payload = {
-            "contents": [{"parts": [{"text": prompt}]}],
-            "generationConfig": {"responseModalities": ["TEXT", "IMAGE"]}
-        }
-
         try:
-            response = requests.post(url, json=payload, timeout=30)
-            response.raise_for_status()
-            data = response.json()
+            from google.genai import types
 
-            for part in data.get("candidates", [{}])[0].get("content", {}).get("parts", []):
-                if "inlineData" in part:
-                    return part["inlineData"]["data"]
+            response = self.client.models.generate_content(
+                model="gemini-3.1-flash-image-preview",
+                contents=[prompt],
+                config=types.GenerateContentConfig(
+                    response_modalities=["IMAGE", "TEXT"]
+                )
+            )
+
+            for part in response.parts:
+                if part.inline_data and part.inline_data.mime_type.startswith("image/"):
+                    return base64.b64encode(part.inline_data.data).decode('utf-8')
+
         except Exception as e:
             print(f"Image generation error: {e}")
 
@@ -57,16 +58,14 @@ class GeminiImageGenerator:
         styles = {
             "instagram": "high-quality Instagram photo, vibrant colors, aesthetically pleasing, lifestyle photography",
             "twitter": "bold graphic design, eye-catching, professional, clean modern design",
-            "tiktok": "dynamic energetic visual, bold colors, trendy Gen-Z aesthetic, vertical format"
+            "tiktok": "dynamic energetic visual, bold colors, trendy aesthetic, vertical format"
         }
         style = styles.get(platform, "professional marketing photo")
-
-        base_prompt = f"{style}, for brand '{brand}', topic: {topic}, persona: {persona}. NO text or words in image."
+        base = f"{style}, brand '{brand}', topic: {topic}. No text or words in the image."
 
         prompts = [
-            f"Main hero image: {base_prompt} Inspiring and bold, wide shot.",
-            f"Detail shot: {base_prompt} Close-up, showing emotion and engagement.",
-            f"Action/lifestyle: {base_prompt} People or product in real-world context.",
+            f"Main hero image: {base} Wide shot, inspiring and bold.",
+            f"Detail shot: {base} Close-up, emotion and engagement.",
+            f"Lifestyle action: {base} Real-world context, people or product.",
         ]
-
         return prompts[:num_images]
