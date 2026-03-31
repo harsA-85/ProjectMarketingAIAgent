@@ -248,16 +248,42 @@ class Orchestrator:
 
     def get_all_agents_dashboard(self) -> Dict[str, Any]:
         """Get overview dashboard for all agents"""
-        total_agents = len(self.agents)
+        # Get agents directly from DB instead of from self.agents (which may have load errors)
+        db_agents = self.db.query(Agent).filter(Agent.is_active == True).all()
+        total_agents = len(db_agents)
         total_posts = self.db.query(Content).count()
         total_interactions = self.db.query(Interaction).count()
 
         agents_data = []
-        for agent_id in self.agents.keys():
+        for agent in db_agents:
             try:
-                agents_data.append(self.get_agent_dashboard(agent_id))
-            except:
-                pass
+                # Load agent if not already in memory
+                if agent.id not in self.agents:
+                    self.agents[agent.id] = BaseAgent(agent.id)
+                agents_data.append(self.get_agent_dashboard(agent.id))
+            except Exception as e:
+                # If agent fails to load, still return basic info
+                agents_data.append({
+                    'agent_id': agent.id,
+                    'agent_name': agent.name,
+                    'brand': agent.brand,
+                    'persona': agent.persona,
+                    'tone': agent.tone_of_voice,
+                    'fields': agent.fields,
+                    'analytics': {},
+                    'draft_posts': self.db.query(Content).filter(
+                        Content.agent_id == agent.id,
+                        Content.status == 'draft'
+                    ).count(),
+                    'scheduled_posts': self.db.query(Content).filter(
+                        Content.agent_id == agent.id,
+                        Content.status == 'scheduled'
+                    ).count(),
+                    'pending_interactions': self.db.query(Interaction).filter(
+                        Interaction.agent_id == agent.id,
+                        Interaction.status == 'pending'
+                    ).count()
+                })
 
         return {
             'total_agents': total_agents,

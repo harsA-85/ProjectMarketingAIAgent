@@ -3,8 +3,10 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, Session
 from .models import Base
 
-# Use absolute path for persistent database
-DB_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'marketing_ai.db')
+# Use absolute path for persistent database (project root)
+# __file__ is src/database/db.py, go up 3 levels to project root
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+DB_PATH = os.path.join(PROJECT_ROOT, 'marketing_ai.db')
 DATABASE_URL = os.getenv(
     'DATABASE_URL',
     f'sqlite:///{DB_PATH}'
