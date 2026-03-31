@@ -173,7 +173,8 @@ def update_agent(agent_id):
             tone_of_voice=data.get('tone_of_voice'),
             fields=fields,
             bio=data.get('bio'),
-            avatar_url=data.get('avatar_url')
+            avatar_url=data.get('avatar_url'),
+            image_style=data.get('image_style')
         )
 
         return jsonify({

@@ -451,6 +451,21 @@
                     <label>Bio</label>
                     <textarea id="bio"></textarea>
                 </div>
+                <div class="form-group">
+                    <label>Image Style (for AI-generated visuals)</label>
+                    <select id="imageStyle">
+                        <option value="ultra realistic photography">📷 Ultra Realistic Photography</option>
+                        <option value="cinematic film photography, dramatic lighting">🎬 Cinematic / Film</option>
+                        <option value="minimalist clean graphic design, flat colors">🎨 Minimalist / Flat Design</option>
+                        <option value="bold vibrant graphic design, pop art style">🎭 Bold / Pop Art</option>
+                        <option value="luxury high-end editorial photography">💎 Luxury / Editorial</option>
+                        <option value="cartoon illustration, colorful and fun">🖍️ Cartoon / Illustration</option>
+                        <option value="3D render, modern and sleek">🧊 3D Render</option>
+                        <option value="dark moody aesthetic, high contrast">🌑 Dark / Moody</option>
+                        <option value="warm vintage film photography, retro tones">🎞️ Vintage / Retro</option>
+                        <option value="futuristic neon cyberpunk aesthetic">🌆 Futuristic / Neon</option>
+                    </select>
+                </div>
                 <div class="form-buttons">
                     <button type="button" class="btn-cancel" onclick="closeEditModal()">Cancel</button>
                     <button type="submit" class="btn-submit">Save Changes</button>
@@ -511,6 +526,10 @@
             document.getElementById('tone').value = agentData.tone;
             document.getElementById('fields').value = agentData.fields.join(', ');
             document.getElementById('bio').value = agentData.bio || '';
+            const styleSelect = document.getElementById('imageStyle');
+            if (agentData.image_style) {
+                styleSelect.value = agentData.image_style;
+            }
 
             document.getElementById('editModal').classList.add('show');
         }
@@ -594,7 +613,8 @@
                 persona: document.getElementById('persona').value,
                 tone_of_voice: document.getElementById('tone').value,
                 fields: document.getElementById('fields').value,
-                bio: document.getElementById('bio').value
+                bio: document.getElementById('bio').value,
+                image_style: document.getElementById('imageStyle').value
             };
 
             try {

@@ -67,7 +67,8 @@ class Orchestrator:
         tone_of_voice: Optional[str] = None,
         fields: Optional[List[str]] = None,
         bio: Optional[str] = None,
-        avatar_url: Optional[str] = None
+        avatar_url: Optional[str] = None,
+        image_style: Optional[str] = None
     ) -> bool:
         """Update an existing agent"""
         agent = self.db.query(Agent).filter(Agent.id == agent_id).first()
@@ -89,6 +90,8 @@ class Orchestrator:
             agent.bio = bio
         if avatar_url is not None:
             agent.avatar_url = avatar_url
+        if image_style is not None:
+            agent.image_style = image_style
 
         # Update timestamp
         agent.updated_at = datetime.utcnow()
@@ -229,6 +232,8 @@ class Orchestrator:
             'persona': agent.agent.persona,
             'tone': agent.agent.tone_of_voice,
             'fields': agent.agent.fields,
+            'image_style': agent.agent.image_style or 'ultra realistic photography',
+            'bio': agent.agent.bio or '',
             'analytics': analytics,
             'draft_posts': self.db.query(Content).filter(
                 Content.agent_id == agent_id,

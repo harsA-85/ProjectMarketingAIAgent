@@ -149,6 +149,7 @@ Make it authentic, engaging, and aligned with the brand voice."""
                     brand=self.agent.brand,
                     persona=self.agent.persona,
                     topic=topic,
+                    image_style=getattr(self.agent, 'image_style', None) or 'ultra realistic photography',
                     num_images=3
                 )
                 images = img_gen.generate_carousel(prompts)

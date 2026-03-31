@@ -18,6 +18,7 @@ class Agent(Base):
     avatar_url = Column(String(500), nullable=True)
     bio = Column(Text, nullable=True)
     fields = Column(JSON, default=[])  # List of topics/fields agent focuses on
+    image_style = Column(String(255), nullable=True, default='ultra realistic photography')  # Visual style for AI images
 
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)

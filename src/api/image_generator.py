@@ -52,20 +52,21 @@ class GeminiImageGenerator:
         brand: str,
         persona: str,
         topic: str,
+        image_style: str = 'ultra realistic photography',
         num_images: int = 3
     ) -> List[str]:
         """Build visual prompts for carousel images"""
-        styles = {
-            "instagram": "high-quality Instagram photo, vibrant colors, aesthetically pleasing, lifestyle photography",
-            "twitter": "bold graphic design, eye-catching, professional, clean modern design",
-            "tiktok": "dynamic energetic visual, bold colors, trendy aesthetic, vertical format"
+        platform_context = {
+            "instagram": "square format, aesthetically pleasing, high contrast",
+            "twitter": "wide format, bold and eye-catching",
+            "tiktok": "vertical format, dynamic and energetic"
         }
-        style = styles.get(platform, "professional marketing photo")
-        base = f"{style}, brand '{brand}', topic: {topic}. No text or words in the image."
+        context = platform_context.get(platform, "professional")
+        base = f"{image_style}, {context}, brand '{brand}', topic: {topic}. No text or words in the image."
 
         prompts = [
-            f"Main hero image: {base} Wide shot, inspiring and bold.",
+            f"Hero image: {base} Wide shot, inspiring and bold.",
             f"Detail shot: {base} Close-up, emotion and engagement.",
-            f"Lifestyle action: {base} Real-world context, people or product.",
+            f"Lifestyle: {base} Real-world context, people or product in action.",
         ]
         return prompts[:num_images]
