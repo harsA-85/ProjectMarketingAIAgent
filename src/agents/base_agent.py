@@ -76,20 +76,31 @@ Always stay true to the brand voice and persona. Create authentic, valuable cont
 Topic: {topic}
 Max length: {max_length} characters
 
-Include relevant hashtags and emojis. Format the response as JSON with:
-- "caption": the main post text
-- "hashtags": list of hashtags
-- "emojis": list of relevant emojis
-- "engagement_tips": how to maximize engagement
+Respond with ONLY a valid JSON object, no markdown, no code blocks, no explanation. Use this exact format:
+{{"caption": "the post text here", "hashtags": ["tag1", "tag2"], "emojis": ["🔥", "💡"], "engagement_tips": "tip here"}}
 
 Make it authentic, engaging, and aligned with the brand voice."""
 
     def _parse_content_response(self, response: str, platform: str) -> Dict[str, Any]:
         """Parse LLM response into structured content"""
+        import re
+        data = None
+
+        # Strip markdown code blocks like ```json ... ```
+        cleaned = re.sub(r'```(?:json)?\s*', '', response).strip().rstrip('`').strip()
+
         try:
-            import json
-            data = json.loads(response)
+            data = json.loads(cleaned)
         except json.JSONDecodeError:
+            # Try to find JSON object anywhere in the string
+            match = re.search(r'\{.*\}', cleaned, re.DOTALL)
+            if match:
+                try:
+                    data = json.loads(match.group())
+                except json.JSONDecodeError:
+                    pass
+
+        if not data:
             data = {
                 "caption": response,
                 "hashtags": [],
