@@ -453,7 +453,8 @@
                 </div>
                 <div class="form-group">
                     <label>Image Style (for AI-generated visuals)</label>
-                    <select id="imageStyle">
+                    <select id="imageStyle" onchange="onStylePresetChange()">
+                        <option value="">— Pick a preset —</option>
                         <option value="ultra realistic photography">📷 Ultra Realistic Photography</option>
                         <option value="cinematic film photography, dramatic lighting">🎬 Cinematic / Film</option>
                         <option value="minimalist clean graphic design, flat colors">🎨 Minimalist / Flat Design</option>
@@ -465,6 +466,8 @@
                         <option value="warm vintage film photography, retro tones">🎞️ Vintage / Retro</option>
                         <option value="futuristic neon cyberpunk aesthetic">🌆 Futuristic / Neon</option>
                     </select>
+                    <input type="text" id="imageStyleCustom" placeholder="Or describe your own style... e.g. 'hyperrealistic 3D with neon accents, cinematic depth of field'" style="margin-top: 8px;">
+                    <small style="color:#999; font-size:11px;">Custom text overrides the preset above.</small>
                 </div>
                 <div class="form-buttons">
                     <button type="button" class="btn-cancel" onclick="closeEditModal()">Cancel</button>
@@ -527,8 +530,13 @@
             document.getElementById('fields').value = agentData.fields.join(', ');
             document.getElementById('bio').value = agentData.bio || '';
             const styleSelect = document.getElementById('imageStyle');
+            const styleCustom = document.getElementById('imageStyleCustom');
             if (agentData.image_style) {
+                // Try to match preset, otherwise put in custom field
                 styleSelect.value = agentData.image_style;
+                if (!styleSelect.value) {
+                    styleCustom.value = agentData.image_style;
+                }
             }
 
             document.getElementById('editModal').classList.add('show');
@@ -558,6 +566,13 @@
                 }
             } catch (error) {
                 alert('Error deleting agent: ' + error.message);
+            }
+        }
+
+        function onStylePresetChange() {
+            const preset = document.getElementById('imageStyle').value;
+            if (preset) {
+                document.getElementById('imageStyleCustom').value = '';
             }
         }
 
@@ -614,7 +629,7 @@
                 tone_of_voice: document.getElementById('tone').value,
                 fields: document.getElementById('fields').value,
                 bio: document.getElementById('bio').value,
-                image_style: document.getElementById('imageStyle').value
+                image_style: document.getElementById('imageStyleCustom').value.trim() || document.getElementById('imageStyle').value
             };
 
             try {
