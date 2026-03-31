@@ -144,103 +144,102 @@
             font-size: 16px;
         }
 
-        /* Social Media Post Previews */
+        /* Posts Grid */
         .posts-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
-            gap: 20px;
+            grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+            gap: 24px;
             margin-top: 20px;
-        }
-
-        .social-preview {
-            border-radius: 12px;
-            overflow: hidden;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
-            background: white;
-        }
-
-        .preview-header {
-            padding: 12px 16px;
-            border-bottom: 1px solid #eee;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            background: #f9f9f9;
-        }
-
-        .preview-platform {
-            font-weight: bold;
-            font-size: 12px;
+            align-items: start;
         }
 
         .preview-status {
             display: inline-block;
-            padding: 4px 8px;
-            border-radius: 4px;
-            font-size: 11px;
+            padding: 3px 8px;
+            border-radius: 20px;
+            font-size: 10px;
             font-weight: bold;
+            letter-spacing: 0.5px;
         }
-
-        .status-draft { background: #ffc107; color: black; }
+        .status-draft { background: #ffc107; color: #000; }
         .status-published { background: #28a745; color: white; }
         .status-scheduled { background: #17a2b8; color: white; }
 
-        /* Instagram Style */
-        .instagram-preview .preview-content {
-            padding: 16px;
-            font-size: 14px;
-            line-height: 1.5;
-            color: #333;
-            background: white;
+        /* ── CAROUSEL ── */
+        .carousel { position: relative; background: #000; overflow: hidden; aspect-ratio: 1; }
+        .carousel-slide { display: none; width: 100%; height: 100%; }
+        .carousel-slide.active { display: block; }
+        .carousel-slide img { width: 100%; height: 100%; object-fit: cover; }
+        .carousel-btn {
+            position: absolute; top: 50%; transform: translateY(-50%);
+            background: rgba(255,255,255,0.85); border: none; border-radius: 50%;
+            width: 28px; height: 28px; font-size: 18px; cursor: pointer; line-height: 1;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .carousel-btn.prev { left: 8px; }
+        .carousel-btn.next { right: 8px; }
+        .carousel-dots { position: absolute; bottom: 8px; left: 50%; transform: translateX(-50%); display: flex; gap: 4px; }
+        .dot { width: 6px; height: 6px; border-radius: 50%; background: rgba(255,255,255,0.5); cursor: pointer; }
+        .dot.active { background: white; }
+        .carousel-count {
+            position: absolute; top: 10px; right: 10px;
+            background: rgba(0,0,0,0.5); color: white;
+            font-size: 11px; padding: 2px 8px; border-radius: 10px;
         }
 
-        .instagram-preview .hashtags {
-            color: #0095f6;
-            margin-top: 10px;
-        }
+        /* ── INSTAGRAM ── */
+        .ig-card { background: #fff; border: 1px solid #dbdbdb; border-radius: 8px; max-width: 400px; font-family: -apple-system, sans-serif; overflow: hidden; }
+        .ig-header { display: flex; align-items: center; padding: 10px 12px; gap: 10px; }
+        .ig-avatar { width: 36px; height: 36px; border-radius: 50%; background: linear-gradient(45deg, #f09433,#e6683c,#dc2743,#cc2366,#bc1888); display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 15px; flex-shrink: 0; }
+        .ig-user-info { flex: 1; }
+        .ig-username { font-size: 13px; font-weight: 600; color: #000; }
+        .ig-location { font-size: 11px; color: #666; }
+        .ig-menu { font-size: 18px; color: #000; cursor: pointer; }
+        .ig-placeholder { background: #f0f0f0; aspect-ratio: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 40px; gap: 8px; }
+        .ig-actions { display: flex; align-items: center; padding: 8px 12px; gap: 14px; }
+        .ig-action { font-size: 22px; cursor: pointer; }
+        .ig-save { margin-left: auto; font-size: 22px; cursor: pointer; }
+        .ig-body { padding: 0 12px 12px; }
+        .ig-likes { font-size: 13px; font-weight: 600; color: #000; display: block; margin-bottom: 4px; }
+        .ig-caption { font-size: 13px; color: #000; line-height: 1.5; }
+        .ig-hashtags { font-size: 13px; color: #0095f6; margin-top: 4px; }
+        .ig-time { font-size: 10px; color: #8e8e8e; margin-top: 6px; text-transform: uppercase; letter-spacing: 0.5px; }
 
-        /* Twitter Style */
-        .twitter-preview .preview-content {
-            padding: 16px;
-            font-size: 15px;
-            line-height: 1.4;
-            color: #0f1419;
-            background: white;
-        }
+        /* ── TWITTER/X ── */
+        .tw-card { background: #fff; border: 1px solid #e1e8ed; border-radius: 12px; padding: 16px; font-family: -apple-system, sans-serif; overflow: hidden; }
+        .tw-header { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 10px; }
+        .tw-avatar { width: 40px; height: 40px; border-radius: 50%; background: #1d9bf0; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 16px; flex-shrink: 0; }
+        .tw-user-info { flex: 1; }
+        .tw-name { font-size: 14px; font-weight: 700; color: #0f1419; }
+        .tw-verified { color: #1d9bf0; }
+        .tw-handle { font-size: 13px; color: #536471; }
+        .tw-x-logo { font-size: 18px; color: #000; font-weight: bold; }
+        .tw-body { font-size: 15px; color: #0f1419; line-height: 1.5; margin-bottom: 10px; white-space: pre-wrap; }
+        .tw-hashtags { color: #1d9bf0; font-size: 14px; margin-bottom: 10px; }
+        .tw-images { display: grid; grid-template-columns: 1fr 1fr; gap: 2px; border-radius: 12px; overflow: hidden; margin-bottom: 10px; }
+        .tw-images img { width: 100%; aspect-ratio: 1; object-fit: cover; }
+        .tw-images img:only-child { grid-column: 1/-1; aspect-ratio: 16/9; }
+        .tw-meta { font-size: 13px; color: #536471; padding: 10px 0; border-top: 1px solid #e1e8ed; border-bottom: 1px solid #e1e8ed; display: flex; align-items: center; }
+        .tw-actions { display: flex; justify-content: space-between; padding-top: 8px; }
+        .tw-action { font-size: 13px; color: #536471; cursor: pointer; }
 
-        .twitter-preview .preview-content {
-            max-height: 250px;
-            overflow-y: auto;
-        }
-
-        /* TikTok Style */
-        .tiktok-preview {
-            background: #000;
-        }
-
-        .tiktok-preview .preview-header {
-            background: #000;
-            color: white;
-            border-bottom-color: #333;
-        }
-
-        .tiktok-preview .preview-content {
-            padding: 16px;
-            color: white;
-            background: #000;
-        }
-
-        .preview-date {
-            font-size: 11px;
-            color: #999;
-            margin-top: 12px;
-            padding-top: 12px;
-            border-top: 1px solid #eee;
-        }
-
-        .tiktok-preview .preview-date {
-            border-top-color: #333;
-        }
+        /* ── TIKTOK ── */
+        .tt-card { position: relative; width: 100%; aspect-ratio: 9/16; max-height: 560px; border-radius: 12px; overflow: hidden; background: #000; font-family: -apple-system, sans-serif; }
+        .tt-bg { width: 100%; height: 100%; background: linear-gradient(135deg, #1a1a2e, #16213e, #0f3460); }
+        .tt-bg-img { width: 100%; height: 100%; }
+        .tt-bg-img img { width: 100%; height: 100%; object-fit: cover; }
+        .tt-overlay { position: absolute; inset: 0; display: flex; flex-direction: column; padding: 12px; }
+        .tt-top { display: flex; justify-content: space-between; align-items: center; }
+        .tt-following { color: white; font-size: 13px; font-weight: 600; border: 1px solid white; padding: 3px 10px; border-radius: 4px; }
+        .tt-right-actions { position: absolute; right: 10px; bottom: 120px; display: flex; flex-direction: column; align-items: center; gap: 18px; }
+        .tt-action-btn { color: white; text-align: center; font-size: 22px; cursor: pointer; line-height: 1.2; }
+        .tt-action-btn span { font-size: 11px; display: block; }
+        .tt-avatar { width: 40px; height: 40px; border-radius: 50%; background: linear-gradient(45deg,#fe2c55,#25f4ee); display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; border: 2px solid white; }
+        .tt-bottom { position: absolute; bottom: 0; left: 0; right: 60px; padding: 0 12px 20px; background: linear-gradient(transparent, rgba(0,0,0,0.7)); }
+        .tt-username { color: white; font-weight: 700; font-size: 15px; margin-bottom: 6px; }
+        .tt-caption { color: rgba(255,255,255,0.9); font-size: 13px; line-height: 1.4; margin-bottom: 6px; }
+        .tt-hashtags { color: white; font-size: 13px; font-weight: 600; margin-bottom: 6px; }
+        .tt-song { color: rgba(255,255,255,0.8); font-size: 12px; display: flex; align-items: center; gap: 4px; }
 
         .empty-state {
             text-align: center;
@@ -714,33 +713,171 @@
         }
 
         function createSocialPreview(post) {
-            const platformClass = `${post.platform}-preview`;
+            if (post.platform === 'instagram') return createInstagramPreview(post);
+            if (post.platform === 'twitter') return createTwitterPreview(post);
+            if (post.platform === 'tiktok') return createTikTokPreview(post);
+            return '';
+        }
+
+        function getCarouselHtml(images) {
+            if (!images || images.length === 0) return '';
+            const id = 'carousel_' + Math.random().toString(36).substr(2, 9);
+            return `
+                <div class="carousel" id="${id}">
+                    <div class="carousel-track">
+                        ${images.map((img, i) => `
+                            <div class="carousel-slide ${i === 0 ? 'active' : ''}">
+                                <img src="data:image/png;base64,${img}" alt="Post image ${i+1}">
+                            </div>
+                        `).join('')}
+                    </div>
+                    ${images.length > 1 ? `
+                        <div class="carousel-dots">
+                            ${images.map((_, i) => `<span class="dot ${i === 0 ? 'active' : ''}" onclick="goToSlide('${id}', ${i})"></span>`).join('')}
+                        </div>
+                        <button class="carousel-btn prev" onclick="changeSlide('${id}', -1)">&#8249;</button>
+                        <button class="carousel-btn next" onclick="changeSlide('${id}', 1)">&#8250;</button>
+                        <div class="carousel-count">${images.length} images</div>
+                    ` : ''}
+                </div>`;
+        }
+
+        function createInstagramPreview(post) {
+            const username = (agentData.agent_name || 'agent').toLowerCase().replace(/\s+/g, '_');
+            const avatar = agentData.agent_name ? agentData.agent_name[0].toUpperCase() : 'A';
+            const images = post.media_urls || [];
             const statusClass = `status-${post.status}`;
 
             return `
-                <div class="social-preview ${platformClass}">
-                    <div class="preview-header">
-                        <span class="preview-platform">
-                            ${post.platform === 'twitter' ? '𝕏 Twitter/X' :
-                              post.platform === 'instagram' ? '📷 Instagram' :
-                              '🎵 TikTok'}
-                        </span>
+            <div class="ig-card">
+                <div class="ig-header">
+                    <div class="ig-avatar">${avatar}</div>
+                    <div class="ig-user-info">
+                        <div class="ig-username">${username}</div>
+                        <div class="ig-location">${agentData.brand}</div>
+                    </div>
+                    <div class="ig-menu">
                         <span class="preview-status ${statusClass}">${post.status.toUpperCase()}</span>
                     </div>
-                    <div class="preview-content">
-                        ${post.body}
-                        ${post.hashtags && post.hashtags.length > 0 ? `
-                            <div class="hashtags" style="margin-top: 10px;">
-                                ${post.hashtags.map(h => `#${h}`).join(' ')}
-                            </div>
-                        ` : ''}
+                </div>
+                ${images.length > 0 ? getCarouselHtml(images) : `
+                    <div class="ig-placeholder">
+                        <span>📷</span>
+                        <span style="font-size:12px;color:#999">Generating images...</span>
                     </div>
-                    <div class="preview-date">
-                        📅 Created: ${new Date(post.created_at).toLocaleDateString()}
-                        ${post.scheduled_at ? `<br>⏰ Scheduled: ${new Date(post.scheduled_at).toLocaleDateString()}` : ''}
+                `}
+                <div class="ig-actions">
+                    <span class="ig-action">♡</span>
+                    <span class="ig-action">💬</span>
+                    <span class="ig-action">↗</span>
+                    <span class="ig-save">🔖</span>
+                </div>
+                <div class="ig-body">
+                    <span class="ig-likes">❤️ —</span>
+                    <div class="ig-caption"><strong>${username}</strong> ${post.body}</div>
+                    ${post.hashtags && post.hashtags.length > 0 ? `
+                        <div class="ig-hashtags">${post.hashtags.slice(0,5).map(h => `#${h}`).join(' ')}</div>
+                    ` : ''}
+                    <div class="ig-time">${new Date(post.created_at).toLocaleDateString('en-US', {month:'long', day:'numeric'}).toUpperCase()}</div>
+                </div>
+            </div>`;
+        }
+
+        function createTwitterPreview(post) {
+            const username = (agentData.agent_name || 'agent').toLowerCase().replace(/\s+/g, '');
+            const avatar = agentData.agent_name ? agentData.agent_name[0].toUpperCase() : 'A';
+            const images = post.media_urls || [];
+            const statusClass = `status-${post.status}`;
+
+            return `
+            <div class="tw-card">
+                <div class="tw-header">
+                    <div class="tw-avatar">${avatar}</div>
+                    <div class="tw-user-info">
+                        <div class="tw-name">${agentData.agent_name} <span class="tw-verified">✓</span></div>
+                        <div class="tw-handle">@${username}</div>
+                    </div>
+                    <div class="tw-x-logo">𝕏</div>
+                </div>
+                <div class="tw-body">${post.body}</div>
+                ${post.hashtags && post.hashtags.length > 0 ? `
+                    <div class="tw-hashtags">${post.hashtags.slice(0,3).map(h => `#${h}`).join(' ')}</div>
+                ` : ''}
+                ${images.length > 0 ? `
+                    <div class="tw-images">
+                        ${images.slice(0,4).map(img => `<img src="data:image/png;base64,${img}" alt="post">`).join('')}
+                    </div>
+                ` : ''}
+                <div class="tw-meta">
+                    <span>${new Date(post.created_at).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})} · ${new Date(post.created_at).toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric'})}</span>
+                    <span class="preview-status ${statusClass}" style="margin-left:auto">${post.status.toUpperCase()}</span>
+                </div>
+                <div class="tw-actions">
+                    <span class="tw-action">💬 —</span>
+                    <span class="tw-action">🔁 —</span>
+                    <span class="tw-action">♡ —</span>
+                    <span class="tw-action">📊 —</span>
+                </div>
+            </div>`;
+        }
+
+        function createTikTokPreview(post) {
+            const username = (agentData.agent_name || 'agent').toLowerCase().replace(/\s+/g, '');
+            const avatar = agentData.agent_name ? agentData.agent_name[0].toUpperCase() : 'A';
+            const images = post.media_urls || [];
+            const statusClass = `status-${post.status}`;
+
+            return `
+            <div class="tt-card">
+                ${images.length > 0 ? `
+                    <div class="tt-bg-img">
+                        <img src="data:image/png;base64,${images[0]}" alt="cover">
+                    </div>
+                ` : `<div class="tt-bg"></div>`}
+                <div class="tt-overlay">
+                    <div class="tt-top">
+                        <span class="preview-status ${statusClass}">${post.status.toUpperCase()}</span>
+                        <span class="tt-following">Following</span>
+                    </div>
+                    <div class="tt-right-actions">
+                        <div class="tt-action-btn"><div class="tt-avatar">${avatar}</div></div>
+                        <div class="tt-action-btn">♡<br><span>—</span></div>
+                        <div class="tt-action-btn">💬<br><span>—</span></div>
+                        <div class="tt-action-btn">↗<br><span>—</span></div>
+                        <div class="tt-action-btn">🎵</div>
+                    </div>
+                    <div class="tt-bottom">
+                        <div class="tt-username">@${username}</div>
+                        <div class="tt-caption">${post.body.substring(0, 120)}${post.body.length > 120 ? '...' : ''}</div>
+                        ${post.hashtags && post.hashtags.length > 0 ? `
+                            <div class="tt-hashtags">${post.hashtags.slice(0,3).map(h => `#${h}`).join(' ')}</div>
+                        ` : ''}
+                        <div class="tt-song">♪ Original sound - ${agentData.brand}</div>
                     </div>
                 </div>
-            `;
+            </div>`;
+        }
+
+        function changeSlide(carouselId, dir) {
+            const carousel = document.getElementById(carouselId);
+            const slides = carousel.querySelectorAll('.carousel-slide');
+            const dots = carousel.querySelectorAll('.dot');
+            let current = [...slides].findIndex(s => s.classList.contains('active'));
+            slides[current].classList.remove('active');
+            dots[current].classList.remove('active');
+            current = (current + dir + slides.length) % slides.length;
+            slides[current].classList.add('active');
+            dots[current].classList.add('active');
+        }
+
+        function goToSlide(carouselId, index) {
+            const carousel = document.getElementById(carouselId);
+            const slides = carousel.querySelectorAll('.carousel-slide');
+            const dots = carousel.querySelectorAll('.dot');
+            slides.forEach(s => s.classList.remove('active'));
+            dots.forEach(d => d.classList.remove('active'));
+            slides[index].classList.add('active');
+            dots[index].classList.add('active');
         }
 
         async function loadAccounts() {

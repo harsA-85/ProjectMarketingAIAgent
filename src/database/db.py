@@ -4,12 +4,14 @@ from sqlalchemy.orm import sessionmaker, Session
 from .models import Base
 
 # Use absolute path for persistent database (project root)
-# __file__ is src/database/db.py, go up 3 levels to project root
-PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# Force to C:\Users\harsa\OneDrive\Desktop\axelunfiltered\ProjectMarketingAIAgent\marketing_ai.db
+PROJECT_ROOT = r'C:\Users\harsa\OneDrive\Desktop\axelunfiltered\ProjectMarketingAIAgent'
 DB_PATH = os.path.join(PROJECT_ROOT, 'marketing_ai.db')
+# Convert backslashes to forward slashes for SQLite URL
+DB_PATH_NORMALIZED = DB_PATH.replace('\\', '/')
 DATABASE_URL = os.getenv(
     'DATABASE_URL',
-    f'sqlite:///{DB_PATH}'
+    f'sqlite:///{DB_PATH_NORMALIZED}'
 )
 
 engine = create_engine(DATABASE_URL, connect_args={'check_same_thread': False} if 'sqlite' in DATABASE_URL else {})

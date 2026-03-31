@@ -43,6 +43,22 @@ def health():
     return jsonify({'status': 'ok', 'message': 'Marketing AI Agent System is running'}), 200
 
 
+@app.route('/debug', methods=['GET'])
+def debug():
+    """Debug endpoint - shows DB path and agents"""
+    from src.database.db import DATABASE_URL, DB_PATH
+    from src.database.models import Agent
+    import os
+    agents = orchestrator.db.query(Agent).all()
+    return jsonify({
+        'db_path': DB_PATH,
+        'db_url': DATABASE_URL,
+        'db_exists': os.path.exists(DB_PATH),
+        'agents_count': len(agents),
+        'agents': [{'id': a.id, 'name': a.name, 'active': a.is_active} for a in agents]
+    })
+
+
 # ==================== AGENTS ====================
 
 @app.route('/api/agents', methods=['GET'])
@@ -77,6 +93,7 @@ def get_agent_posts(agent_id):
                 'status': p.status,
                 'hashtags': p.hashtags,
                 'mentions': p.mentions,
+                'media_urls': p.media_urls or [],
                 'created_at': p.created_at.isoformat() if p.created_at else None,
                 'scheduled_at': p.scheduled_at.isoformat() if p.scheduled_at else None,
                 'published_at': p.published_at.isoformat() if p.published_at else None,

@@ -1,9 +1,11 @@
 import json
+import threading
 from typing import Dict, List, Optional, Any
 from datetime import datetime
 from src.database.models import Agent, Content, Interaction, SocialMediaAccount
 from src.database.db import get_db
 from src.api.llm_provider import LLMProvider
+from src.api.image_generator import GeminiImageGenerator
 
 
 class BaseAgent:
@@ -107,23 +109,61 @@ Make it authentic, engaging, and aligned with the brand voice."""
         self,
         platform: str,
         topic: str,
-        target_audience: Optional[str] = None
+        target_audience: Optional[str] = None,
+        generate_images: bool = True
     ) -> int:
-        """Create a draft post in the database"""
+        """Create a draft post with text + carousel images using parallel agents"""
         platform_config = self._get_platform_config(platform)
-        content_data = self.generate_content(
-            content_type="social media post",
-            platform=platform,
-            topic=topic,
-            target_audience=target_audience,
-            max_length=platform_config.get('max_length', 280)
-        )
+
+        # Results containers for parallel execution
+        text_result = {}
+        image_result = {"images": [], "prompts": []}
+
+        def generate_text():
+            content_data = self.generate_content(
+                content_type="social media post",
+                platform=platform,
+                topic=topic,
+                target_audience=target_audience,
+                max_length=platform_config.get('max_length', 280)
+            )
+            text_result.update(content_data)
+
+        def generate_images_fn():
+            try:
+                img_gen = GeminiImageGenerator()
+                prompts = img_gen.build_image_prompts(
+                    post_text=topic,
+                    platform=platform,
+                    brand=self.agent.brand,
+                    persona=self.agent.persona,
+                    topic=topic,
+                    num_images=3
+                )
+                images = img_gen.generate_carousel(prompts)
+                image_result["images"] = images
+                image_result["prompts"] = prompts
+            except Exception as e:
+                print(f"Image generation skipped: {e}")
+
+        # Run both agents in parallel
+        text_thread = threading.Thread(target=generate_text)
+        image_thread = threading.Thread(target=generate_images_fn) if generate_images else None
+
+        text_thread.start()
+        if image_thread:
+            image_thread.start()
+
+        text_thread.join()
+        if image_thread:
+            image_thread.join(timeout=30)
 
         post = Content(
             agent_id=self.agent_id,
-            title=content_data['caption'][:100],
-            body=content_data['caption'],
-            hashtags=content_data['hashtags'],
+            title=text_result.get('caption', topic)[:100],
+            body=text_result.get('caption', ''),
+            hashtags=text_result.get('hashtags', []),
+            media_urls=image_result["images"],  # base64 images stored here
             platform=platform,
             status='draft'
         )

@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -m py_compile dashboard/app.py src/orchestrator/orchestrator.py)",
+      "Bash(python app.py)",
+      "Bash(python -m pip install -q -r requirements.txt)",
+      "Bash(python -m pip install -q flask flask-cors sqlalchemy anthropic tweepy requests)",
+      "Bash(curl -s http://localhost:5000/)",
+      "Bash(python -m pip install -q schedule python-dotenv)",
+      "Bash(python:*)",
+      "Bash(curl -s http://localhost:5000/api/agents)",
+      "Bash(pkill -f \"python app.py\")"
+    ]
+  }
+}
