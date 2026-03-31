@@ -15,7 +15,7 @@ class GeminiImageGenerator:
 
     def generate_image(self, prompt: str) -> Optional[str]:
         """Generate a single image and return as base64 string"""
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-preview-image-generation:generateContent?key={self.api_key}"
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-image-preview:generateContent?key={self.api_key}"
 
         payload = {
             "contents": [{"parts": [{"text": prompt}]}],
