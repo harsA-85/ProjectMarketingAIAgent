@@ -1,0 +1,2105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Marketing AI — Newsroom</title>
+    <style>
+        :root {
+            --bg: #f5f5f7;
+            --surface: #ffffff;
+            --surface-2: #f2f2f7;
+            --sidebar-bg: #fafafa;
+            --border: rgba(0,0,0,0.07);
+            --border-strong: rgba(0,0,0,0.12);
+            --text-1: #1c1c1e;
+            --text-2: #6e6e73;
+            --text-3: #aeaeb2;
+            --accent: #007aff;
+            --accent-dim: rgba(0,122,255,0.1);
+            --success: #30d158;
+            --warning: #ff9f0a;
+            --danger: #ff453a;
+            --r: 12px;
+            --r-sm: 8px;
+            --r-lg: 16px;
+            --shadow-sm: 0 1px 3px rgba(0,0,0,0.05), 0 2px 8px rgba(0,0,0,0.04);
+            --shadow: 0 2px 12px rgba(0,0,0,0.07), 0 4px 20px rgba(0,0,0,0.04);
+            --shadow-lg: 0 8px 32px rgba(0,0,0,0.1), 0 2px 8px rgba(0,0,0,0.06);
+            --shadow-xl: 0 24px 64px rgba(0,0,0,0.16), 0 8px 24px rgba(0,0,0,0.08);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', system-ui, sans-serif;
+            background: var(--bg);
+            min-height: 100vh;
+            overflow: hidden;
+            color: var(--text-1);
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* ── LAYOUT ── */
+        .app { display: flex; height: 100vh; overflow: hidden; }
+
+        /* ── SIDEBAR ── */
+        .sidebar {
+            width: 228px;
+            min-width: 228px;
+            background: var(--sidebar-bg);
+            border-right: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+
+        .sidebar-header {
+            padding: 18px 16px 14px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .brand { display: flex; align-items: center; gap: 10px; }
+
+        .brand-icon {
+            width: 34px; height: 34px;
+            background: linear-gradient(135deg, #007aff 0%, #5856d6 100%);
+            border-radius: 9px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 18px; flex-shrink: 0;
+            box-shadow: 0 2px 8px rgba(0,122,255,0.35);
+        }
+
+        .brand-text { line-height: 1; }
+        .brand-name { font-size: 14px; font-weight: 700; color: var(--text-1); letter-spacing: -0.3px; }
+        .brand-sub  { font-size: 10.5px; color: var(--text-3); margin-top: 2px; }
+
+        .sidebar-nav { padding: 10px 8px; flex: 1; }
+
+        .nav-section {
+            font-size: 10px; font-weight: 700; color: var(--text-3);
+            text-transform: uppercase; letter-spacing: 0.8px;
+            padding: 10px 10px 4px;
+        }
+
+        .nav-item {
+            display: flex; align-items: center; gap: 8px;
+            padding: 7px 10px; border-radius: 7px;
+            font-size: 13px; font-weight: 500; color: var(--text-2);
+            cursor: pointer; transition: all 0.15s; user-select: none;
+            text-decoration: none;
+        }
+
+        .nav-item .ni { font-size: 14px; width: 18px; text-align: center; }
+        .nav-item:hover { background: rgba(0,0,0,0.05); color: var(--text-1); }
+        .nav-item.active { background: var(--accent-dim); color: var(--accent); font-weight: 600; }
+
+        .sidebar-footer {
+            padding: 12px 16px 18px;
+            border-top: 1px solid var(--border);
+        }
+
+        .sidebar-ver { font-size: 10px; color: var(--text-3); margin-top: 10px; text-align: center; }
+
+        /* ── MAIN ── */
+        .main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+
+        /* ── TOPBAR ── */
+        .topbar {
+            display: flex; align-items: center; gap: 10px;
+            padding: 10px 20px;
+            background: rgba(255,255,255,0.88);
+            backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+            border-bottom: 1px solid var(--border);
+            flex-shrink: 0; position: relative;
+        }
+
+        .traffic-lights { display: flex; gap: 6px; align-items: center; }
+        .tl { width: 12px; height: 12px; border-radius: 50%; }
+        .tl.red    { background: #ff5f57; }
+        .tl.yellow { background: #febc2e; }
+        .tl.green  { background: #28c840; }
+
+        .topbar-center {
+            position: absolute; left: 50%; transform: translateX(-50%);
+            font-size: 13px; font-weight: 600; color: var(--text-1); pointer-events: none;
+        }
+
+        .topbar-right { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+
+        /* ── NOTIFICATION BELL ── */
+        .notif-bell {
+            position: relative; cursor: pointer; padding: 6px 8px;
+            border-radius: var(--r-sm); border: none; background: none;
+            font-size: 18px; transition: background 0.15s;
+        }
+        .notif-bell:hover { background: rgba(0,0,0,0.05); }
+        .notif-badge {
+            position: absolute; top: 2px; right: 2px;
+            min-width: 16px; height: 16px; border-radius: 100px;
+            background: var(--danger); color: #fff;
+            font-size: 9px; font-weight: 700; display: flex;
+            align-items: center; justify-content: center; padding: 0 4px;
+        }
+        .notif-badge.hidden { display: none; }
+        .notif-panel {
+            display: none; position: absolute; top: 44px; right: 0;
+            width: 360px; max-height: 480px; overflow-y: auto;
+            background: var(--surface); border: 1px solid var(--border);
+            border-radius: var(--r); box-shadow: var(--shadow-lg);
+            z-index: 999;
+        }
+        .notif-panel.open { display: block; }
+        .notif-panel-header {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 12px 14px; border-bottom: 1px solid var(--border);
+            font-size: 13px; font-weight: 600;
+        }
+        .notif-item {
+            display: flex; gap: 10px; padding: 10px 14px;
+            border-bottom: 1px solid var(--border); cursor: pointer;
+            transition: background 0.1s;
+        }
+        .notif-item:hover { background: var(--surface-2); }
+        .notif-item.unread { background: rgba(0,122,255,0.04); }
+        .notif-icon { font-size: 20px; flex-shrink: 0; margin-top: 2px; }
+        .notif-content { flex: 1; min-width: 0; }
+        .notif-title { font-size: 12px; font-weight: 600; color: var(--text-1); }
+        .notif-body { font-size: 11px; color: var(--text-2); margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .notif-time { font-size: 10px; color: var(--text-3); margin-top: 3px; }
+
+        /* ── BUTTONS ── */
+        .btn {
+            display: inline-flex; align-items: center; gap: 5px;
+            border: none; border-radius: var(--r-sm);
+            padding: 7px 14px; font-size: 13px; font-weight: 500;
+            font-family: inherit; cursor: pointer;
+            transition: all 0.15s; white-space: nowrap; line-height: 1;
+        }
+
+        .btn-primary { background: var(--accent); color: #fff; box-shadow: 0 1px 3px rgba(0,122,255,0.3); }
+        .btn-primary:hover { background: #0066dd; box-shadow: 0 2px 10px rgba(0,122,255,0.4); }
+        .btn-primary:active { transform: scale(0.97); }
+
+        .btn-ghost { background: transparent; color: var(--text-2); }
+        .btn-ghost:hover { background: var(--surface-2); color: var(--text-1); }
+
+        .btn-success { background: var(--success); color: #fff; box-shadow: 0 1px 3px rgba(48,209,88,0.3); }
+        .btn-success:hover { background: #28b84e; }
+        .btn-success:active { transform: scale(0.97); }
+
+        .btn-danger { background: transparent; color: var(--danger); border: 1px solid rgba(255,69,58,0.25); }
+        .btn-danger:hover { background: rgba(255,69,58,0.08); }
+
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none !important; }
+
+        /* ── CONTENT ── */
+        .content { flex: 1; overflow-y: auto; padding: 26px 28px; }
+
+        .section-title { font-size: 20px; font-weight: 700; color: var(--text-1); letter-spacing: -0.5px; }
+        .section-subtitle { font-size: 13px; color: var(--text-2); margin-top: 2px; }
+        .section-header { display: flex; align-items: center; margin-bottom: 18px; }
+        .section-header .section-title { flex: 1; }
+
+        /* ── TEAM PANEL ── */
+        .team-panel {
+            margin-bottom: 28px;
+        }
+
+        .team-grid {
+            display: flex;
+            gap: 10px;
+            overflow-x: auto;
+            padding-bottom: 6px;
+            scrollbar-width: thin;
+            scrollbar-color: var(--border-strong) transparent;
+        }
+
+        .team-grid::-webkit-scrollbar { height: 4px; }
+        .team-grid::-webkit-scrollbar-track { background: transparent; }
+        .team-grid::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 2px; }
+
+        .team-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--r);
+            padding: 14px 16px;
+            min-width: 138px;
+            max-width: 160px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            box-shadow: var(--shadow-sm);
+            text-align: center;
+            flex-shrink: 0;
+        }
+
+        .team-card:hover {
+            box-shadow: var(--shadow);
+            transform: translateY(-2px);
+            border-color: rgba(0,122,255,0.2);
+        }
+
+        .team-emoji { font-size: 28px; margin-bottom: 6px; line-height: 1; }
+        .team-name { font-size: 12px; font-weight: 600; color: var(--text-1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .team-role { font-size: 10px; color: var(--text-2); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .team-llm {
+            display: inline-flex; align-items: center; gap: 3px;
+            font-size: 9px; font-weight: 600; margin-top: 6px;
+            padding: 2px 6px; border-radius: 100px;
+            background: var(--surface-2); color: var(--text-3);
+            white-space: nowrap;
+        }
+        .team-llm.claude { background: rgba(204,120,50,0.10); color: #b36a00; }
+        .team-llm.gemini { background: rgba(66,133,244,0.10); color: #4285f4; }
+        .team-llm.gemini-img { background: rgba(234,67,53,0.10); color: #ea4335; }
+
+        /* ── ORG CHART ── */
+        .org-section { margin-bottom: 28px; }
+        .org-chart {
+            display: flex; flex-direction: column; align-items: center;
+            gap: 0; padding: 20px 0;
+        }
+        .org-level { display: flex; gap: 16px; justify-content: center; align-items: flex-start; position: relative; }
+        .org-node {
+            display: flex; flex-direction: column; align-items: center;
+            background: var(--surface); border: 1px solid var(--border);
+            border-radius: var(--r); padding: 10px 14px; min-width: 120px;
+            box-shadow: var(--shadow-sm); position: relative; cursor: pointer;
+            transition: all 0.15s;
+        }
+        .org-node:hover { box-shadow: var(--shadow); transform: translateY(-1px); }
+        .org-node.leadership { border-color: rgba(0,122,255,0.3); background: rgba(0,122,255,0.03); }
+        .org-node.creative { border-color: rgba(175,82,222,0.3); background: rgba(175,82,222,0.03); }
+        .org-node.intelligence { border-color: rgba(48,209,88,0.3); background: rgba(48,209,88,0.03); }
+        .org-node.production { border-color: rgba(255,159,10,0.3); background: rgba(255,159,10,0.03); }
+        .org-node.distribution { border-color: rgba(255,69,58,0.3); background: rgba(255,69,58,0.03); }
+        .org-emoji { font-size: 22px; }
+        .org-name { font-size: 11px; font-weight: 600; color: var(--text-1); margin-top: 4px; }
+        .org-title { font-size: 9px; color: var(--text-2); text-align: center; max-width: 100px; }
+        .org-model { font-size: 8px; color: var(--text-3); margin-top: 3px; font-weight: 500; }
+        .org-connector {
+            display: flex; justify-content: center; padding: 8px 0;
+        }
+        .org-vline { width: 2px; height: 24px; background: var(--border-strong); }
+        .org-hline-group {
+            display: flex; align-items: flex-start; position: relative;
+        }
+        .org-branch {
+            display: flex; flex-direction: column; align-items: center;
+        }
+        .org-branch-line {
+            width: 2px; height: 16px; background: var(--border-strong);
+        }
+        .org-hbar {
+            height: 2px; background: var(--border-strong);
+            position: absolute; top: 0;
+        }
+
+        /* ── PIPELINE STEPPER ── */
+        .pipeline-panel {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--r);
+            box-shadow: var(--shadow-sm);
+            padding: 28px 32px;
+            margin-bottom: 28px;
+        }
+
+        .stepper {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0;
+            margin-bottom: 24px;
+        }
+
+        .step-node {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+            position: relative;
+            z-index: 1;
+        }
+
+        .step-circle {
+            width: 40px; height: 40px;
+            border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 15px; font-weight: 700;
+            background: var(--surface-2);
+            color: var(--text-3);
+            border: 2px solid var(--border-strong);
+            transition: all 0.3s ease;
+            position: relative;
+        }
+
+        .step-node.completed .step-circle {
+            background: var(--success);
+            border-color: var(--success);
+            color: #fff;
+        }
+
+        .step-node.running .step-circle {
+            background: var(--accent);
+            border-color: var(--accent);
+            color: #fff;
+            animation: step-pulse 1.6s ease-in-out infinite;
+        }
+
+        .step-node.failed .step-circle {
+            background: var(--danger);
+            border-color: var(--danger);
+            color: #fff;
+        }
+
+        .step-node.selected .step-circle {
+            box-shadow: 0 0 0 3px rgba(0,122,255,0.2);
+        }
+
+        @keyframes step-pulse {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(0,122,255,0.4); }
+            50% { box-shadow: 0 0 0 8px rgba(0,122,255,0); }
+        }
+
+        .step-label {
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--text-3);
+            transition: color 0.2s;
+            white-space: nowrap;
+        }
+
+        .step-node.completed .step-label { color: var(--success); }
+        .step-node.running .step-label   { color: var(--accent); }
+        .step-node.failed .step-label    { color: var(--danger); }
+        .step-node.selected .step-label  { color: var(--text-1); }
+
+        .step-line {
+            width: 64px;
+            height: 3px;
+            background: var(--border-strong);
+            flex-shrink: 0;
+            margin: 0 -2px;
+            margin-bottom: 22px;
+            transition: background 0.3s;
+        }
+
+        .step-line.done { background: var(--success); }
+
+        /* ── STEP DETAIL IN ARTIFACT ── */
+        .step-detail { display: flex; flex-direction: column; gap: 12px; }
+        .step-detail-header { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
+        .step-detail-icon { font-size: 24px; }
+        .step-detail-title { font-size: 15px; font-weight: 700; color: var(--text-1); }
+        .step-detail-status { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 100px; }
+        .step-detail-status.completed { background: rgba(48,209,88,0.1); color: var(--success); }
+        .step-detail-status.running { background: rgba(0,122,255,0.1); color: var(--accent); }
+        .step-detail-status.pending { background: var(--surface-2); color: var(--text-3); }
+        .step-detail-status.failed { background: rgba(255,69,58,0.1); color: var(--danger); }
+        .step-detail-timing { font-size: 11px; color: var(--text-3); display: flex; gap: 16px; }
+        .step-detail-timing span { display: flex; align-items: center; gap: 4px; }
+        .step-detail-role { font-size: 12px; color: var(--text-2); }
+        .step-detail-output { background: rgba(0,0,0,0.04); border-radius: var(--r-sm); padding: 14px 16px; font-size: 12px; line-height: 1.6; color: var(--text-1); white-space: pre-wrap; word-break: break-word; max-height: 300px; overflow-y: auto; }
+        .step-running-pulse { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); animation: pulse-dot 1.2s ease-in-out infinite; margin-right: 4px; }
+        @keyframes pulse-dot { 0%,100% { opacity:1; transform:scale(1); } 50% { opacity:0.4; transform:scale(0.8); } }
+
+        /* ── WORKFLOW PROGRESS BAR ── */
+        .wf-progress-wrap { width: 100%; height: 6px; background: var(--surface-2); border-radius: 100px; overflow: hidden; margin-top: 4px; }
+        .wf-progress-bar { height: 100%; border-radius: 100px; transition: width 0.5s ease; }
+        .wf-progress-bar.running { background: linear-gradient(90deg, var(--accent), #5ac8fa); animation: progress-shimmer 1.5s ease-in-out infinite; }
+        .wf-progress-bar.completed { background: var(--success); }
+        .wf-progress-bar.failed { background: var(--danger); }
+        @keyframes progress-shimmer { 0% { opacity:1; } 50% { opacity:0.6; } 100% { opacity:1; } }
+        .wf-step-dots { display: flex; gap: 3px; margin-top: 3px; }
+        .wf-step-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--surface-2); font-size: 6px; display: flex; align-items: center; justify-content: center; }
+        .wf-step-dot.done { background: var(--success); }
+        .wf-step-dot.active { background: var(--accent); animation: pulse-dot 1.2s ease-in-out infinite; }
+        .wf-step-dot.fail { background: var(--danger); }
+
+        /* ── ARTIFACT PREVIEW ── */
+        .artifact-preview {
+            background: var(--surface-2);
+            border-radius: var(--r-sm);
+            min-height: 120px;
+            padding: 20px;
+            position: relative;
+        }
+
+        .artifact-empty {
+            text-align: center;
+            padding: 32px 20px;
+            color: var(--text-3);
+            font-size: 13px;
+        }
+
+        .artifact-empty-icon { font-size: 32px; margin-bottom: 8px; }
+
+        .artifact-content { font-size: 13px; color: var(--text-2); line-height: 1.6; }
+        .artifact-content pre {
+            background: rgba(0,0,0,0.04);
+            padding: 12px 16px;
+            border-radius: var(--r-sm);
+            font-size: 12px;
+            font-family: 'SF Mono', 'Fira Code', monospace;
+            overflow-x: auto;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+
+        /* ── ATOMIZED CARDS GRID ── */
+        .atom-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        .atom-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--r-sm);
+            padding: 14px;
+            transition: all 0.2s;
+            position: relative;
+        }
+
+        .atom-card:hover { border-color: rgba(0,122,255,0.2); }
+        .atom-card.selected { border-color: var(--accent); background: rgba(0,122,255,0.02); }
+
+        .atom-header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+        .atom-platform { font-size: 18px; }
+        .atom-format { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: var(--accent); background: var(--accent-dim); padding: 2px 7px; border-radius: 100px; }
+        .atom-agent { font-size: 10px; color: var(--text-3); margin-left: auto; }
+
+        .atom-body {
+            font-size: 12px;
+            color: var(--text-2);
+            line-height: 1.5;
+            display: -webkit-box;
+            -webkit-line-clamp: 4;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+
+        .atom-checkbox {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            width: 18px; height: 18px;
+            accent-color: var(--accent);
+            cursor: pointer;
+        }
+
+        .atom-actions {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding-top: 12px;
+            border-top: 1px solid var(--border);
+        }
+
+        .atom-actions .select-count { font-size: 12px; color: var(--text-2); flex: 1; }
+
+        /* ── WORKFLOW TABLE ── */
+        .wf-table-wrap {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--r);
+            box-shadow: var(--shadow-sm);
+            overflow: hidden;
+        }
+
+        .wf-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+
+        .wf-table thead th {
+            text-align: left;
+            padding: 10px 16px;
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--text-3);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            border-bottom: 1px solid var(--border);
+            background: var(--surface-2);
+        }
+
+        .wf-table tbody tr {
+            cursor: pointer;
+            transition: background 0.1s;
+        }
+
+        .wf-table tbody tr:hover { background: rgba(0,122,255,0.03); }
+
+        .wf-table tbody td {
+            padding: 11px 16px;
+            border-bottom: 1px solid var(--border);
+            color: var(--text-2);
+        }
+
+        .wf-table tbody tr:last-child td { border-bottom: none; }
+
+        .wf-id { font-weight: 600; color: var(--text-1); font-variant-numeric: tabular-nums; }
+
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 11px;
+            font-weight: 600;
+            padding: 3px 10px;
+            border-radius: 100px;
+        }
+
+        .status-badge.running  { background: var(--accent-dim); color: var(--accent); }
+        .status-badge.completed { background: rgba(48,209,88,0.1); color: #1a9e42; }
+        .status-badge.failed   { background: rgba(255,69,58,0.1); color: var(--danger); }
+        .status-badge.pending  { background: var(--surface-2); color: var(--text-3); }
+
+        .status-dot {
+            width: 6px; height: 6px;
+            border-radius: 50%;
+        }
+
+        .status-dot.running  { background: var(--accent); animation: blink 1.2s ease-in-out infinite; }
+        .status-dot.completed { background: var(--success); }
+        .status-dot.failed   { background: var(--danger); }
+        .status-dot.pending  { background: var(--text-3); }
+
+        @keyframes blink { 0%,100%{opacity:1;} 50%{opacity:0.3;} }
+
+        .wf-empty {
+            text-align: center;
+            padding: 40px 20px;
+            color: var(--text-3);
+            font-size: 13px;
+        }
+
+        /* ── MODAL ── */
+        .overlay {
+            display: none;
+            position: fixed; inset: 0; z-index: 500;
+            background: rgba(0,0,0,0.28);
+            backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+            align-items: center; justify-content: center;
+        }
+
+        .overlay.open { display: flex; }
+
+        .modal {
+            background: var(--surface);
+            border-radius: var(--r-lg);
+            width: 560px;
+            max-width: 94vw;
+            max-height: 88vh;
+            overflow-y: auto;
+            box-shadow: var(--shadow-xl);
+            animation: modal-pop 0.22s cubic-bezier(0.34,1.56,0.64,1);
+        }
+
+        .modal.wide { width: 640px; }
+
+        @keyframes modal-pop {
+            from { opacity: 0; transform: scale(0.94) translateY(12px); }
+            to   { opacity: 1; transform: scale(1) translateY(0); }
+        }
+
+        .modal-header {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 22px 24px 0;
+        }
+
+        .modal-title { font-size: 17px; font-weight: 700; color: var(--text-1); letter-spacing: -0.3px; }
+
+        .close-btn {
+            width: 28px; height: 28px;
+            border-radius: 50%;
+            background: var(--surface-2);
+            border: none; font-size: 13px;
+            cursor: pointer; color: var(--text-2);
+            display: flex; align-items: center; justify-content: center;
+            transition: all 0.15s;
+        }
+
+        .close-btn:hover { background: rgba(0,0,0,0.1); }
+
+        .modal-body { padding: 20px 24px; }
+
+        .form-group { margin-bottom: 16px; }
+
+        .form-label {
+            display: block; font-size: 13px; font-weight: 600;
+            color: var(--text-1); margin-bottom: 6px;
+        }
+
+        .form-label .hint { font-weight: 400; color: var(--text-3); }
+
+        .form-input, .form-textarea, .form-select {
+            width: 100%;
+            background: var(--surface-2);
+            border: 1px solid transparent;
+            border-radius: var(--r-sm);
+            padding: 9px 12px;
+            font-size: 14px;
+            font-family: inherit;
+            color: var(--text-1);
+            outline: none;
+            transition: all 0.2s;
+            -webkit-appearance: none;
+        }
+
+        .form-input:focus, .form-textarea:focus, .form-select:focus {
+            border-color: var(--accent);
+            background: white;
+            box-shadow: 0 0 0 3px rgba(0,122,255,0.12);
+        }
+
+        .form-textarea { resize: vertical; min-height: 80px; }
+
+        .form-hint { font-size: 11px; color: var(--text-3); margin-top: 4px; }
+
+        .modal-footer {
+            display: flex; gap: 10px;
+            justify-content: flex-end;
+            padding: 0 24px 22px;
+            border-top: 1px solid var(--border);
+            padding-top: 16px; margin-top: 4px;
+        }
+
+        /* Slider */
+        .range-row { display: flex; align-items: center; gap: 12px; }
+
+        .range-slider {
+            flex: 1;
+            -webkit-appearance: none;
+            appearance: none;
+            height: 4px;
+            background: var(--border-strong);
+            border-radius: 2px;
+            outline: none;
+        }
+
+        .range-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 18px; height: 18px;
+            border-radius: 50%;
+            background: var(--accent);
+            box-shadow: 0 1px 4px rgba(0,122,255,0.3);
+            cursor: pointer;
+        }
+
+        .range-value {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--accent);
+            min-width: 32px;
+            text-align: right;
+            font-variant-numeric: tabular-nums;
+        }
+
+        /* Agent checkboxes in modal */
+        .agent-check-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 6px;
+            max-height: 220px;
+            overflow-y: auto;
+            padding: 4px 0;
+        }
+
+        .agent-check-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 10px;
+            border-radius: var(--r-sm);
+            cursor: pointer;
+            transition: background 0.1s;
+            font-size: 13px;
+            color: var(--text-1);
+        }
+
+        .agent-check-item:hover { background: var(--surface-2); }
+
+        .agent-check-item input[type="checkbox"] {
+            accent-color: var(--accent);
+            width: 16px; height: 16px;
+            cursor: pointer;
+        }
+
+        /* ── TOAST ── */
+        #toasts {
+            position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%);
+            z-index: 9999;
+            display: flex; flex-direction: column; gap: 8px;
+            pointer-events: none;
+        }
+
+        .toast {
+            display: flex; align-items: center; gap: 9px;
+            background: rgba(28,28,30,0.92);
+            backdrop-filter: blur(12px);
+            color: white;
+            padding: 11px 20px;
+            border-radius: 100px;
+            font-size: 14px; font-weight: 500;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+            opacity: 0;
+            transform: translateY(16px) scale(0.95);
+            transition: all 0.3s cubic-bezier(0.34,1.56,0.64,1);
+            pointer-events: auto; white-space: nowrap;
+        }
+
+        .toast.in  { opacity: 1; transform: translateY(0) scale(1); }
+        .toast.out { opacity: 0; transform: translateY(8px) scale(0.97); transition: all 0.2s ease; }
+
+        .t-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+        .t-dot.success { background: var(--success); }
+        .t-dot.error   { background: var(--danger); }
+        .t-dot.info    { background: var(--accent); }
+
+        /* ── SPINNER ── */
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        .spinner {
+            width: 13px; height: 13px;
+            border: 2px solid rgba(255,255,255,0.3);
+            border-top-color: white;
+            border-radius: 50%;
+            animation: spin 0.7s linear infinite;
+            display: inline-block; vertical-align: middle;
+        }
+
+        /* ── SKELETON ── */
+        @keyframes shimmer {
+            0%   { background-position: -600px 0; }
+            100% { background-position: 600px 0; }
+        }
+
+        .skeleton {
+            background: linear-gradient(90deg, #ebebeb 25%, #d8d8d8 50%, #ebebeb 75%);
+            background-size: 600px 100%;
+            animation: shimmer 1.4s ease-in-out infinite;
+            border-radius: 6px;
+        }
+
+        /* ── ANIMATIONS ── */
+        @keyframes fade-up {
+            from { opacity: 0; transform: translateY(10px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+
+        .fade-up { animation: fade-up 0.3s ease forwards; }
+
+        /* ── MISC ── */
+        .muted { color: var(--text-3); }
+        .mono  { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 12px; }
+
+        /* ── VICTORIA CHAT ── */
+        .chat-fab {
+            position: fixed; bottom: 24px; right: 24px; z-index: 900;
+            width: 56px; height: 56px; border-radius: 50%;
+            background: linear-gradient(135deg, #b36a00, #e08a20);
+            color: #fff; border: none; cursor: pointer;
+            box-shadow: 0 4px 16px rgba(179,106,0,0.35);
+            font-size: 24px; display: flex; align-items: center; justify-content: center;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .chat-fab:hover { transform: scale(1.08); box-shadow: 0 6px 24px rgba(179,106,0,0.45); }
+
+        .chat-panel {
+            position: fixed; bottom: 90px; right: 24px; z-index: 901;
+            width: 380px; max-height: 520px;
+            background: var(--surface); border: 1px solid var(--border);
+            border-radius: 16px; box-shadow: 0 12px 40px rgba(0,0,0,0.15);
+            display: none; flex-direction: column; overflow: hidden;
+        }
+        .chat-panel.open { display: flex; animation: chat-pop 0.22s cubic-bezier(0.34,1.56,0.64,1); }
+        @keyframes chat-pop { from { opacity: 0; transform: translateY(16px) scale(0.95); } to { opacity: 1; transform: none; } }
+
+        .chat-header {
+            padding: 14px 18px; display: flex; align-items: center; gap: 10px;
+            border-bottom: 1px solid var(--border); background: var(--surface-2);
+        }
+        .chat-avatar {
+            width: 36px; height: 36px; border-radius: 50%;
+            background: linear-gradient(135deg, #b36a00, #e08a20);
+            display: flex; align-items: center; justify-content: center;
+            font-size: 18px; flex-shrink: 0;
+        }
+        .chat-header-info { flex: 1; }
+        .chat-header-name { font-size: 14px; font-weight: 700; color: var(--text-1); }
+        .chat-header-role { font-size: 11px; color: var(--text-3); }
+
+        .chat-messages {
+            flex: 1; overflow-y: auto; padding: 16px;
+            display: flex; flex-direction: column; gap: 10px;
+            min-height: 280px; max-height: 360px;
+        }
+        .chat-msg {
+            max-width: 85%; padding: 10px 14px;
+            border-radius: 14px; font-size: 13px; line-height: 1.5;
+            word-wrap: break-word;
+        }
+        .chat-msg.user {
+            align-self: flex-end;
+            background: var(--accent); color: #fff;
+            border-bottom-right-radius: 4px;
+        }
+        .chat-msg.victoria {
+            align-self: flex-start;
+            background: var(--surface-2); color: var(--text-1);
+            border-bottom-left-radius: 4px;
+        }
+        .chat-msg.victoria .v-label {
+            font-size: 10px; font-weight: 600; color: #b36a00;
+            margin-bottom: 3px;
+        }
+        .chat-typing {
+            align-self: flex-start; padding: 10px 14px;
+            background: var(--surface-2); border-radius: 14px; border-bottom-left-radius: 4px;
+            font-size: 13px; color: var(--text-3);
+        }
+        .chat-typing span { animation: blink 1.2s infinite; }
+        .chat-typing span:nth-child(2) { animation-delay: 0.2s; }
+        .chat-typing span:nth-child(3) { animation-delay: 0.4s; }
+        @keyframes blink { 0%,80%,100% { opacity: 0.2; } 40% { opacity: 1; } }
+
+        .chat-input-bar {
+            padding: 12px; border-top: 1px solid var(--border);
+            display: flex; gap: 8px; background: var(--surface);
+        }
+        .chat-input {
+            flex: 1; border: 1px solid var(--border); border-radius: 10px;
+            padding: 8px 12px; font-size: 13px; outline: none;
+            background: var(--surface-2); color: var(--text-1);
+            font-family: inherit;
+        }
+        .chat-input:focus { border-color: var(--accent); }
+        .chat-send {
+            width: 36px; height: 36px; border-radius: 10px;
+            background: var(--accent); color: #fff; border: none;
+            cursor: pointer; font-size: 16px; display: flex;
+            align-items: center; justify-content: center;
+            transition: background 0.15s;
+        }
+        .chat-send:hover { background: #0062d6; }
+        .chat-send:disabled { opacity: 0.5; cursor: default; }
+    </style>
+</head>
+<body>
+<div class="app">
+    <!-- SIDEBAR -->
+    <nav class="sidebar">
+        <div class="sidebar-header">
+            <div class="brand">
+                <div class="brand-icon">🤖</div>
+                <div class="brand-text">
+                    <div class="brand-name">Marketing AI</div>
+                    <div class="brand-sub">Command Center</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="sidebar-nav">
+            <div class="nav-section">Workspace</div>
+            <a class="nav-item" href="/"><span class="ni">⬡</span> All Agents</a>
+            <a class="nav-item" href="/inbox"><span class="ni">📥</span> Inbox</a>
+            <a class="nav-item active" href="/newsroom"><span class="ni">📰</span> Newsroom</a>
+            <a class="nav-item" href="#"><span class="ni">📊</span> Analytics</a>
+            <a class="nav-item" href="#"><span class="ni">📅</span> Schedule</a>
+            <div class="nav-section">System</div>
+            <a class="nav-item" href="#"><span class="ni">⚙️</span> Settings</a>
+        </div>
+
+        <div class="sidebar-footer">
+            <div class="sidebar-ver">Newsroom v1.0</div>
+        </div>
+    </nav>
+
+    <!-- MAIN -->
+    <div class="main">
+        <!-- TOPBAR -->
+        <header class="topbar">
+            <div class="traffic-lights">
+                <span class="tl red"></span>
+                <span class="tl yellow"></span>
+                <span class="tl green"></span>
+            </div>
+            <div class="topbar-center">Newsroom</div>
+            <div class="topbar-right">
+                <div style="position:relative">
+                    <button class="notif-bell" id="notif-bell" onclick="toggleNotifPanel()">
+                        🔔<span class="notif-badge hidden" id="notif-badge">0</span>
+                    </button>
+                    <div class="notif-panel" id="notif-panel">
+                        <div class="notif-panel-header">
+                            <span>Notifications</span>
+                            <button class="btn btn-ghost" style="font-size:11px;padding:2px 8px" onclick="markAllRead()">Mark all read</button>
+                        </div>
+                        <div id="notif-list"></div>
+                    </div>
+                </div>
+                <button class="btn btn-primary" onclick="openNewWorkflowModal()">▶ New Workflow</button>
+            </div>
+        </header>
+
+        <!-- CONTENT -->
+        <div class="content">
+
+            <!-- TEAM PANEL -->
+            <div class="team-panel fade-up">
+                <div class="section-header">
+                    <div>
+                        <div class="section-title">Editorial Team</div>
+                        <div class="section-subtitle">Click a member to edit their system prompt and settings</div>
+                    </div>
+                </div>
+                <div class="team-grid" id="team-grid">
+                    <!-- populated by loadTeam() -->
+                </div>
+            </div>
+
+            <!-- ORG CHART -->
+            <div class="org-section fade-up" style="animation-delay:0.04s">
+                <div class="section-header">
+                    <div>
+                        <div class="section-title">Organization & Workflow</div>
+                        <div class="section-subtitle">Hierarchy, team assignments, and LLM models</div>
+                    </div>
+                </div>
+                <div id="org-chart" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);padding:24px;box-shadow:var(--shadow-sm);overflow-x:auto">
+                    <!-- rendered by renderOrgChart() -->
+                </div>
+            </div>
+
+            <!-- PIPELINE VIEW -->
+            <div class="pipeline-panel fade-up" style="animation-delay:0.06s">
+                <div class="section-header" style="margin-bottom:20px">
+                    <div class="section-title" style="flex:1">Pipeline</div>
+                    <div style="display:flex;align-items:center;gap:10px">
+                        <div id="pipeline-run-label" class="muted" style="font-size:12px;font-weight:500"></div>
+                        <button class="btn btn-ghost" id="btn-stop-wf" style="display:none;font-size:11px;padding:4px 10px;color:var(--danger);border:1px solid var(--danger)" onclick="stopWorkflow()">⬜ Stop</button>
+                    </div>
+                </div>
+
+                <div class="stepper" id="stepper">
+                    <!-- steps rendered by JS -->
+                </div>
+
+                <div class="artifact-preview" id="artifact-preview">
+                    <div class="artifact-empty">
+                        <div class="artifact-empty-icon">📄</div>
+                        Select a pipeline step to preview its output
+                    </div>
+                </div>
+            </div>
+
+            <!-- WORKFLOW HISTORY -->
+            <div class="fade-up" style="animation-delay:0.12s">
+                <div class="section-header">
+                    <div class="section-title" style="flex:1">Workflow History</div>
+                </div>
+                <div class="wf-table-wrap">
+                    <table class="wf-table">
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Status</th>
+                                <th>Step</th>
+                                <th>Agents</th>
+                                <th>Started</th>
+                                <th>Completed</th>
+                            </tr>
+                        </thead>
+                        <tbody id="wf-tbody">
+                            <tr><td colspan="6" class="wf-empty">Loading workflows...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+        </div><!-- /content -->
+    </div><!-- /main -->
+</div><!-- /app -->
+
+<!-- NEW WORKFLOW MODAL -->
+<div class="overlay" id="overlay-new-wf">
+    <div class="modal wide">
+        <div class="modal-header">
+            <div class="modal-title">New Workflow</div>
+            <button class="close-btn" onclick="closeModal('overlay-new-wf')">✕</button>
+        </div>
+        <div class="modal-body">
+            <div class="form-group">
+                <label class="form-label">Target Agents</label>
+                <div class="agent-check-list" id="agent-check-list">
+                    <!-- populated on open -->
+                </div>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Topic Seeds <span class="hint">(optional)</span></label>
+                <textarea class="form-textarea" id="topic-seeds" rows="3" placeholder="Enter topic ideas, one per line..."></textarea>
+                <div class="form-hint">Provide optional starting signals or themes for the pipeline to explore</div>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-ghost" onclick="closeModal('overlay-new-wf')">Cancel</button>
+            <button class="btn btn-primary" id="btn-start-pipeline" onclick="startWorkflow()">▶ Start Pipeline</button>
+        </div>
+    </div>
+</div>
+
+<!-- EDIT TEAM MEMBER MODAL -->
+<div class="overlay" id="overlay-edit-member">
+    <div class="modal">
+        <div class="modal-header">
+            <div class="modal-title" id="edit-member-title">Edit Team Member</div>
+            <button class="close-btn" onclick="closeModal('overlay-edit-member')">✕</button>
+        </div>
+        <div class="modal-body">
+            <div class="form-group">
+                <label class="form-label">Role Key</label>
+                <input class="form-input" id="edit-role-key" readonly style="opacity:0.6;cursor:default">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Display Name</label>
+                <input class="form-input" id="edit-display-name" readonly style="opacity:0.6;cursor:default">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Role Title</label>
+                <input class="form-input" id="edit-role-title" readonly style="opacity:0.6;cursor:default">
+            </div>
+            <div class="form-group">
+                <label class="form-label">LLM Model</label>
+                <select class="form-select" id="edit-llm-model">
+                    <optgroup label="Claude (Anthropic)">
+                        <option value="claude|claude-opus-4-6">Claude Opus 4.6</option>
+                        <option value="claude|claude-sonnet-4-6">Claude Sonnet 4.6</option>
+                        <option value="claude|claude-haiku-4-5-20251001">Claude Haiku 4.5</option>
+                    </optgroup>
+                    <optgroup label="Gemini (Google)">
+                        <option value="gemini|gemini-3-flash-preview">Gemini 3 Flash Preview</option>
+                        <option value="gemini|gemini-3.1-flash-image-preview">Gemini 3.1 Flash Image Preview</option>
+                    </optgroup>
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label">System Prompt</label>
+                <textarea class="form-textarea" id="edit-system-prompt" rows="8" placeholder="Enter system prompt..."></textarea>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Temperature <span class="hint">Controls creativity vs precision</span></label>
+                <div class="range-row">
+                    <input type="range" class="range-slider" id="edit-temperature" min="0" max="1" step="0.05" value="0.7" oninput="document.getElementById('temp-display').textContent=this.value">
+                    <span class="range-value" id="temp-display">0.70</span>
+                </div>
+                <div class="form-hint">0.0 = deterministic, 1.0 = highly creative</div>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-ghost" onclick="closeModal('overlay-edit-member')">Cancel</button>
+            <button class="btn btn-primary" id="btn-save-member" onclick="saveMember()">Save Changes</button>
+        </div>
+    </div>
+</div>
+
+<!-- TOASTS -->
+<div id="toasts"></div>
+
+<script>
+/* ─────────────────────────────────────────────
+   STATE
+───────────────────────────────────────────── */
+const STEPS = [
+    { key: 'signal',       label: 'Signal',      icon: '📡' },
+    { key: 'angle',        label: 'Angle',        icon: '🎯' },
+    { key: 'co_creation',  label: 'Co-Creation',  icon: '✍️' },
+    { key: 'fact_check',   label: 'Fact-Check',   icon: '🔍' },
+    { key: 'atomization',  label: 'Atomization',  icon: '⚛️' },
+];
+
+let teamMembers  = [];
+let currentRunId  = null;
+let pollTimer     = null;
+let selectedStep  = null;
+let currentArtifacts = {};
+let currentStepLogs = [];  // step_logs from last poll
+let currentWfStatus = null; // full workflow status
+let editingRoleKey   = null;
+
+/* ─────────────────────────────────────────────
+   NOTIFICATIONS
+───────────────────────────────────────────── */
+const NOTIF_ICONS = {
+    post_scheduled: '📅',
+    workflow_completed: '✅',
+    workflow_failed: '❌',
+    content_ready: '📝',
+};
+
+function toggleNotifPanel() {
+    document.getElementById('notif-panel').classList.toggle('open');
+}
+
+async function loadNotifications() {
+    try {
+        const r = await fetch('/api/notifications?limit=20&_t=' + Date.now());
+        if (!r.ok) return;
+        const data = await r.json();
+        const badge = document.getElementById('notif-badge');
+        if (data.unread > 0) {
+            badge.textContent = data.unread > 99 ? '99+' : data.unread;
+            badge.classList.remove('hidden');
+        } else {
+            badge.classList.add('hidden');
+        }
+        const list = document.getElementById('notif-list');
+        if (!data.notifications || data.notifications.length === 0) {
+            list.innerHTML = '<div style="padding:24px;text-align:center;color:var(--text-3);font-size:12px">No notifications yet</div>';
+            return;
+        }
+        list.innerHTML = data.notifications.map(n => {
+            const icon = NOTIF_ICONS[n.type] || '🔔';
+            const ago = timeAgo(n.created_at);
+            return `
+                <div class="notif-item ${n.is_read ? '' : 'unread'}" onclick="clickNotif(${n.id}, '${esc(n.link || '')}')">
+                    <div class="notif-icon">${icon}</div>
+                    <div class="notif-content">
+                        <div class="notif-title">${esc(n.title)}</div>
+                        <div class="notif-body">${esc(n.body || '')}</div>
+                        <div class="notif-time">${ago}</div>
+                    </div>
+                </div>`;
+        }).join('');
+    } catch(e) { /* silent */ }
+}
+
+function timeAgo(iso) {
+    if (!iso) return '';
+    const diff = (Date.now() - new Date(iso).getTime()) / 1000;
+    if (diff < 60) return 'just now';
+    if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
+    if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
+    return Math.floor(diff / 86400) + 'd ago';
+}
+
+async function clickNotif(id, link) {
+    // Mark as read
+    try { await fetch('/api/notifications/read', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ids: [id]}) }); } catch(e) {}
+    if (link) window.location = link;
+    else { loadNotifications(); document.getElementById('notif-panel').classList.remove('open'); }
+}
+
+async function markAllRead() {
+    try { await fetch('/api/notifications/read', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({}) }); } catch(e) {}
+    loadNotifications();
+}
+
+/* ─────────────────────────────────────────────
+   INIT
+───────────────────────────────────────────── */
+document.addEventListener('DOMContentLoaded', () => {
+    renderStepper();
+    loadTeam();
+    loadWorkflows();
+    loadNotifications();
+    setInterval(loadNotifications, 10000);  // poll every 10s
+});
+
+// Close notif panel on outside click
+document.addEventListener('click', e => {
+    const panel = document.getElementById('notif-panel');
+    const bell = document.getElementById('notif-bell');
+    if (panel && bell && !panel.contains(e.target) && !bell.contains(e.target)) {
+        panel.classList.remove('open');
+    }
+});
+
+/* ─────────────────────────────────────────────
+   STEPPER RENDER
+───────────────────────────────────────────── */
+function renderStepper(statuses) {
+    const wrap = document.getElementById('stepper');
+    wrap.innerHTML = '';
+    STEPS.forEach((s, i) => {
+        const status = statuses ? (statuses[s.key] || 'pending') : 'pending';
+        const node = document.createElement('div');
+        node.className = 'step-node ' + status + (selectedStep === s.key ? ' selected' : '');
+        node.onclick = () => selectStep(s.key);
+        node.innerHTML = `
+            <div class="step-circle">${s.icon}</div>
+            <div class="step-label">${s.label}</div>
+        `;
+        wrap.appendChild(node);
+        if (i < STEPS.length - 1) {
+            const line = document.createElement('div');
+            const nextStatus = statuses ? (statuses[STEPS[i].key] || 'pending') : 'pending';
+            line.className = 'step-line' + (nextStatus === 'completed' ? ' done' : '');
+            wrap.appendChild(line);
+        }
+    });
+}
+
+/* ─────────────────────────────────────────────
+   TEAM
+───────────────────────────────────────────── */
+async function loadTeam() {
+    const grid = document.getElementById('team-grid');
+    try {
+        const res = await fetch('/api/team/members');
+        if (!res.ok) throw new Error('Failed to load team');
+        const data = await res.json();
+        teamMembers = Array.isArray(data) ? data : (data.members || []);
+        grid.innerHTML = '';
+        if (teamMembers.length === 0) {
+            grid.innerHTML = '<div style="padding:20px;color:var(--text-3);font-size:13px">No team members configured</div>';
+            return;
+        }
+        teamMembers.forEach(m => {
+            const card = document.createElement('div');
+            card.className = 'team-card';
+            card.onclick = () => openEditMember(m.role_key);
+            const llmCls = (m.llm_model || '').includes('image') ? 'gemini-img'
+                         : (m.llm_provider || '').includes('gemini') ? 'gemini' : 'claude';
+            const llmLabel = (m.llm_model || 'claude-sonnet-4-6').replace('claude-', '').replace('gemini-', 'G ');
+            card.innerHTML = `
+                <div class="team-emoji">${m.emoji || '👤'}</div>
+                <div class="team-name">${esc(m.display_name)}</div>
+                <div class="team-role">${esc(m.role_title)}</div>
+                <div class="team-llm ${llmCls}">${llmLabel}</div>
+            `;
+            grid.appendChild(card);
+        });
+        renderOrgChart();
+    } catch (e) {
+        grid.innerHTML = '<div style="padding:20px;color:var(--text-3);font-size:13px">Could not load team members</div>';
+    }
+}
+
+/* ─────────────────────────────────────────────
+   ORG CHART
+───────────────────────────────────────────── */
+let allAgents = [];  // loaded for org chart
+
+async function renderOrgChart() {
+    const el = document.getElementById('org-chart');
+    if (!el || !teamMembers.length) return;
+
+    // Load agents
+    try {
+        const r = await fetch('/api/agents');
+        const d = await r.json();
+        allAgents = d.agents || [];
+    } catch(e) { allAgents = []; }
+
+    const palette = ['#007aff','#ff9500','#af52de','#ff3b30','#30d158','#5ac8fa','#ff2d55','#ffcc00','#34c759','#ff6482','#00c7be'];
+
+    // Build lookup
+    const byKey = {};
+    teamMembers.forEach(m => byKey[m.role_key] = m);
+
+    function node(key) {
+        const m = byKey[key];
+        if (!m) return '';
+        const team = m.team || 'editorial';
+        const model = (m.llm_model || 'claude-sonnet-4-6');
+        const provIcon = m.llm_provider === 'gemini' ? '◆' : '●';
+        const shortModel = model.replace('claude-','').replace('gemini-','G ');
+        return `
+            <div class="org-node ${team}" onclick="openEditMember('${esc(key)}')" title="${esc(m.role_title)}">
+                <div class="org-emoji">${m.emoji || '👤'}</div>
+                <div class="org-name">${esc(m.display_name)}</div>
+                <div class="org-title">${esc(m.role_title)}</div>
+                <div class="org-model">${provIcon} ${shortModel}</div>
+            </div>`;
+    }
+
+    function agentNode(a, idx) {
+        const color = palette[idx % palette.length];
+        const init = (a.agent_name || '?')[0].toUpperCase();
+        const fields = (a.fields || []).slice(0,2).join(', ');
+        return `
+            <div class="org-node" style="border-color:${color}33;background:${color}05;min-width:100px;padding:8px 10px"
+                 onclick="window.location='/agent-detail.html?id=${a.agent_id}'" title="${esc(a.agent_name)} — ${esc(a.brand)}">
+                <div style="width:28px;height:28px;border-radius:50%;background:${color};color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700">${init}</div>
+                <div class="org-name" style="font-size:10px;margin-top:3px">${esc(a.agent_name)}</div>
+                <div class="org-title" style="font-size:8px;max-width:80px">${esc(a.brand)}</div>
+                <div style="font-size:7px;color:var(--text-3);margin-top:2px">${esc(fields)}</div>
+            </div>`;
+    }
+
+    function vline() { return '<div class="org-connector"><div class="org-vline"></div></div>'; }
+
+    const agentCards = allAgents.map((a, i) => agentNode(a, i)).join('');
+
+    el.innerHTML = `
+        <div class="org-chart">
+            <!-- Level 0: EIC -->
+            <div class="org-level">${node('eic')}</div>
+            ${vline()}
+
+            <!-- Level 1: Direct reports to EIC -->
+            <div style="position:relative;display:flex;justify-content:center">
+                <div style="position:absolute;top:0;left:50%;transform:translateX(-50%);width:calc(100% - 120px);height:2px;background:var(--border-strong)"></div>
+                <div style="display:flex;gap:24px;align-items:flex-start;padding-top:0">
+                    <!-- Creative Director branch -->
+                    <div class="org-branch">
+                        <div class="org-branch-line"></div>
+                        ${node('creative_director')}
+                        ${vline()}
+                        <div style="position:relative;display:flex;justify-content:center">
+                            <div style="position:absolute;top:0;left:50%;transform:translateX(-50%);width:calc(100% - 40px);height:2px;background:var(--border-strong)"></div>
+                            <div style="display:flex;gap:12px;padding-top:0">
+                                <div class="org-branch"><div class="org-branch-line"></div>${node('prompt_engineer_1')}</div>
+                                <div class="org-branch"><div class="org-branch-line"></div>${node('prompt_engineer_2')}</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Head of Intelligence -->
+                    <div class="org-branch">
+                        <div class="org-branch-line"></div>
+                        ${node('head_intelligence')}
+                    </div>
+
+                    <!-- Production Manager branch -->
+                    <div class="org-branch">
+                        <div class="org-branch-line"></div>
+                        ${node('production_manager')}
+                        ${vline()}
+                        <div style="position:relative;display:flex;justify-content:center">
+                            <div style="position:absolute;top:0;left:50%;transform:translateX(-50%);width:calc(100% - 40px);height:2px;background:var(--border-strong)"></div>
+                            <div style="display:flex;gap:12px;padding-top:0">
+                                <div class="org-branch"><div class="org-branch-line"></div>${node('copywriter_1')}</div>
+                                <div class="org-branch"><div class="org-branch-line"></div>${node('copywriter_2')}</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Distribution Specialist -->
+                    <div class="org-branch">
+                        <div class="org-branch-line"></div>
+                        ${node('distribution_specialist')}
+                    </div>
+                </div>
+            </div>
+
+            ${vline()}
+
+            <!-- Level 3: AGENTS / INFLUENCERS -->
+            <div style="width:100%;padding:16px;background:var(--surface-2);border-radius:var(--r);border:1px dashed var(--border-strong)">
+                <div style="text-align:center;font-size:10px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:12px">
+                    📢 Influencer Agents — Content Recipients
+                </div>
+                <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center">
+                    ${agentCards || '<div style="color:var(--text-3);font-size:12px">No agents created yet</div>'}
+                </div>
+            </div>
+
+            <!-- Workflow arrows -->
+            <div style="margin-top:24px;padding:14px 20px;background:var(--surface-2);border-radius:var(--r);border:1px solid var(--border)">
+                <div style="font-size:11px;font-weight:600;color:var(--text-2);margin-bottom:8px">WORKFLOW SEQUENCE</div>
+                <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:11px;font-weight:500">
+                    <span style="color:var(--success)">🔍 Intelligence</span>
+                    <span style="color:var(--text-3)">→</span>
+                    <span style="color:var(--accent)">👑 EIC + 🎨 CD</span>
+                    <span style="color:var(--text-3)">→</span>
+                    <span style="color:var(--warning)">🖊️ Writers + 📸🖌️ Prompt Eng.</span>
+                    <span style="color:var(--text-3)">→</span>
+                    <span style="color:var(--warning)">⚙️ Production QC</span>
+                    <span style="color:var(--text-3)">→</span>
+                    <span style="color:var(--success)">🔍 Fact-Check</span>
+                    <span style="color:var(--text-3)">→</span>
+                    <span style="color:var(--danger)">🚀 Distribution</span>
+                    <span style="color:var(--text-3)">→</span>
+                    <span style="padding:2px 8px;background:rgba(0,122,255,0.1);border-radius:100px;color:var(--accent)">📢 ${allAgents.length} Agents</span>
+                    <span style="color:var(--text-3)">→</span>
+                    <span style="color:var(--text-2)">📅 Auto-Schedule</span>
+                    <span style="color:var(--text-3)">→</span>
+                    <span style="color:var(--text-2)">🔔 You Review</span>
+                </div>
+            </div>
+        </div>`;
+}
+
+/* ─────────────────────────────────────────────
+   WORKFLOWS
+───────────────────────────────────────────── */
+async function loadWorkflows() {
+    const tbody = document.getElementById('wf-tbody');
+    try {
+        const res = await fetch('/api/team/workflows');
+        if (!res.ok) throw new Error('Failed');
+        const data = await res.json();
+        const runs = Array.isArray(data) ? data : (data.workflows || []);
+        if (runs.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="6" class="wf-empty">No workflows yet. Click "New Workflow" to start your first pipeline.</td></tr>';
+            return;
+        }
+        tbody.innerHTML = runs.map(r => {
+            const stepKeys = STEPS.map(s => s.key);
+            const curIdx = stepKeys.indexOf(r.current_step || '');
+            const pct = r.status === 'completed' ? 100
+                      : r.status === 'failed' ? Math.max(10, ((curIdx) / 5) * 100)
+                      : curIdx >= 0 ? ((curIdx + 0.5) / 5) * 100 : 0;
+            const barCls = r.status === 'completed' ? 'completed' : r.status === 'failed' ? 'failed' : 'running';
+            const dots = STEPS.map((s, i) => {
+                const cls = r.status === 'completed' ? 'done'
+                          : i < curIdx ? 'done'
+                          : i === curIdx ? (r.status === 'failed' ? 'fail' : 'active')
+                          : '';
+                return `<div class="wf-step-dot ${cls}" title="${s.label}">${s.icon}</div>`;
+            }).join('');
+            return `
+            <tr onclick="viewWorkflow('${esc(r.id || r.run_id)}')">
+                <td class="wf-id">${esc(r.id || r.run_id || '-')}</td>
+                <td>
+                    <span class="status-badge ${r.status || 'pending'}"><span class="status-dot ${r.status || 'pending'}"></span>${capitalize(r.status || 'pending')}</span>
+                    <div class="wf-progress-wrap"><div class="wf-progress-bar ${barCls}" style="width:${pct}%"></div></div>
+                    <div class="wf-step-dots">${dots}</div>
+                </td>
+                <td>${esc(r.current_step || r.step || '-')}</td>
+                <td>${esc(formatAgents(r.agents))}</td>
+                <td>${formatTime(r.started_at || r.started)}</td>
+                <td>${formatTime(r.completed_at || r.completed)}</td>
+            </tr>`;
+        }).join('');
+    } catch (e) {
+        tbody.innerHTML = '<tr><td colspan="6" class="wf-empty">Could not load workflows</td></tr>';
+    }
+}
+
+function viewWorkflow(runId) {
+    currentRunId = runId;
+    document.getElementById('pipeline-run-label').textContent = 'Run #' + runId;
+    selectedStep = null;
+    pollWorkflow(runId);
+    loadArtifacts(runId);
+}
+
+/* ─────────────────────────────────────────────
+   START WORKFLOW
+───────────────────────────────────────────── */
+async function startWorkflow() {
+    const btn = document.getElementById('btn-start-pipeline');
+    const checks = document.querySelectorAll('#agent-check-list input:checked');
+    const agentIds = Array.from(checks).map(c => c.value);
+    const seeds = document.getElementById('topic-seeds').value.trim();
+
+    if (agentIds.length === 0) {
+        toast('Select at least one agent', 'error');
+        return;
+    }
+
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> Starting...';
+
+    try {
+        const res = await fetch('/api/team/workflow/start', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                agent_ids: agentIds,
+                topic_seeds: seeds ? seeds.split('\n').filter(Boolean) : []
+            })
+        });
+        if (!res.ok) throw new Error('Failed to start workflow');
+        const data = await res.json();
+        const runId = data.run_id || data.id;
+        currentRunId = runId;
+        document.getElementById('pipeline-run-label').textContent = 'Run #' + runId;
+        closeModal('overlay-new-wf');
+        toast('Pipeline started', 'success');
+        pollWorkflow(runId);
+        loadWorkflows();
+    } catch (e) {
+        toast('Failed to start pipeline: ' + e.message, 'error');
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '▶ Start Pipeline';
+    }
+}
+
+/* ─────────────────────────────────────────────
+   POLL WORKFLOW
+───────────────────────────────────────────── */
+function pollWorkflow(runId) {
+    if (pollTimer) clearInterval(pollTimer);
+    document.getElementById('btn-stop-wf').style.display = 'inline-flex';
+    fetchWorkflowStatus(runId);
+    pollTimer = setInterval(() => fetchWorkflowStatus(runId), 3000);
+}
+
+async function stopWorkflow() {
+    if (!currentRunId) return;
+    if (!confirm('Stop workflow #' + currentRunId + '?')) return;
+    try {
+        const r = await fetch(`/api/team/workflow/${currentRunId}/stop`, { method: 'POST' });
+        if (!r.ok) { const d = await r.json(); throw new Error(d.error || 'Failed'); }
+        toast('Workflow stopped', 'warning');
+        if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+        document.getElementById('btn-stop-wf').style.display = 'none';
+        loadWorkflows();
+    } catch(e) { toast(e.message, 'error'); }
+}
+
+async function fetchWorkflowStatus(runId) {
+    try {
+        const res = await fetch(`/api/team/workflow/${runId}`);
+        if (!res.ok) {
+            // Stop polling on 404 (workflow deleted/missing)
+            if (res.status === 404 && pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+            return;
+        }
+        const data = await res.json();
+
+        // Build step statuses
+        const statuses = {};
+        const stepOrder = STEPS.map(s => s.key);
+        const currentIdx = stepOrder.indexOf(data.current_step);
+
+        stepOrder.forEach((key, i) => {
+            if (data.status === 'completed') {
+                statuses[key] = 'completed';
+            } else if (data.status === 'failed') {
+                if (i < currentIdx) statuses[key] = 'completed';
+                else if (i === currentIdx) statuses[key] = 'failed';
+                else statuses[key] = 'pending';
+            } else {
+                if (i < currentIdx) statuses[key] = 'completed';
+                else if (i === currentIdx) statuses[key] = 'running';
+                else statuses[key] = 'pending';
+            }
+        });
+
+        currentStepLogs = data.step_logs || [];
+        currentWfStatus = data;
+        renderStepper(statuses);
+
+        // Auto-show selected step detail
+        if (selectedStep) showArtifact(selectedStep);
+
+        if (data.status === 'completed' || data.status === 'failed') {
+            if (pollTimer) clearInterval(pollTimer);
+            pollTimer = null;
+            document.getElementById('btn-stop-wf').style.display = 'none';
+            loadWorkflows();
+            loadNotifications();
+            if (data.status === 'completed') {
+                toast('Pipeline completed', 'success');
+                loadArtifacts(runId);
+            } else {
+                toast('Pipeline failed at ' + (data.current_step || 'unknown step'), 'error');
+            }
+        }
+    } catch (e) {
+        // silent fail on poll
+    }
+}
+
+/* ─────────────────────────────────────────────
+   ARTIFACTS
+───────────────────────────────────────────── */
+async function loadArtifacts(runId) {
+    try {
+        const res = await fetch(`/api/team/workflow/${runId}/artifacts`);
+        if (!res.ok) throw new Error('');
+        const raw = await res.json();
+        // Map API keys to step keys
+        currentArtifacts = {};
+        if (raw.trend_report) currentArtifacts.signal = raw.trend_report;
+        if (raw.content_brief) currentArtifacts.angle = raw.content_brief;
+        if (raw.master_content) currentArtifacts.co_creation = raw.master_content;
+        if (raw.master_content) currentArtifacts.fact_check = raw.master_content; // same data, shows fact-check notes
+        if (raw.atomized) currentArtifacts.atomization = { items: raw.atomized };
+        if (selectedStep) showArtifact(selectedStep);
+    } catch (e) {
+        currentArtifacts = {};
+    }
+}
+
+function selectStep(stepName) {
+    selectedStep = stepName;
+    // re-render to highlight
+    const nodes = document.querySelectorAll('.step-node');
+    nodes.forEach(n => n.classList.remove('selected'));
+    const idx = STEPS.findIndex(s => s.key === stepName);
+    if (idx >= 0 && nodes[idx]) nodes[idx].classList.add('selected');
+    showArtifact(stepName);
+}
+
+function showArtifact(stepName) {
+    const panel = document.getElementById('artifact-preview');
+    const stepDef = STEPS.find(s => s.key === stepName);
+    const stepLog = currentStepLogs.find(l => l.step === stepName);
+    const artifact = currentArtifacts[stepName];
+
+    // Determine step status
+    let status = 'pending';
+    if (currentWfStatus) {
+        const stepKeys = STEPS.map(s => s.key);
+        const curIdx = stepKeys.indexOf(currentWfStatus.current_step || '');
+        const thisIdx = stepKeys.indexOf(stepName);
+        if (currentWfStatus.status === 'completed') status = 'completed';
+        else if (currentWfStatus.status === 'failed' && thisIdx === curIdx) status = 'failed';
+        else if (thisIdx < curIdx) status = 'completed';
+        else if (thisIdx === curIdx) status = 'running';
+    }
+
+    // Timing
+    let timing = '';
+    if (stepLog) {
+        const started = stepLog.started ? new Date(stepLog.started) : null;
+        const completed = stepLog.completed ? new Date(stepLog.completed) : null;
+        if (started && completed) {
+            const dur = Math.round((completed - started) / 1000);
+            timing = `<span>Started: ${started.toLocaleTimeString()}</span><span>Duration: ${dur}s</span>`;
+        } else if (started) {
+            const elapsed = Math.round((Date.now() - started.getTime()) / 1000);
+            timing = `<span>Started: ${started.toLocaleTimeString()}</span><span><span class="step-running-pulse"></span>${elapsed}s elapsed</span>`;
+        }
+    }
+
+    // Role info
+    const roleMap = {
+        signal: 'Marcus Webb (Head of Intelligence)',
+        angle: 'Victoria Crane (Editor-in-Chief)',
+        co_creation: 'Sasha Noir (CD) + James Mercer & Elena Santos (Copywriters) + Kai Lens & Zoe Vector (Prompt Eng.)',
+        fact_check: 'Ryan Takeda (Production Manager)',
+        atomization: 'Nadia Flux (Distribution Specialist)',
+    };
+
+    // Build step detail
+    let html = `<div class="step-detail">
+        <div class="step-detail-header">
+            <div class="step-detail-icon">${stepDef ? stepDef.icon : '📄'}</div>
+            <div class="step-detail-title">${stepDef ? stepDef.label : stepName}</div>
+            <span class="step-detail-status ${status}">${status === 'running' ? '<span class="step-running-pulse"></span>' : ''}${status}</span>
+        </div>
+        <div class="step-detail-role">${roleMap[stepName] || ''}</div>
+        ${timing ? `<div class="step-detail-timing">${timing}</div>` : ''}`;
+
+    // Step log output (real-time)
+    if (stepLog && stepLog.output) {
+        html += `<div class="step-detail-output">${esc(stepLog.output)}</div>`;
+    }
+
+    // Artifact content (after completion)
+    if (artifact) {
+        if (stepName === 'atomization' && Array.isArray(artifact.items || artifact)) {
+            html += `</div>`;
+            panel.innerHTML = html;
+            renderAtomizationReview(artifact.items || artifact);
+            return;
+        }
+        const content = typeof artifact === 'string' ? artifact
+            : (artifact.content || artifact.output || '');
+        if (content) {
+            html += `<div class="step-detail-output">${esc(content)}</div>`;
+        } else {
+            // Show structured artifact data nicely
+            const formatted = _formatArtifact(stepName, artifact);
+            if (formatted) html += formatted;
+        }
+    }
+
+    if (!stepLog && !artifact && status === 'pending') {
+        html += `<div style="color:var(--text-3);font-size:12px;padding:12px 0">Waiting for previous steps to complete...</div>`;
+    }
+
+    html += `</div>`;
+    panel.innerHTML = html;
+}
+
+function _formatArtifact(stepName, data) {
+    if (!data) return '';
+    if (stepName === 'trend_report' || stepName === 'signal') {
+        let h = '';
+        if (data.anchor_points && data.anchor_points.length) {
+            h += `<div style="margin-top:8px"><strong style="font-size:11px;color:var(--text-3)">ANCHOR POINTS</strong></div>`;
+            h += `<div class="step-detail-output">${data.anchor_points.map(p => '- ' + esc(p)).join('\n')}</div>`;
+        }
+        if (data.market_context) {
+            h += `<div style="margin-top:8px"><strong style="font-size:11px;color:var(--text-3)">MARKET CONTEXT</strong></div>`;
+            h += `<div class="step-detail-output">${esc(data.market_context)}</div>`;
+        }
+        return h;
+    }
+    if (stepName === 'content_brief' || stepName === 'angle') {
+        let h = '';
+        if (data.headline) h += `<div style="font-size:14px;font-weight:700;margin:8px 0">${esc(data.headline)}</div>`;
+        if (data.chosen_angle) h += `<div class="step-detail-output">${esc(data.chosen_angle)}</div>`;
+        if (data.narrative_hook) h += `<div style="margin-top:6px;font-size:12px;color:var(--text-2)"><strong>Hook:</strong> ${esc(data.narrative_hook)}</div>`;
+        return h;
+    }
+    if (stepName === 'master_content' || stepName === 'co_creation' || stepName === 'fact_check') {
+        let h = '';
+        if (data.headline) h += `<div style="font-size:14px;font-weight:700;margin:8px 0">${esc(data.headline)}</div>`;
+        if (data.body) h += `<div class="step-detail-output">${esc(data.body.substring(0, 800))}${data.body.length > 800 ? '...' : ''}</div>`;
+        if (data.fact_check_passed !== undefined) {
+            h += `<div style="margin-top:8px;font-size:12px"><strong>Fact-check:</strong> ${data.fact_check_passed ? '✅ Passed' : '❌ Issues found'}</div>`;
+        }
+        if (data.fact_check_notes && data.fact_check_notes.length) {
+            h += `<div class="step-detail-output" style="margin-top:4px">${data.fact_check_notes.map(n => '- ' + esc(n)).join('\n')}</div>`;
+        }
+        return h;
+    }
+    // Fallback: JSON
+    return `<div class="step-detail-output">${esc(JSON.stringify(data, null, 2))}</div>`;
+}
+
+function renderAtomizationReview(items) {
+    const panel = document.getElementById('artifact-preview');
+    const platformIcons = {
+        twitter: '🐦', x: '𝕏', instagram: '📸', linkedin: '💼',
+        facebook: '📘', tiktok: '🎵', youtube: '▶️', blog: '📝',
+        email: '📧', newsletter: '📩', default: '📄'
+    };
+
+    let html = '<div class="atom-grid">';
+    items.forEach((item, i) => {
+        const platform = (item.platform || 'default').toLowerCase();
+        const icon = platformIcons[platform] || platformIcons.default;
+        const body = (item.body || item.content || '').substring(0, 150);
+        const agent = item.target_agent || item.agent_name || '-';
+        const format = item.format || item.type || 'post';
+        html += `
+            <div class="atom-card" id="atom-${i}">
+                <input type="checkbox" class="atom-checkbox" value="${i}" onchange="updateAtomSelection()" checked>
+                <div class="atom-header">
+                    <span class="atom-platform">${icon}</span>
+                    <span class="atom-format">${esc(format)}</span>
+                    <span class="atom-agent">${esc(agent)}</span>
+                </div>
+                <div class="atom-body">${esc(body)}${body.length >= 150 ? '...' : ''}</div>
+            </div>`;
+    });
+    html += '</div>';
+
+    html += `
+        <div class="atom-actions">
+            <span class="select-count" id="atom-select-count">${items.length} of ${items.length} selected</span>
+            <button class="btn btn-ghost" onclick="toggleAllAtoms(false)">Deselect All</button>
+            <button class="btn btn-ghost" onclick="toggleAllAtoms(true)">Select All</button>
+            <button class="btn btn-success" onclick="pushToAgents()">Push to Agents</button>
+        </div>`;
+
+    panel.innerHTML = html;
+}
+
+function toggleAllAtoms(checked) {
+    document.querySelectorAll('.atom-checkbox').forEach(cb => cb.checked = checked);
+    updateAtomSelection();
+}
+
+function updateAtomSelection() {
+    const all = document.querySelectorAll('.atom-checkbox');
+    const checked = document.querySelectorAll('.atom-checkbox:checked');
+    const countEl = document.getElementById('atom-select-count');
+    if (countEl) countEl.textContent = `${checked.length} of ${all.length} selected`;
+
+    all.forEach(cb => {
+        const card = cb.closest('.atom-card');
+        if (card) card.classList.toggle('selected', cb.checked);
+    });
+}
+
+async function pushToAgents() {
+    const checked = document.querySelectorAll('.atom-checkbox:checked');
+    const ids = Array.from(checked).map(cb => parseInt(cb.value));
+
+    if (ids.length === 0) {
+        toast('Select at least one item', 'error');
+        return;
+    }
+
+    try {
+        await approveContent(currentRunId, ids);
+        toast(`Pushed ${ids.length} items to agents`, 'success');
+    } catch (e) {
+        toast('Failed to push content', 'error');
+    }
+}
+
+async function approveContent(runId, atomizedIds) {
+    const res = await fetch(`/api/team/workflow/${runId}/approve`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ atomized_ids: atomizedIds })
+    });
+    if (!res.ok) throw new Error('Approve failed');
+    return res.json();
+}
+
+/* ─────────────────────────────────────────────
+   EDIT TEAM MEMBER
+───────────────────────────────────────────── */
+async function openEditMember(roleKey) {
+    editingRoleKey = roleKey;
+    document.getElementById('edit-member-title').textContent = 'Edit Team Member';
+
+    try {
+        const res = await fetch(`/api/team/members/${roleKey}`);
+        if (!res.ok) throw new Error('');
+        const m = await res.json();
+
+        document.getElementById('edit-role-key').value      = m.role_key || roleKey;
+        document.getElementById('edit-display-name').value   = m.display_name || '';
+        document.getElementById('edit-role-title').value     = m.role_title || '';
+        document.getElementById('edit-system-prompt').value  = m.system_prompt || '';
+
+        const temp = m.temperature != null ? parseFloat(m.temperature) : 0.7;
+        document.getElementById('edit-temperature').value    = temp;
+        document.getElementById('temp-display').textContent  = temp.toFixed(2);
+
+        const llmVal = (m.llm_provider || 'claude') + '|' + (m.llm_model || 'claude-sonnet-4-6');
+        document.getElementById('edit-llm-model').value = llmVal;
+
+        document.getElementById('edit-member-title').textContent = (m.emoji || '') + ' ' + (m.display_name || roleKey);
+    } catch (e) {
+        // fill with what we have locally
+        const local = teamMembers.find(t => t.role_key === roleKey);
+        if (local) {
+            document.getElementById('edit-role-key').value    = local.role_key;
+            document.getElementById('edit-display-name').value = local.display_name || '';
+            document.getElementById('edit-role-title').value   = local.role_title || '';
+        }
+    }
+
+    openModal('overlay-edit-member');
+}
+
+async function saveMember() {
+    const btn = document.getElementById('btn-save-member');
+    const llmParts = (document.getElementById('edit-llm-model').value || 'claude|claude-sonnet-4-6').split('|');
+    const payload = {
+        system_prompt: document.getElementById('edit-system-prompt').value,
+        temperature:   parseFloat(document.getElementById('edit-temperature').value),
+        llm_provider:  llmParts[0],
+        llm_model:     llmParts[1]
+    };
+
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> Saving...';
+
+    try {
+        const res = await fetch(`/api/team/members/${editingRoleKey}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        if (!res.ok) throw new Error('Save failed');
+        toast('Team member updated', 'success');
+        closeModal('overlay-edit-member');
+        loadTeam();
+    } catch (e) {
+        toast('Failed to save: ' + e.message, 'error');
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = 'Save Changes';
+    }
+}
+
+/* ─────────────────────────────────────────────
+   NEW WORKFLOW MODAL
+───────────────────────────────────────────── */
+async function openNewWorkflowModal() {
+    document.getElementById('topic-seeds').value = '';
+    const list = document.getElementById('agent-check-list');
+    list.innerHTML = '<div style="padding:12px;color:var(--text-3);font-size:13px">Loading agents...</div>';
+    openModal('overlay-new-wf');
+
+    try {
+        const res = await fetch('/api/agents');
+        if (!res.ok) throw new Error('');
+        const data = await res.json();
+        const agents = Array.isArray(data) ? data : (data.agents || []);
+
+        if (agents.length === 0) {
+            list.innerHTML = '<div style="padding:12px;color:var(--text-3);font-size:13px">No agents found</div>';
+            return;
+        }
+
+        list.innerHTML = agents.map(a => `
+            <label class="agent-check-item">
+                <input type="checkbox" value="${a.agent_id}" checked>
+                <span>${esc(a.agent_name)}</span>
+            </label>
+        `).join('');
+    } catch (e) {
+        list.innerHTML = '<div style="padding:12px;color:var(--text-3);font-size:13px">Could not load agents</div>';
+    }
+}
+
+/* ─────────────────────────────────────────────
+   MODAL HELPERS
+───────────────────────────────────────────── */
+function openModal(id)  { document.getElementById(id).classList.add('open'); }
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+
+// Close on overlay click
+document.querySelectorAll('.overlay').forEach(ov => {
+    ov.addEventListener('click', e => {
+        if (e.target === ov) ov.classList.remove('open');
+    });
+});
+
+// Close on Escape
+document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') {
+        document.querySelectorAll('.overlay.open').forEach(ov => ov.classList.remove('open'));
+    }
+});
+
+/* ─────────────────────────────────────────────
+   TOAST
+───────────────────────────────────────────── */
+function toast(msg, type = 'info') {
+    const wrap = document.getElementById('toasts');
+    const el = document.createElement('div');
+    el.className = 'toast';
+    el.innerHTML = `<span class="t-dot ${type === 'error' ? 'error' : type === 'success' ? 'success' : 'info'}"></span>${esc(msg)}`;
+    wrap.appendChild(el);
+    requestAnimationFrame(() => requestAnimationFrame(() => el.classList.add('in')));
+    setTimeout(() => {
+        el.classList.remove('in');
+        el.classList.add('out');
+        setTimeout(() => el.remove(), 300);
+    }, 3200);
+}
+
+/* ─────────────────────────────────────────────
+   UTILS
+───────────────────────────────────────────── */
+function esc(s) {
+    if (s == null) return '';
+    const d = document.createElement('div');
+    d.textContent = String(s);
+    return d.innerHTML;
+}
+
+function capitalize(s) {
+    return s ? s.charAt(0).toUpperCase() + s.slice(1) : '';
+}
+
+function formatAgents(agents) {
+    if (!agents) return '-';
+    if (Array.isArray(agents)) return agents.length > 3 ? agents.slice(0,3).join(', ') + ' +' + (agents.length - 3) : agents.join(', ');
+    return String(agents);
+}
+
+function formatTime(ts) {
+    if (!ts) return '-';
+    try {
+        const d = new Date(ts);
+        return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ' ' +
+               d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+    } catch { return ts; }
+}
+/* ── VICTORIA CHAT ── */
+let _chatOpen = false;
+function toggleChat() {
+    _chatOpen = !_chatOpen;
+    document.getElementById('chat-panel').classList.toggle('open', _chatOpen);
+    if (_chatOpen) {
+        document.getElementById('chat-input').focus();
+        const msgs = document.getElementById('chat-messages');
+        if (msgs.children.length === 0) {
+            appendMsg('victoria', "Hello! I'm Victoria Crane, your Editor-in-Chief. Ask me about our workflow status, team assignments, content strategy, or what topics we should tackle next. How can I help?");
+        }
+    }
+}
+
+function appendMsg(role, text) {
+    const msgs = document.getElementById('chat-messages');
+    const div = document.createElement('div');
+    div.className = 'chat-msg ' + role;
+    if (role === 'victoria') {
+        div.innerHTML = '<div class="v-label">Victoria Crane</div>' + esc(text).replace(/\n/g, '<br>');
+    } else {
+        div.textContent = text;
+    }
+    msgs.appendChild(div);
+    msgs.scrollTop = msgs.scrollHeight;
+}
+
+async function sendChat() {
+    const input = document.getElementById('chat-input');
+    const msg = input.value.trim();
+    if (!msg) return;
+
+    input.value = '';
+    appendMsg('user', msg);
+
+    // Show typing indicator
+    const msgs = document.getElementById('chat-messages');
+    const typing = document.createElement('div');
+    typing.className = 'chat-typing';
+    typing.id = 'chat-typing';
+    typing.innerHTML = '<span>.</span><span>.</span><span>.</span>';
+    msgs.appendChild(typing);
+    msgs.scrollTop = msgs.scrollHeight;
+
+    const sendBtn = document.getElementById('chat-send-btn');
+    sendBtn.disabled = true;
+
+    try {
+        const r = await fetch('/api/team/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message: msg })
+        });
+        const data = await r.json();
+        typing.remove();
+        if (r.ok) {
+            appendMsg('victoria', data.reply);
+        } else {
+            appendMsg('victoria', data.error || 'Sorry, I had trouble processing that. Try again?');
+        }
+    } catch (e) {
+        typing.remove();
+        appendMsg('victoria', 'Connection error. Is the server running?');
+    } finally {
+        sendBtn.disabled = false;
+        input.focus();
+    }
+}
+
+document.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.shiftKey && document.activeElement?.id === 'chat-input') {
+        e.preventDefault();
+        sendChat();
+    }
+});
+
+</script>
+
+<!-- VICTORIA CHAT FAB + PANEL -->
+<button class="chat-fab" onclick="toggleChat()" title="Chat with Victoria Crane">
+    👑
+</button>
+
+<div class="chat-panel" id="chat-panel">
+    <div class="chat-header">
+        <div class="chat-avatar">👑</div>
+        <div class="chat-header-info">
+            <div class="chat-header-name">Victoria Crane</div>
+            <div class="chat-header-role">Editor-in-Chief &middot; opus-4-6</div>
+        </div>
+        <button style="background:none;border:none;cursor:pointer;font-size:16px;color:var(--text-3)" onclick="toggleChat()">✕</button>
+    </div>
+    <div class="chat-messages" id="chat-messages"></div>
+    <div class="chat-input-bar">
+        <input class="chat-input" id="chat-input" placeholder="Ask Victoria..." autocomplete="off">
+        <button class="chat-send" id="chat-send-btn" onclick="sendChat()">➤</button>
+    </div>
+</div>
+
+</body>
+</html>

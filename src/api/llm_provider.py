@@ -8,8 +8,9 @@ from src.database.models import APIConfiguration
 class LLMProvider:
     """Manages LLM API calls with support for multiple providers"""
 
-    def __init__(self, provider: str = 'claude', custom_api_key: Optional[str] = None):
+    def __init__(self, provider: str = 'claude', custom_api_key: Optional[str] = None, model: Optional[str] = None):
         self.provider = provider.lower()
+        self.model = model  # specific model override (e.g. claude-opus-4-6)
         self.api_key = custom_api_key or self._get_api_key()
         self.client = self._initialize_client()
 
@@ -44,6 +45,12 @@ class LLMProvider:
                 return OpenAI(api_key=self.api_key)
             except ImportError:
                 raise ImportError("OpenAI SDK not installed. Install with: pip install openai")
+        elif self.provider == 'gemini':
+            try:
+                from google import genai
+                return genai.Client(api_key=self.api_key)
+            except ImportError:
+                raise ImportError("Google GenAI SDK not installed. Install with: pip install google-genai")
         else:
             raise ValueError(f"Unsupported provider: {self.provider}")
 
@@ -59,6 +66,8 @@ class LLMProvider:
             return self._claude_generate(prompt, max_tokens, temperature, system_prompt)
         elif self.provider == 'openai':
             return self._openai_generate(prompt, max_tokens, temperature, system_prompt)
+        elif self.provider == 'gemini':
+            return self._gemini_generate(prompt, max_tokens, temperature, system_prompt)
 
     def _claude_generate(
         self,
@@ -76,7 +85,7 @@ class LLMProvider:
         ]
 
         response = self.client.messages.create(
-            model="claude-sonnet-4-6",
+            model=self.model or "claude-sonnet-4-6",
             max_tokens=max_tokens,
             temperature=temperature,
             system=system_prompt or "You are a helpful social media content creator.",
@@ -94,7 +103,7 @@ class LLMProvider:
     ) -> str:
         """Generate content using OpenAI API"""
         response = self.client.chat.completions.create(
-            model="gpt-4-turbo",
+            model=self.model or "gpt-4o",
             max_tokens=max_tokens,
             temperature=temperature,
             messages=[
@@ -110,6 +119,26 @@ class LLMProvider:
         )
 
         return response.choices[0].message.content
+
+    def _gemini_generate(
+        self,
+        prompt: str,
+        max_tokens: int,
+        temperature: float,
+        system_prompt: Optional[str]
+    ) -> str:
+        """Generate content using Google Gemini API"""
+        from google.genai import types
+        full_prompt = f"{system_prompt or 'You are a helpful social media content creator.'}\n\n{prompt}"
+        response = self.client.models.generate_content(
+            model=self.model or 'gemini-3-flash-preview',
+            contents=full_prompt,
+            config=types.GenerateContentConfig(
+                max_output_tokens=max_tokens,
+                temperature=temperature,
+            ),
+        )
+        return response.text
 
     @staticmethod
     def set_api_key(provider: str, api_key: str, model_name: Optional[str] = None):

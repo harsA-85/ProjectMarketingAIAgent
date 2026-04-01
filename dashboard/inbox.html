@@ -1,0 +1,804 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Inbox — Marketing AI</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+    --bg: #f5f5f7; --surface: #ffffff; --surface-2: #f2f2f7; --sidebar-bg: #fafafa;
+    --text-1: #1c1c1e; --text-2: #6e6e73; --text-3: #aeaeb2;
+    --accent: #007aff; --accent-dim: rgba(0,122,255,0.1);
+    --success: #30d158; --warning: #ff9f0a; --danger: #ff453a;
+    --border: rgba(0,0,0,0.07); --border-strong: rgba(0,0,0,0.12);
+    --r: 12px; --r-sm: 8px; --r-lg: 16px;
+    --shadow-sm: 0 1px 3px rgba(0,0,0,0.05), 0 2px 8px rgba(0,0,0,0.04);
+    --shadow: 0 2px 12px rgba(0,0,0,0.07), 0 4px 20px rgba(0,0,0,0.04);
+    --shadow-lg: 0 8px 32px rgba(0,0,0,0.1), 0 2px 8px rgba(0,0,0,0.06);
+}
+html, body { height: 100%; overflow: hidden; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text-1); -webkit-font-smoothing: antialiased; }
+
+/* ── LAYOUT ── */
+.app { display: flex; height: 100vh; }
+
+/* ── SIDEBAR ── */
+.sidebar { width: 228px; background: var(--sidebar-bg); border-right: 1px solid var(--border); display: flex; flex-direction: column; flex-shrink: 0; }
+.sidebar-header { padding: 18px 16px 12px; }
+.brand { display: flex; align-items: center; gap: 10px; }
+.brand-icon { width: 36px; height: 36px; border-radius: 10px; background: linear-gradient(135deg, #007aff, #5856d6); display: flex; align-items: center; justify-content: center; font-size: 18px; }
+.brand-name { font-size: 15px; font-weight: 700; color: var(--text-1); letter-spacing: -0.3px; }
+.brand-sub { font-size: 10px; color: var(--text-3); font-weight: 500; }
+.sidebar-nav { flex: 1; padding: 4px 10px; }
+.nav-section { font-size: 10px; font-weight: 700; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.8px; padding: 12px 10px 4px; }
+.nav-item { display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-radius: 7px; font-size: 13px; font-weight: 500; color: var(--text-2); cursor: pointer; transition: all 0.15s; text-decoration: none; }
+.nav-item:hover { background: rgba(0,0,0,0.04); color: var(--text-1); }
+.nav-item.active { background: var(--accent-dim); color: var(--accent); font-weight: 600; }
+.ni { font-size: 15px; width: 20px; text-align: center; }
+
+/* ── MAIN ── */
+.main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+.topbar { display: flex; align-items: center; padding: 10px 20px; border-bottom: 1px solid var(--border); background: rgba(255,255,255,0.85); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); flex-shrink: 0; }
+.traffic-lights { display: flex; gap: 8px; margin-right: 16px; }
+.tl { width: 12px; height: 12px; border-radius: 50%; }
+.tl.red { background: #ff5f57; } .tl.yellow { background: #febc2e; } .tl.green { background: #28c840; }
+.topbar-center { flex: 1; text-align: center; font-size: 13px; font-weight: 600; color: var(--text-2); }
+
+/* ── INBOX LAYOUT ── */
+.inbox-layout { display: flex; flex: 1; overflow: hidden; }
+
+/* ── THREAD LIST ── */
+.thread-col { width: 340px; border-right: 1px solid var(--border); display: flex; flex-direction: column; background: var(--surface); flex-shrink: 0; }
+.thread-header { padding: 16px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px; }
+.thread-header-title { font-size: 17px; font-weight: 700; flex: 1; }
+.thread-tabs { display: flex; gap: 2px; padding: 0 12px; border-bottom: 1px solid var(--border); }
+.thread-tab { padding: 8px 12px; font-size: 12px; font-weight: 600; color: var(--text-3); cursor: pointer; border-bottom: 2px solid transparent; transition: all 0.15s; }
+.thread-tab:hover { color: var(--text-2); }
+.thread-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+.thread-search { padding: 10px 12px; border-bottom: 1px solid var(--border); }
+.thread-search input { width: 100%; border: 1px solid var(--border); border-radius: var(--r-sm); padding: 7px 10px; font-size: 12px; outline: none; background: var(--surface-2); font-family: inherit; }
+.thread-search input:focus { border-color: var(--accent); }
+.thread-list { flex: 1; overflow-y: auto; }
+.thread-item { display: flex; gap: 10px; padding: 12px 14px; border-bottom: 1px solid var(--border); cursor: pointer; transition: background 0.1s; }
+.thread-item:hover { background: var(--surface-2); }
+.thread-item.active { background: var(--accent-dim); }
+.thread-item.unread .ti-name { font-weight: 700; }
+.ti-avatar { width: 38px; height: 38px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0; background: var(--surface-2); }
+.ti-body { flex: 1; min-width: 0; }
+.ti-top { display: flex; align-items: center; gap: 6px; }
+.ti-name { font-size: 13px; font-weight: 600; color: var(--text-1); flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ti-time { font-size: 10px; color: var(--text-3); flex-shrink: 0; }
+.ti-subject { font-size: 12px; font-weight: 600; color: var(--text-1); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ti-preview { font-size: 11px; color: var(--text-2); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ti-meta { display: flex; align-items: center; gap: 6px; margin-top: 3px; }
+.ti-badge { font-size: 9px; font-weight: 600; padding: 1px 6px; border-radius: 100px; }
+.ti-badge.email { background: rgba(88,86,214,0.1); color: #5856d6; }
+.ti-badge.chat { background: rgba(0,122,255,0.1); color: #007aff; }
+.ti-unread-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); flex-shrink: 0; }
+
+.thread-empty { padding: 40px 20px; text-align: center; color: var(--text-3); font-size: 13px; }
+
+/* ── MESSAGE VIEW ── */
+.msg-col { flex: 1; display: flex; flex-direction: column; background: var(--bg); overflow: hidden; min-height: 0; }
+.msg-header { padding: 14px 20px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid var(--border); background: var(--surface); flex-shrink: 0; }
+.msg-avatar { width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0; }
+.msg-header-info { flex: 1; }
+.msg-header-name { font-size: 14px; font-weight: 700; color: var(--text-1); }
+.msg-header-role { font-size: 11px; color: var(--text-3); }
+.msg-messages { flex: 1; overflow-y: auto; padding: 20px 24px; display: flex; flex-direction: column; gap: 12px; min-height: 0; }
+.msg-bubble { max-width: 72%; padding: 12px 16px; border-radius: 18px; font-size: 13px; line-height: 1.6; word-wrap: break-word; white-space: pre-wrap; }
+.msg-bubble.user { align-self: flex-end; background: var(--accent); color: #fff; border-bottom-right-radius: 4px; box-shadow: 0 1px 4px rgba(0,122,255,0.18); }
+.msg-bubble.ai { align-self: flex-start; background: var(--surface); color: var(--text-1); border: 1px solid var(--border); border-bottom-left-radius: 4px; box-shadow: var(--shadow-sm); max-width: 80%; }
+.msg-bubble .bubble-name { font-size: 10px; font-weight: 700; margin-bottom: 4px; display: flex; align-items: center; gap: 5px; }
+.msg-bubble.ai .bubble-name { color: #b36a00; }
+.msg-bubble .bubble-time { font-size: 9px; color: var(--text-3); margin-top: 6px; text-align: right; }
+.msg-bubble.user .bubble-time { color: rgba(255,255,255,0.5); }
+.msg-bubble.ai .bubble-text { color: var(--text-1); }
+.msg-input-bar { padding: 12px 20px; border-top: 1px solid var(--border); display: flex; gap: 8px; background: var(--surface); flex-shrink: 0; }
+.msg-input { flex: 1; border: 1px solid var(--border); border-radius: 12px; padding: 10px 14px; font-size: 13px; outline: none; background: var(--surface-2); color: var(--text-1); font-family: inherit; resize: none; }
+.msg-input:focus { border-color: var(--accent); }
+.msg-send { width: 40px; height: 40px; border-radius: 12px; background: var(--accent); color: #fff; border: none; cursor: pointer; font-size: 17px; display: flex; align-items: center; justify-content: center; transition: background 0.15s; flex-shrink: 0; }
+.msg-send:hover { background: #0062d6; }
+.msg-send:disabled { opacity: 0.4; cursor: default; }
+.msg-typing { align-self: flex-start; padding: 10px 14px; background: var(--surface); border: 1px solid var(--border); border-radius: 16px; border-bottom-left-radius: 4px; font-size: 13px; color: var(--text-3); }
+.msg-typing span { animation: blink 1.2s infinite; }
+.msg-typing span:nth-child(2) { animation-delay: 0.2s; }
+.msg-typing span:nth-child(3) { animation-delay: 0.4s; }
+@keyframes blink { 0%,80%,100% { opacity: 0.2; } 40% { opacity: 1; } }
+
+.msg-empty { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; color: var(--text-3); gap: 8px; }
+.msg-empty-icon { font-size: 40px; }
+
+/* ── NEW CHAT BUTTON ── */
+.btn { border: none; border-radius: var(--r-sm); font-family: inherit; font-weight: 600; cursor: pointer; transition: all 0.15s; }
+.btn-primary { background: var(--accent); color: #fff; padding: 7px 14px; font-size: 12px; }
+.btn-primary:hover { background: #0062d6; }
+.btn-ghost { background: none; color: var(--text-2); padding: 5px 10px; font-size: 12px; }
+.btn-ghost:hover { background: var(--surface-2); }
+
+/* ── ENTITY PICKER MODAL ── */
+.overlay { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; z-index: 500; background: rgba(0,0,0,0.28); backdrop-filter: blur(8px); }
+.overlay.open { display: flex; }
+.modal { background: var(--surface); border-radius: var(--r-lg); box-shadow: var(--shadow-lg); width: 520px; max-height: 80vh; overflow: hidden; animation: modal-pop 0.22s cubic-bezier(0.34,1.56,0.64,1); display: flex; flex-direction: column; }
+@keyframes modal-pop { from { opacity: 0; transform: scale(0.92); } to { opacity: 1; transform: none; } }
+.modal-header { display: flex; align-items: center; padding: 16px 20px; border-bottom: 1px solid var(--border); }
+.modal-title { font-size: 16px; font-weight: 700; flex: 1; }
+.close-btn { width: 28px; height: 28px; border-radius: 50%; background: var(--surface-2); border: none; cursor: pointer; font-size: 14px; display: flex; align-items: center; justify-content: center; }
+.modal-body { padding: 16px 20px; overflow-y: auto; flex: 1; }
+.picker-tabs { display: flex; gap: 2px; margin-bottom: 14px; }
+.picker-tab { padding: 6px 14px; font-size: 12px; font-weight: 600; color: var(--text-3); cursor: pointer; border-radius: 100px; transition: all 0.15s; }
+.picker-tab.active { background: var(--accent-dim); color: var(--accent); }
+.picker-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.picker-card { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--r); cursor: pointer; transition: all 0.15s; }
+.picker-card:hover { border-color: var(--accent); background: var(--accent-dim); }
+.picker-emoji { font-size: 22px; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; border-radius: 50%; background: var(--surface-2); flex-shrink: 0; }
+.picker-info { flex: 1; min-width: 0; }
+.picker-name { font-size: 13px; font-weight: 600; color: var(--text-1); }
+.picker-role { font-size: 10px; color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.picker-llm { font-size: 9px; font-weight: 600; padding: 1px 5px; border-radius: 100px; margin-top: 2px; display: inline-block; }
+.picker-llm.claude { background: rgba(204,120,50,0.1); color: #b36a00; }
+.picker-llm.gemini { background: rgba(66,133,244,0.1); color: #4285f4; }
+
+/* ── TASK CARDS (in-chat) ── */
+.task-created-block { margin-top: 10px; border-top: 1px solid rgba(0,0,0,0.06); padding-top: 10px; }
+.task-created-label { font-size: 9px; font-weight: 700; text-transform: uppercase; color: var(--success); letter-spacing: 0.5px; margin-bottom: 6px; display: flex; align-items: center; gap: 4px; }
+.task-created-label::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--success); }
+.task-card-mini { display: flex; align-items: center; gap: 8px; padding: 6px 10px; background: var(--surface-2); border-radius: var(--r-sm); border: 1px solid var(--border); margin-bottom: 4px; font-size: 12px; }
+.task-card-mini .tc-prio { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+.tc-prio.urgent { background: var(--danger); } .tc-prio.high { background: var(--warning); } .tc-prio.medium { background: var(--accent); } .tc-prio.low { background: var(--text-3); }
+.task-card-mini .tc-title { flex: 1; font-weight: 600; color: var(--text-1); }
+.task-card-mini .tc-assignee { font-size: 10px; color: var(--text-3); }
+
+/* ── HIRE PROPOSAL CARDS ── */
+.hire-block { margin-top: 10px; border-top: 1px solid rgba(0,0,0,0.06); padding-top: 10px; }
+.hire-label { font-size: 9px; font-weight: 700; text-transform: uppercase; color: #5856d6; letter-spacing: 0.5px; margin-bottom: 6px; display: flex; align-items: center; gap: 4px; }
+.hire-label::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: #5856d6; }
+.hire-card { padding: 12px; background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--r); margin-bottom: 8px; }
+.hire-card-name { font-size: 14px; font-weight: 700; color: var(--text-1); }
+.hire-card-brand { font-size: 11px; color: var(--text-3); margin-top: 1px; }
+.hire-card-reason { font-size: 11px; color: #5856d6; margin-top: 6px; font-weight: 600; }
+.hire-card-details { font-size: 11px; color: var(--text-2); margin-top: 4px; line-height: 1.5; }
+.hire-card-fields { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+.hire-card-field { font-size: 10px; font-weight: 600; padding: 2px 7px; border-radius: 100px; background: var(--accent-dim); color: var(--accent); }
+.hire-card-actions { display: flex; gap: 6px; margin-top: 10px; }
+.hire-btn { padding: 5px 14px; font-size: 11px; font-weight: 700; border-radius: var(--r-sm); border: none; cursor: pointer; font-family: inherit; transition: all 0.15s; }
+.hire-btn.approve { background: var(--success); color: #fff; }
+.hire-btn.approve:hover { background: #1a9e42; }
+.hire-btn.reject { background: var(--surface); color: var(--text-3); border: 1px solid var(--border); }
+.hire-btn.reject:hover { background: rgba(255,69,58,0.1); color: var(--danger); border-color: var(--danger); }
+.hire-btn:disabled { opacity: 0.5; cursor: default; }
+
+/* ── TASKS PANEL (right sidebar) ── */
+.tasks-panel { width: 320px; border-left: 1px solid var(--border); background: var(--surface); display: flex; flex-direction: column; flex-shrink: 0; }
+.tasks-panel.hidden { display: none; }
+.tasks-panel-header { padding: 14px 16px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 8px; }
+.tasks-panel-header h3 { font-size: 14px; font-weight: 700; flex: 1; margin: 0; }
+.tasks-list { flex: 1; overflow-y: auto; padding: 8px; }
+.task-item { padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--r); margin-bottom: 6px; cursor: pointer; transition: all 0.15s; background: var(--surface); }
+.task-item:hover { border-color: var(--accent); box-shadow: var(--shadow-sm); }
+.task-item.done { opacity: 0.45; }
+.task-item .task-title { font-size: 12px; font-weight: 600; color: var(--text-1); line-height: 1.3; }
+.task-item .task-row { display: flex; align-items: center; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
+.task-status { font-size: 9px; font-weight: 700; padding: 2px 7px; border-radius: 100px; text-transform: uppercase; letter-spacing: 0.3px; }
+.task-status.todo { background: var(--surface-2); color: var(--text-2); }
+.task-status.in_progress { background: rgba(0,122,255,0.1); color: var(--accent); }
+.task-status.done { background: rgba(48,209,88,0.1); color: var(--success); }
+.task-status.blocked { background: rgba(255,69,58,0.1); color: var(--danger); }
+.task-assignee { font-size: 10px; color: var(--text-2); display: flex; align-items: center; gap: 3px; }
+.task-assignee::before { content: ''; width: 14px; height: 14px; border-radius: 50%; background: var(--surface-2); display: inline-block; }
+.task-due { font-size: 10px; color: var(--text-3); margin-left: auto; }
+.task-due.overdue { color: var(--danger); font-weight: 600; }
+.task-due.soon { color: var(--warning); font-weight: 600; }
+.task-prio-bar { width: 4px; border-radius: 4px; align-self: stretch; flex-shrink: 0; }
+.task-item-inner { display: flex; gap: 10px; }
+.task-item-content { flex: 1; min-width: 0; }
+.task-subtasks { font-size: 10px; color: var(--text-3); margin-top: 4px; }
+.task-subtasks-bar { width: 100%; height: 3px; background: var(--surface-2); border-radius: 100px; margin-top: 3px; overflow: hidden; }
+.task-subtasks-fill { height: 100%; background: var(--success); border-radius: 100px; transition: width 0.3s; }
+
+/* ── TOGGLE BUTTON ── */
+.tasks-toggle { background: none; border: 1px solid var(--border); border-radius: var(--r-sm); padding: 5px 10px; font-size: 12px; font-weight: 600; cursor: pointer; color: var(--text-2); transition: all 0.15s; }
+.tasks-toggle:hover { background: var(--surface-2); }
+.tasks-toggle.active { background: var(--accent-dim); color: var(--accent); border-color: var(--accent); }
+
+/* ── TOAST ── */
+#toasts { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); z-index: 9999; display: flex; flex-direction: column; gap: 8px; align-items: center; }
+.toast { padding: 10px 20px; border-radius: 100px; font-size: 13px; font-weight: 600; box-shadow: var(--shadow-lg); animation: toast-in 0.3s ease; }
+.toast.success { background: #1a1a1a; color: #fff; }
+.toast.error { background: var(--danger); color: #fff; }
+@keyframes toast-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+</style>
+</head>
+<body>
+<div class="app">
+    <!-- SIDEBAR -->
+    <nav class="sidebar">
+        <div class="sidebar-header">
+            <div class="brand">
+                <div class="brand-icon">🤖</div>
+                <div>
+                    <div class="brand-name">Marketing AI</div>
+                    <div class="brand-sub">Command Center</div>
+                </div>
+            </div>
+        </div>
+        <div class="sidebar-nav">
+            <div class="nav-section">Workspace</div>
+            <a class="nav-item" href="/"><span class="ni">⬡</span> All Agents</a>
+            <a class="nav-item active" href="/inbox"><span class="ni">📥</span> Inbox</a>
+            <a class="nav-item" href="/newsroom.html"><span class="ni">📰</span> Newsroom</a>
+            <div class="nav-item"><span class="ni">📊</span> Analytics</div>
+            <div class="nav-item"><span class="ni">📅</span> Schedule</div>
+            <div class="nav-section">System</div>
+            <div class="nav-item"><span class="ni">⚙️</span> Settings</div>
+        </div>
+    </nav>
+
+    <div class="main">
+        <!-- TOPBAR -->
+        <header class="topbar">
+            <div class="traffic-lights"><span class="tl red"></span><span class="tl yellow"></span><span class="tl green"></span></div>
+            <div class="topbar-center">Inbox</div>
+            <div style="display:flex;gap:8px;align-items:center">
+                <button class="tasks-toggle" id="tasks-toggle" onclick="toggleTasksPanel()">📋 Tasks</button>
+            </div>
+        </header>
+
+        <!-- INBOX -->
+        <div class="inbox-layout">
+            <!-- THREAD LIST -->
+            <div class="thread-col">
+                <div class="thread-header">
+                    <div class="thread-header-title">Messages</div>
+                    <button class="btn btn-primary" onclick="openEntityPicker()">+ New Chat</button>
+                </div>
+                <div class="thread-tabs">
+                    <div class="thread-tab active" data-filter="all" onclick="setFilter('all',this)">All</div>
+                    <div class="thread-tab" data-filter="chat" onclick="setFilter('chat',this)">Chats</div>
+                    <div class="thread-tab" data-filter="email" onclick="setFilter('email',this)">Emails</div>
+                </div>
+                <div class="thread-search"><input type="text" placeholder="Search messages..." oninput="filterThreads(this.value)"></div>
+                <div class="thread-list" id="thread-list">
+                    <div class="thread-empty">Loading...</div>
+                </div>
+            </div>
+
+            <!-- MESSAGE VIEW -->
+            <div class="msg-col" id="msg-col">
+                <div class="msg-empty" id="msg-empty">
+                    <div class="msg-empty-icon">📥</div>
+                    <div style="font-size:15px;font-weight:600">Select a conversation</div>
+                    <div style="font-size:12px">or start a new chat with a team member or agent</div>
+                </div>
+                <div id="msg-view" style="display:none;flex:1;flex-direction:column;overflow:hidden;min-height:0">
+                    <div class="msg-header" id="msg-header"></div>
+                    <div class="msg-messages" id="msg-messages"></div>
+                    <div class="msg-input-bar">
+                        <input class="msg-input" id="msg-input" placeholder="Type a message..." autocomplete="off">
+                        <button class="msg-send" id="msg-send-btn" onclick="sendMessage()">➤</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TASKS PANEL -->
+            <div class="tasks-panel hidden" id="tasks-panel">
+                <div class="tasks-panel-header">
+                    <h3>Tasks</h3>
+                    <select id="task-filter" style="font-size:11px;border:1px solid var(--border);border-radius:6px;padding:3px 6px;font-family:inherit" onchange="loadTasks()">
+                        <option value="">All</option>
+                        <option value="todo">To Do</option>
+                        <option value="in_progress">In Progress</option>
+                        <option value="done">Done</option>
+                    </select>
+                </div>
+                <div class="tasks-list" id="tasks-list">
+                    <div style="padding:20px;text-align:center;color:var(--text-3);font-size:12px">No tasks yet</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ENTITY PICKER -->
+<div class="overlay" id="overlay-picker">
+    <div class="modal">
+        <div class="modal-header">
+            <div class="modal-title">Start New Chat</div>
+            <button class="close-btn" onclick="closePicker()">✕</button>
+        </div>
+        <div class="modal-body">
+            <div class="picker-tabs">
+                <div class="picker-tab active" onclick="showPickerTab('team',this)">Editorial Team</div>
+                <div class="picker-tab" onclick="showPickerTab('agents',this)">Publishing Agents</div>
+            </div>
+            <div id="picker-team" class="picker-grid"></div>
+            <div id="picker-agents" class="picker-grid" style="display:none"></div>
+        </div>
+    </div>
+</div>
+
+<div id="toasts"></div>
+
+<script>
+/* ── STATE ── */
+let allThreads = [];
+let currentThreadId = null;
+let currentEntity = null; // {type, key, name, emoji, role}
+let currentFilter = 'all';
+let teamMembers = [];
+let agentsList = [];
+
+/* ── HELPERS ── */
+function esc(s) { const d = document.createElement('div'); d.textContent = String(s || ''); return d.innerHTML; }
+function ago(iso) {
+    if (!iso) return '';
+    const d = (Date.now() - new Date(iso).getTime()) / 1000;
+    if (d < 60) return 'now';
+    if (d < 3600) return Math.floor(d / 60) + 'm';
+    if (d < 86400) return Math.floor(d / 3600) + 'h';
+    return Math.floor(d / 86400) + 'd';
+}
+function toast(msg, type = 'success') {
+    const t = document.createElement('div');
+    t.className = 'toast ' + type;
+    t.textContent = msg;
+    document.getElementById('toasts').appendChild(t);
+    setTimeout(() => t.remove(), 3000);
+}
+
+/* ── LOAD THREADS ── */
+async function loadInbox() {
+    try {
+        const r = await fetch(`/api/inbox?type=${currentFilter}&_t=${Date.now()}`);
+        if (!r.ok) return;
+        const data = await r.json();
+        allThreads = data.threads || [];
+        renderThreads(allThreads);
+    } catch (e) {
+        document.getElementById('thread-list').innerHTML = '<div class="thread-empty">Failed to load</div>';
+    }
+}
+
+function renderThreads(threads) {
+    const el = document.getElementById('thread-list');
+    if (!threads.length) {
+        el.innerHTML = '<div class="thread-empty">No messages yet.<br>Start a chat with a team member or agent!</div>';
+        return;
+    }
+    el.innerHTML = threads.map(t => {
+        const isActive = t.thread_id === currentThreadId;
+        const isUnread = t.unread > 0;
+        const avatar = t.from_emoji || (t.from_name || '?')[0];
+        return `
+        <div class="thread-item ${isActive ? 'active' : ''} ${isUnread ? 'unread' : ''}" onclick="openThread('${esc(t.thread_id)}')">
+            <div class="ti-avatar">${avatar}</div>
+            <div class="ti-body">
+                <div class="ti-top">
+                    <div class="ti-name">${esc(t.from_name)}</div>
+                    <div class="ti-time">${ago(t.last_at)}</div>
+                </div>
+                ${t.subject ? `<div class="ti-subject">${esc(t.subject)}</div>` : ''}
+                <div class="ti-preview">${esc(t.preview)}</div>
+                <div class="ti-meta">
+                    <span class="ti-badge ${t.msg_type}">${t.msg_type}</span>
+                    ${isUnread ? '<span class="ti-unread-dot"></span>' : ''}
+                </div>
+            </div>
+        </div>`;
+    }).join('');
+}
+
+function setFilter(f, el) {
+    currentFilter = f;
+    document.querySelectorAll('.thread-tab').forEach(t => t.classList.remove('active'));
+    el.classList.add('active');
+    loadInbox();
+}
+
+function filterThreads(q) {
+    const lq = q.toLowerCase();
+    const filtered = allThreads.filter(t =>
+        (t.from_name || '').toLowerCase().includes(lq) ||
+        (t.subject || '').toLowerCase().includes(lq) ||
+        (t.preview || '').toLowerCase().includes(lq)
+    );
+    renderThreads(filtered);
+}
+
+/* ── OPEN THREAD ── */
+async function openThread(threadId) {
+    currentThreadId = threadId;
+    document.getElementById('msg-empty').style.display = 'none';
+    const view = document.getElementById('msg-view');
+    view.style.display = 'flex';
+
+    // Re-render thread list to highlight active
+    renderThreads(allThreads.filter(t => {
+        if (currentFilter === 'all') return true;
+        return t.msg_type === currentFilter;
+    }));
+
+    try {
+        const r = await fetch(`/api/inbox/thread/${encodeURIComponent(threadId)}`);
+        if (!r.ok) return;
+        const data = await r.json();
+        const msgs = data.messages || [];
+
+        // Determine entity from messages
+        const aiMsg = msgs.find(m => m.from_type !== 'user');
+        if (aiMsg) {
+            currentEntity = {
+                type: aiMsg.from_type,
+                key: aiMsg.from_key,
+                name: aiMsg.from_name,
+                emoji: aiMsg.from_emoji || '',
+            };
+        }
+
+        // Header
+        if (currentEntity) {
+            document.getElementById('msg-header').innerHTML = `
+                <div class="msg-avatar" style="background:var(--surface-2)">${currentEntity.emoji || (currentEntity.name || '?')[0]}</div>
+                <div class="msg-header-info">
+                    <div class="msg-header-name">${esc(currentEntity.name)}</div>
+                    <div class="msg-header-role">${currentEntity.type === 'team_member' ? 'Editorial Team' : 'Publishing Agent'}</div>
+                </div>
+            `;
+        }
+
+        // Messages
+        const msgsEl = document.getElementById('msg-messages');
+        msgsEl.innerHTML = msgs.map(m => {
+            const isUser = m.from_type === 'user';
+            return `
+            <div class="msg-bubble ${isUser ? 'user' : 'ai'}">
+                ${!isUser ? `<div class="bubble-name">${esc(m.from_name)}</div>` : ''}
+                ${m.subject ? `<div style="font-weight:700;margin-bottom:4px">${esc(m.subject)}</div>` : ''}
+                ${esc(m.body)}
+                <div class="bubble-time">${ago(m.created_at)}</div>
+            </div>`;
+        }).join('');
+        msgsEl.scrollTop = msgsEl.scrollHeight;
+
+        // Update unread counts
+        loadInbox();
+
+        document.getElementById('msg-input').focus();
+    } catch (e) {
+        toast('Failed to load thread', 'error');
+    }
+}
+
+/* ── SEND MESSAGE ── */
+async function sendMessage() {
+    const input = document.getElementById('msg-input');
+    const msg = input.value.trim();
+    if (!msg || !currentEntity) return;
+
+    input.value = '';
+    const msgsEl = document.getElementById('msg-messages');
+
+    // Append user bubble
+    msgsEl.innerHTML += `<div class="msg-bubble user">${esc(msg)}<div class="bubble-time">now</div></div>`;
+    msgsEl.scrollTop = msgsEl.scrollHeight;
+
+    // Typing indicator
+    const typing = document.createElement('div');
+    typing.className = 'msg-typing';
+    typing.innerHTML = '<span>.</span><span>.</span><span>.</span>';
+    msgsEl.appendChild(typing);
+    msgsEl.scrollTop = msgsEl.scrollHeight;
+
+    document.getElementById('msg-send-btn').disabled = true;
+
+    try {
+        const r = await fetch('/api/inbox/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                entity_type: currentEntity.type,
+                entity_key: currentEntity.key,
+                thread_id: currentThreadId,
+                message: msg
+            })
+        });
+        typing.remove();
+        const data = await r.json();
+        if (r.ok) {
+            let taskHtml = '';
+            if (data.tasks_created && data.tasks_created.length > 0) {
+                taskHtml = `<div class="task-created-block">
+                    <div class="task-created-label">Tasks Created</div>
+                    ${data.tasks_created.map(t => `
+                        <div class="task-card-mini">
+                            <span class="tc-prio ${t.priority}"></span>
+                            <span class="tc-title">${esc(t.title)}</span>
+                            <span class="tc-assignee">${esc(t.assignee)}</span>
+                        </div>
+                    `).join('')}
+                </div>`;
+                loadTasks(); // refresh task panel
+            }
+            let wfHtml = '';
+            if (data.workflow_launched) {
+                const wf = data.workflow_launched;
+                wfHtml = `<div class="task-created-block">
+                    <div class="task-created-label" style="color:var(--accent)">Pipeline Launched #${wf.run_id}</div>
+                    <div class="task-card-mini">
+                        <span class="tc-prio urgent"></span>
+                        <span class="tc-title">Topics: ${esc((wf.topics || []).join(', '))}</span>
+                        <span class="tc-assignee">${wf.target_agents?.length || 11} agents</span>
+                    </div>
+                    <div style="font-size:10px;color:var(--text-3);margin-top:4px">
+                        <a href="/newsroom.html" style="color:var(--accent)">View in Newsroom &rarr;</a>
+                    </div>
+                </div>`;
+            }
+            let hireHtml = '';
+            if (data.hires_proposed && data.hires_proposed.length > 0) {
+                hireHtml = `<div class="hire-block">
+                    <div class="hire-label">Hire Proposals</div>
+                    ${data.hires_proposed.map((h, i) => `
+                        <div class="hire-card" id="hire-card-${i}">
+                            <div class="hire-card-name">${esc(h.name)}</div>
+                            <div class="hire-card-brand">@${esc(h.brand)}</div>
+                            ${h.reason ? `<div class="hire-card-reason">Why: ${esc(h.reason)}</div>` : ''}
+                            <div class="hire-card-details">${esc(h.persona).substring(0, 150)}${h.persona.length > 150 ? '...' : ''}</div>
+                            <div class="hire-card-fields">${(h.fields || []).map(f => `<span class="hire-card-field">${esc(f)}</span>`).join('')}</div>
+                            <div class="hire-card-actions">
+                                <button class="hire-btn approve" onclick="approveHire(${i}, this)">Approve Hire</button>
+                                <button class="hire-btn reject" onclick="rejectHire(${i}, this)">Reject</button>
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>`;
+                // Store proposals globally for the approve handler
+                window._pendingHires = data.hires_proposed;
+            }
+            msgsEl.innerHTML += `
+            <div class="msg-bubble ai">
+                <div class="bubble-name">${esc(data.from_name)}</div>
+                ${esc(data.reply)}
+                ${taskHtml}
+                ${wfHtml}
+                ${hireHtml}
+                <div class="bubble-time">now</div>
+            </div>`;
+            msgsEl.scrollTop = msgsEl.scrollHeight;
+            if (!currentThreadId && data.thread_id) currentThreadId = data.thread_id;
+            loadInbox();
+        } else {
+            toast(data.error || 'Failed to get reply', 'error');
+        }
+    } catch (e) {
+        typing.remove();
+        toast('Connection error', 'error');
+    } finally {
+        document.getElementById('msg-send-btn').disabled = false;
+        input.focus();
+    }
+}
+
+/* ── NEW CHAT ── */
+async function openEntityPicker() {
+    document.getElementById('overlay-picker').classList.add('open');
+    // Load team + agents
+    try {
+        const [tr, ar] = await Promise.all([
+            fetch('/api/team/members'),
+            fetch('/api/agents')
+        ]);
+        teamMembers = await tr.json();
+        const agentsData = await ar.json();
+        agentsList = agentsData.agents || [];
+
+        document.getElementById('picker-team').innerHTML = teamMembers.map(m => {
+            const model = m.llm_model || 'claude-sonnet-4-6';
+            const cls = model.includes('image') ? 'gemini' : (m.llm_provider || '').includes('gemini') ? 'gemini' : 'claude';
+            const label = model.replace('claude-', '').replace('gemini-', 'G ');
+            return `
+            <div class="picker-card" onclick="startNewChat('team_member','${esc(m.role_key)}','${esc(m.display_name)}','${esc(m.emoji || '')}','${esc(m.role_title)}')">
+                <div class="picker-emoji">${m.emoji || '👤'}</div>
+                <div class="picker-info">
+                    <div class="picker-name">${esc(m.display_name)}</div>
+                    <div class="picker-role">${esc(m.role_title)}</div>
+                    <span class="picker-llm ${cls}">${label}</span>
+                </div>
+            </div>`;
+        }).join('');
+
+        const palette = ['#007aff','#ff9500','#ff3b30','#5856d6','#30d158','#ff2d55','#af52de','#00c7be','#ff6482','#34c759','#5ac8fa'];
+        document.getElementById('picker-agents').innerHTML = agentsList.map((a, i) => {
+            const c = palette[i % palette.length];
+            const init = (a.agent_name || '?')[0].toUpperCase();
+            const model = a.llm_model || 'claude-sonnet-4-6';
+            const cls = (a.llm_provider || '').includes('gemini') ? 'gemini' : 'claude';
+            const label = model.replace('claude-', '').replace('gemini-', 'G ');
+            return `
+            <div class="picker-card" onclick="startNewChat('agent','${a.agent_id}','${esc(a.agent_name)}','','${esc(a.brand)}')">
+                <div class="picker-emoji" style="background:${c};color:#fff;font-size:15px;font-weight:700">${init}</div>
+                <div class="picker-info">
+                    <div class="picker-name">${esc(a.agent_name)}</div>
+                    <div class="picker-role">${esc(a.brand)}</div>
+                    <span class="picker-llm ${cls}">${label}</span>
+                </div>
+            </div>`;
+        }).join('');
+    } catch (e) {
+        toast('Failed to load entities', 'error');
+    }
+}
+
+function closePicker() {
+    document.getElementById('overlay-picker').classList.remove('open');
+}
+
+function showPickerTab(tab, el) {
+    document.querySelectorAll('.picker-tab').forEach(t => t.classList.remove('active'));
+    el.classList.add('active');
+    document.getElementById('picker-team').style.display = tab === 'team' ? 'grid' : 'none';
+    document.getElementById('picker-agents').style.display = tab === 'agents' ? 'grid' : 'none';
+}
+
+function startNewChat(entityType, entityKey, name, emoji, role) {
+    closePicker();
+    currentEntity = { type: entityType, key: entityKey, name, emoji };
+    currentThreadId = null; // will be generated by backend
+
+    document.getElementById('msg-empty').style.display = 'none';
+    const view = document.getElementById('msg-view');
+    view.style.display = 'flex';
+
+    document.getElementById('msg-header').innerHTML = `
+        <div class="msg-avatar" style="background:var(--surface-2)">${emoji || name[0]}</div>
+        <div class="msg-header-info">
+            <div class="msg-header-name">${esc(name)}</div>
+            <div class="msg-header-role">${esc(role)}</div>
+        </div>
+    `;
+    document.getElementById('msg-messages').innerHTML = `
+        <div style="text-align:center;color:var(--text-3);font-size:12px;padding:20px">
+            Start your conversation with ${esc(name)}
+        </div>
+    `;
+    document.getElementById('msg-input').focus();
+}
+
+/* ── KEYBOARD ── */
+document.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.shiftKey && document.activeElement?.id === 'msg-input') {
+        e.preventDefault();
+        sendMessage();
+    }
+});
+
+/* ── TASKS PANEL ── */
+let _tasksPanelOpen = false;
+
+function toggleTasksPanel() {
+    _tasksPanelOpen = !_tasksPanelOpen;
+    document.getElementById('tasks-panel').classList.toggle('hidden', !_tasksPanelOpen);
+    document.getElementById('tasks-toggle').classList.toggle('active', _tasksPanelOpen);
+    if (_tasksPanelOpen) loadTasks();
+}
+
+async function loadTasks() {
+    const list = document.getElementById('tasks-list');
+    const status = document.getElementById('task-filter').value;
+    try {
+        const url = `/api/tasks?${status ? 'status=' + status : ''}&_t=${Date.now()}`;
+        const r = await fetch(url);
+        if (!r.ok) return;
+        const data = await r.json();
+        const tasks = data.tasks || [];
+        if (!tasks.length) {
+            list.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-3);font-size:12px">No tasks yet.<br>Chat with a team member to create tasks!</div>';
+            return;
+        }
+        list.innerHTML = tasks.map(t => {
+            const prioColor = {urgent:'#ff453a',high:'#ff9f0a',medium:'#007aff',low:'#aeaeb2'}[t.priority] || '#aeaeb2';
+            const statusLabel = (t.status || 'todo').replace('_', ' ');
+            // Due date formatting
+            let dueHtml = '';
+            if (t.due_date) {
+                const due = new Date(t.due_date);
+                const now = new Date();
+                const diffDays = Math.ceil((due - now) / (1000 * 60 * 60 * 24));
+                const dateStr = due.toLocaleDateString('en-US', {month:'short', day:'numeric'});
+                let cls = '';
+                if (diffDays < 0 && t.status !== 'done') cls = 'overdue';
+                else if (diffDays <= 2 && t.status !== 'done') cls = 'soon';
+                dueHtml = `<span class="task-due ${cls}">${diffDays < 0 ? 'Overdue' : diffDays === 0 ? 'Today' : dateStr}</span>`;
+            }
+            // Subtasks
+            let subHtml = '';
+            if (t.subtask_count > 0) {
+                const pct = Math.round((t.subtasks_done / t.subtask_count) * 100);
+                subHtml = `<div class="task-subtasks">${t.subtasks_done}/${t.subtask_count} subtasks
+                    <div class="task-subtasks-bar"><div class="task-subtasks-fill" style="width:${pct}%"></div></div>
+                </div>`;
+            }
+            return `
+            <div class="task-item ${t.status === 'done' ? 'done' : ''}" onclick="cycleTaskStatus(${t.id}, '${t.status}')">
+                <div class="task-item-inner">
+                    <div class="task-prio-bar" style="background:${prioColor}"></div>
+                    <div class="task-item-content">
+                        <div class="task-title">${esc(t.title)}</div>
+                        <div class="task-row">
+                            <span class="task-status ${t.status}">${statusLabel}</span>
+                            <span class="task-assignee">${esc(t.assignee_name)}</span>
+                            ${dueHtml}
+                        </div>
+                        ${subHtml}
+                    </div>
+                </div>
+            </div>`;
+        }).join('');
+    } catch (e) {
+        list.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-3);font-size:12px">Failed to load tasks</div>';
+    }
+}
+
+async function cycleTaskStatus(id, current) {
+    const next = {todo:'in_progress', in_progress:'done', done:'todo', blocked:'in_progress'}[current] || 'todo';
+    try {
+        await fetch(`/api/tasks/${id}`, {
+            method: 'PUT',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({status: next})
+        });
+        loadTasks();
+        toast(`Task → ${next.replace('_', ' ')}`, 'success');
+    } catch (e) { toast('Failed to update task', 'error'); }
+}
+
+/* ── HIRE APPROVAL ── */
+window._pendingHires = [];
+
+async function approveHire(idx, btn) {
+    const hire = window._pendingHires[idx];
+    if (!hire) return;
+    btn.disabled = true;
+    btn.textContent = 'Creating...';
+    try {
+        const r = await fetch('/api/team/hire/approve', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(hire)
+        });
+        const data = await r.json();
+        if (r.ok) {
+            const card = document.getElementById(`hire-card-${idx}`);
+            if (card) {
+                card.querySelector('.hire-card-actions').innerHTML = `<span style="color:var(--success);font-size:11px;font-weight:700">Hired! Agent #${data.agent_id}</span>`;
+            }
+            toast(`${hire.name} has been hired!`, 'success');
+        } else {
+            toast(data.error || 'Failed to hire', 'error');
+            btn.disabled = false;
+            btn.textContent = 'Approve Hire';
+        }
+    } catch (e) {
+        toast('Connection error', 'error');
+        btn.disabled = false;
+        btn.textContent = 'Approve Hire';
+    }
+}
+
+function rejectHire(idx, btn) {
+    const card = document.getElementById(`hire-card-${idx}`);
+    if (card) {
+        card.querySelector('.hire-card-actions').innerHTML = `<span style="color:var(--danger);font-size:11px;font-weight:600">Rejected</span>`;
+        card.style.opacity = '0.5';
+    }
+}
+
+/* ── INIT ── */
+loadInbox();
+// Auto-refresh tasks every 15s when panel is open
+setInterval(() => { if (_tasksPanelOpen) loadTasks(); }, 15000);
+document.getElementById('overlay-picker').addEventListener('click', e => { if (e.target === e.currentTarget) closePicker(); });
+</script>
+</body>
+</html>

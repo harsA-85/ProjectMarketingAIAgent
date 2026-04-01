@@ -3,69 +3,93 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Marketing AI Agent Dashboard</title>
+    <title>Marketing AI — Dashboard</title>
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
+        :root {
+            --bg: #f5f5f7;
+            --surface: #ffffff;
+            --surface-2: #f2f2f7;
+            --sidebar-bg: #fafafa;
+            --border: rgba(0,0,0,0.07);
+            --border-strong: rgba(0,0,0,0.12);
+            --text-1: #1c1c1e;
+            --text-2: #6e6e73;
+            --text-3: #aeaeb2;
+            --accent: #007aff;
+            --accent-dim: rgba(0,122,255,0.1);
+            --success: #30d158;
+            --warning: #ff9f0a;
+            --danger: #ff453a;
+            --r: 12px;
+            --r-sm: 8px;
+            --r-lg: 16px;
+            --shadow-sm: 0 1px 3px rgba(0,0,0,0.05), 0 2px 8px rgba(0,0,0,0.04);
+            --shadow: 0 2px 12px rgba(0,0,0,0.07), 0 4px 20px rgba(0,0,0,0.04);
+            --shadow-lg: 0 8px 32px rgba(0,0,0,0.1), 0 2px 8px rgba(0,0,0,0.06);
+            --shadow-xl: 0 24px 64px rgba(0,0,0,0.16), 0 8px 24px rgba(0,0,0,0.08);
         }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
 
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', sans-serif;
-            background: #f2f2f7;
+            font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', system-ui, sans-serif;
+            background: var(--bg);
             min-height: 100vh;
             overflow: hidden;
+            color: var(--text-1);
+            -webkit-font-smoothing: antialiased;
         }
 
-        .app {
-            display: flex;
-            height: 100vh;
-            overflow: hidden;
-        }
+        /* ── LAYOUT ── */
+        .app { display: flex; height: 100vh; overflow: hidden; }
 
         /* ── SIDEBAR ── */
         .sidebar {
-            width: 220px;
-            min-width: 220px;
-            background: #e8e8ed;
-            backdrop-filter: blur(20px);
-            -webkit-backdrop-filter: blur(20px);
-            border-right: 1px solid #d1d1d6;
+            width: 228px;
+            min-width: 228px;
+            background: var(--sidebar-bg);
+            border-right: 1px solid var(--border);
             display: flex;
             flex-direction: column;
             height: 100vh;
-            overflow: hidden;
         }
 
         .sidebar-header {
+            padding: 18px 16px 14px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .brand {
             display: flex;
             align-items: center;
             gap: 10px;
-            padding: 20px 16px 16px;
-            border-bottom: 1px solid #d1d1d6;
         }
 
-        .app-icon {
-            width: 32px;
-            height: 32px;
-            background: #007aff;
-            border-radius: 8px;
+        .brand-icon {
+            width: 34px;
+            height: 34px;
+            background: linear-gradient(135deg, #007aff 0%, #5856d6 100%);
+            border-radius: 9px;
             display: flex;
             align-items: center;
             justify-content: center;
             font-size: 18px;
+            flex-shrink: 0;
+            box-shadow: 0 2px 8px rgba(0,122,255,0.35);
         }
 
-        .app-name {
-            font-size: 14px;
-            font-weight: 600;
-            color: #1c1c1e;
-        }
+        .brand-text { line-height: 1; }
+        .brand-name { font-size: 14px; font-weight: 700; color: var(--text-1); letter-spacing: -0.3px; }
+        .brand-sub  { font-size: 10.5px; color: var(--text-3); margin-top: 2px; }
 
-        .sidebar-nav {
-            padding: 8px 8px;
-            flex: 1;
+        .sidebar-nav { padding: 10px 8px; flex: 1; }
+
+        .nav-section {
+            font-size: 10px;
+            font-weight: 700;
+            color: var(--text-3);
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            padding: 10px 10px 4px;
         }
 
         .nav-item {
@@ -76,511 +100,1039 @@
             border-radius: 7px;
             font-size: 13px;
             font-weight: 500;
-            color: #1c1c1e;
+            color: var(--text-2);
             cursor: pointer;
-            transition: background 0.15s;
+            transition: all 0.15s;
             user-select: none;
         }
 
-        .nav-item:hover {
-            background: rgba(0,0,0,0.06);
+        .nav-item .ni { font-size: 14px; width: 18px; text-align: center; }
+        .nav-item:hover { background: rgba(0,0,0,0.05); color: var(--text-1); }
+        .nav-item.active { background: var(--accent-dim); color: var(--accent); font-weight: 600; }
+
+        .sidebar-footer {
+            padding: 12px 16px 18px;
+            border-top: 1px solid var(--border);
         }
 
-        .nav-item.active {
-            background: rgba(0,122,255,0.15);
-            color: #007aff;
-        }
-
-        .sidebar-stats {
-            padding: 12px 16px 20px;
-            border-top: 1px solid #d1d1d6;
-        }
-
-        .sidebar-stat {
+        .sidebar-stat-row {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 4px 0;
+            padding: 3px 0;
         }
 
-        .sidebar-stat-label {
-            font-size: 12px;
-            color: #6e6e73;
-        }
+        .ssl { font-size: 12px; color: var(--text-2); }
+        .ssv { font-size: 12px; font-weight: 600; color: var(--text-1); }
+        .sidebar-ver { font-size: 10px; color: var(--text-3); margin-top: 10px; text-align: center; }
 
-        .sidebar-stat-value {
-            font-size: 12px;
-            font-weight: 600;
-            color: #1c1c1e;
-        }
+        /* ── MAIN ── */
+        .main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
 
-        /* ── MAIN CONTENT ── */
-        .main-content {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            overflow: hidden;
-            background: #f2f2f7;
-        }
-
-        /* ── WINDOW CHROME ── */
-        .window-chrome {
+        /* ── TOPBAR ── */
+        .topbar {
             display: flex;
             align-items: center;
-            justify-content: space-between;
-            padding: 12px 16px;
-            background: rgba(255,255,255,0.7);
+            gap: 10px;
+            padding: 10px 20px;
+            background: rgba(255,255,255,0.88);
             backdrop-filter: blur(20px);
             -webkit-backdrop-filter: blur(20px);
-            border-bottom: 1px solid #d1d1d6;
+            border-bottom: 1px solid var(--border);
             flex-shrink: 0;
+            position: relative;
         }
 
-        .traffic-lights {
-            display: flex;
-            gap: 6px;
-            align-items: center;
-        }
-
-        .tl {
-            width: 12px;
-            height: 12px;
-            border-radius: 50%;
-            display: inline-block;
-        }
-
-        .tl.red   { background: #ff5f57; }
+        .traffic-lights { display: flex; gap: 6px; align-items: center; }
+        .tl { width: 12px; height: 12px; border-radius: 50%; }
+        .tl.red    { background: #ff5f57; }
         .tl.yellow { background: #febc2e; }
         .tl.green  { background: #28c840; }
 
-        .window-title {
+        .topbar-center {
+            position: absolute;
+            left: 50%;
+            transform: translateX(-50%);
             font-size: 13px;
             font-weight: 600;
-            color: #1c1c1e;
+            color: var(--text-1);
+            pointer-events: none;
         }
 
-        /* ── CONTENT AREA ── */
-        .content-area {
-            flex: 1;
-            overflow-y: auto;
-            padding: 24px;
-        }
+        .topbar-right { display: flex; align-items: center; gap: 8px; margin-left: auto; }
 
-        /* ── TOOLBAR ── */
-        .toolbar {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            margin-bottom: 20px;
-        }
+        .notif-bell { position:relative;cursor:pointer;padding:6px 8px;border-radius:var(--r-sm);border:none;background:none;font-size:18px;transition:background 0.15s; }
+        .notif-bell:hover { background:rgba(0,0,0,0.05); }
+        .notif-badge { position:absolute;top:2px;right:2px;min-width:16px;height:16px;border-radius:100px;background:var(--danger);color:#fff;font-size:9px;font-weight:700;display:flex;align-items:center;justify-content:center;padding:0 4px; }
+        .notif-badge.hidden { display:none; }
+        .notif-panel { display:none;position:absolute;top:44px;right:0;width:360px;max-height:480px;overflow-y:auto;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);box-shadow:var(--shadow-lg);z-index:999; }
+        .notif-panel.open { display:block; }
+        .notif-panel-header { display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border-bottom:1px solid var(--border);font-size:13px;font-weight:600; }
+        .notif-item { display:flex;gap:10px;padding:10px 14px;border-bottom:1px solid var(--border);cursor:pointer;transition:background 0.1s; }
+        .notif-item:hover { background:var(--surface-2); }
+        .notif-item.unread { background:rgba(0,122,255,0.04); }
+        .notif-icon { font-size:20px;flex-shrink:0;margin-top:2px; }
+        .notif-content { flex:1;min-width:0; }
+        .notif-title { font-size:12px;font-weight:600;color:var(--text-1); }
+        .notif-body { font-size:11px;color:var(--text-2);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
+        .notif-time { font-size:10px;color:var(--text-3);margin-top:3px; }
 
-        .toolbar-title {
-            font-size: 22px;
-            font-weight: 700;
-            color: #1c1c1e;
-            flex: 1;
-        }
+        .search-wrap { position: relative; display: flex; align-items: center; }
+        .search-icon { position: absolute; left: 9px; color: var(--text-3); font-size: 12px; pointer-events: none; }
 
         .search-input {
-            background: rgba(118,118,128,0.12);
-            border: none;
-            border-radius: 8px;
-            padding: 8px 12px;
-            font-size: 14px;
+            background: var(--surface-2);
+            border: 1px solid transparent;
+            border-radius: var(--r-sm);
+            padding: 7px 12px 7px 28px;
+            font-size: 13px;
             font-family: inherit;
-            color: #1c1c1e;
-            width: 200px;
+            color: var(--text-1);
+            width: 196px;
             outline: none;
-            transition: box-shadow 0.2s;
+            transition: all 0.2s;
         }
 
         .search-input:focus {
-            box-shadow: 0 0 0 3px rgba(0,122,255,0.3);
+            border-color: var(--accent);
+            background: white;
+            box-shadow: 0 0 0 3px rgba(0,122,255,0.12);
         }
 
-        .search-input::placeholder {
-            color: #6e6e73;
-        }
+        .search-input::placeholder { color: var(--text-3); }
 
-        .btn-primary {
-            background: #007aff;
-            color: white;
+        /* ── BUTTONS ── */
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
             border: none;
-            border-radius: 8px;
-            padding: 8px 16px;
-            font-size: 14px;
+            border-radius: var(--r-sm);
+            padding: 7px 14px;
+            font-size: 13px;
             font-weight: 500;
             font-family: inherit;
             cursor: pointer;
-            transition: opacity 0.15s;
+            transition: all 0.15s;
             white-space: nowrap;
+            line-height: 1;
         }
 
-        .btn-primary:hover {
-            opacity: 0.85;
-        }
+        .btn-primary { background: var(--accent); color: #fff; box-shadow: 0 1px 3px rgba(0,122,255,0.3); }
+        .btn-primary:hover { background: #0066dd; box-shadow: 0 2px 10px rgba(0,122,255,0.4); }
+        .btn-primary:active { transform: scale(0.97); }
 
-        .btn-secondary {
-            background: rgba(0,122,255,0.1);
-            color: #007aff;
-            border: none;
-            border-radius: 8px;
-            padding: 8px 16px;
-            font-size: 14px;
-            font-weight: 500;
-            font-family: inherit;
-            cursor: pointer;
-            transition: background 0.15s;
-        }
+        .btn-ghost { background: transparent; color: var(--text-2); }
+        .btn-ghost:hover { background: var(--surface-2); color: var(--text-1); }
 
-        .btn-secondary:hover {
-            background: rgba(0,122,255,0.18);
-        }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none !important; }
 
-        /* ── STATS ROW ── */
-        .stats-row {
-            display: flex;
+        /* ── CONTENT ── */
+        .content { flex: 1; overflow-y: auto; padding: 26px 28px; }
+
+        /* ── STATS ── */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
             gap: 16px;
-            margin-bottom: 24px;
+            margin-bottom: 28px;
         }
 
         .stat-card {
-            background: white;
+            background: var(--surface);
+            border-radius: var(--r);
+            padding: 20px;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            border: 1px solid var(--border);
+            box-shadow: var(--shadow-sm);
+            transition: box-shadow 0.2s, transform 0.2s;
+        }
+
+        .stat-card:hover { box-shadow: var(--shadow); transform: translateY(-1px); }
+
+        .stat-icon {
+            width: 46px;
+            height: 46px;
             border-radius: 12px;
-            box-shadow: 0 2px 16px rgba(0,0,0,0.06);
-            padding: 18px 22px;
-            flex: 1;
-            min-width: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 22px;
+            flex-shrink: 0;
         }
 
-        .stat-number {
-            font-size: 32px;
-            font-weight: 700;
-            color: #007aff;
-            line-height: 1.1;
+        .si-blue   { background: rgba(0,122,255,0.1); }
+        .si-green  { background: rgba(48,209,88,0.1); }
+        .si-purple { background: rgba(88,86,214,0.1); }
+
+        .stat-info { flex: 1; }
+        .stat-num  { font-size: 30px; font-weight: 700; color: var(--text-1); line-height: 1; letter-spacing: -1px; }
+        .stat-lbl  { font-size: 13px; color: var(--text-2); margin-top: 3px; }
+
+        /* ── SECTION HEADER ── */
+        .section-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 18px;
         }
 
-        .stat-label {
-            font-size: 13px;
-            color: #6e6e73;
-            margin-top: 4px;
-        }
+        .section-title { font-size: 20px; font-weight: 700; color: var(--text-1); letter-spacing: -0.5px; flex: 1; }
 
         /* ── AGENTS GRID ── */
         .agents-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+            grid-template-columns: repeat(auto-fill, minmax(288px, 1fr));
             gap: 16px;
         }
 
         .agent-card {
-            background: white;
-            border-radius: 12px;
-            box-shadow: 0 2px 16px rgba(0,0,0,0.06);
-            padding: 18px;
+            background: var(--surface);
+            border-radius: var(--r);
+            border: 1px solid var(--border);
+            box-shadow: var(--shadow-sm);
             cursor: pointer;
-            transition: box-shadow 0.2s, transform 0.15s;
+            transition: all 0.2s ease;
             display: flex;
             flex-direction: column;
-            gap: 12px;
+            overflow: hidden;
         }
 
         .agent-card:hover {
-            box-shadow: 0 4px 24px rgba(0,0,0,0.12);
-            transform: translateY(-1px);
+            box-shadow: var(--shadow-lg);
+            transform: translateY(-2px);
+            border-color: rgba(0,0,0,0.1);
         }
 
-        .agent-card-top {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-        }
+        .agent-stripe { height: 3px; flex-shrink: 0; }
+        .agent-body   { padding: 16px; flex: 1; display: flex; flex-direction: column; gap: 10px; }
+
+        .agent-top { display: flex; align-items: center; gap: 11px; }
 
         .agent-avatar {
-            width: 44px;
-            height: 44px;
+            width: 42px;
+            height: 42px;
             border-radius: 50%;
             display: flex;
             align-items: center;
             justify-content: center;
             color: white;
-            font-size: 18px;
+            font-size: 17px;
             font-weight: 700;
             flex-shrink: 0;
         }
 
-        .agent-card-info {
-            flex: 1;
-            min-width: 0;
-        }
+        .agent-meta { flex: 1; min-width: 0; }
+        .agent-name { font-size: 15px; font-weight: 600; color: var(--text-1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .agent-brand { font-size: 12px; color: var(--text-2); margin-top: 2px; }
 
-        .agent-name {
-            font-size: 15px;
+        .agent-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--success); flex-shrink: 0; }
+
+        .agent-badges { display: flex; gap: 5px; align-items: center; flex-wrap: wrap; min-height: 0; }
+        .badge-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 3px;
+            font-size: 10px;
             font-weight: 600;
-            color: #1c1c1e;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
+            padding: 2px 7px;
+            border-radius: 100px;
+            letter-spacing: 0.01em;
+        }
+        .badge-pill.autopilot {
+            background: rgba(0,122,255,0.10);
+            color: #007aff;
+            border: 1px solid rgba(0,122,255,0.18);
+        }
+        .badge-pill.ai-auto {
+            background: rgba(48,209,88,0.10);
+            color: #1a9e42;
+            border: 1px solid rgba(48,209,88,0.22);
+        }
+        .badge-pill.ai-auto.running {
+            background: rgba(255,159,10,0.12);
+            color: #b36a00;
+            border: 1px solid rgba(255,159,10,0.28);
+        }
+        .badge-pill.llm-badge {
+            font-size: 9px;
+            font-weight: 600;
+            padding: 2px 6px;
+            border: none;
+        }
+        .badge-pill.llm-badge.claude { background: rgba(204,120,50,0.10); color: #b36a00; }
+        .badge-pill.llm-badge.gemini { background: rgba(66,133,244,0.10); color: #4285f4; }
+        .badge-pill.llm-badge.gemini-img { background: rgba(234,67,53,0.10); color: #ea4335; }
+        .badge-pill.generating {
+            background: rgba(0,122,255,0.12);
+            color: #007aff;
+            border: 1px solid rgba(0,122,255,0.28);
+            animation: pill-pulse 1.4s ease-in-out infinite;
+        }
+        @keyframes pill-pulse {
+            0%,100% { opacity: 1; }
+            50%      { opacity: 0.55; }
         }
 
-        .agent-brand {
-            font-size: 13px;
-            color: #6e6e73;
-            margin-top: 2px;
+        /* ── Team member mini-cards ── */
+        .team-mini-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 10px;
         }
-
-        .agent-fields {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 6px;
+        .team-mini-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--r);
+            padding: 12px 14px;
+            display: flex; align-items: center; gap: 10px;
+            cursor: pointer;
+            transition: all 0.18s;
         }
+        .team-mini-card:hover {
+            box-shadow: var(--shadow-lg);
+            transform: translateY(-1px);
+        }
+        .team-mini-emoji { font-size: 22px; flex-shrink: 0; }
+        .team-mini-info { flex: 1; min-width: 0; }
+        .team-mini-name { font-size: 13px; font-weight: 700; color: var(--text-1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .team-mini-role { font-size: 10px; color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .team-mini-llm {
+            display: inline-flex; align-items: center;
+            font-size: 9px; font-weight: 600; margin-top: 3px;
+            padding: 1px 6px; border-radius: 100px;
+        }
+        .team-mini-llm.claude { background: rgba(204,120,50,0.10); color: #b36a00; }
+        .team-mini-llm.gemini { background: rgba(66,133,244,0.10); color: #4285f4; }
+        .team-mini-llm.gemini-img { background: rgba(234,67,53,0.10); color: #ea4335; }
 
-        .field-badge {
-            background: rgba(118,118,128,0.12);
-            color: #6e6e73;
+        .agent-tags { display: flex; flex-wrap: wrap; gap: 5px; }
+
+        .tag {
+            background: var(--accent-dim);
+            color: var(--accent);
             font-size: 11px;
-            font-weight: 500;
-            padding: 3px 8px;
-            border-radius: 20px;
+            font-weight: 600;
+            padding: 3px 9px;
+            border-radius: 100px;
+            border: none;
         }
 
-        .agent-card-footer {
+        .agent-footer {
+            padding: 10px 16px 14px;
+            border-top: 1px solid var(--surface-2);
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding-top: 10px;
-            border-top: 1px solid #f2f2f7;
         }
 
-        .agent-meta {
+        .agent-counters { display: flex; gap: 16px; }
+
+        .counter { text-align: center; }
+        .counter-val { font-size: 14px; font-weight: 600; color: var(--text-1); }
+        .counter-lbl { font-size: 10px; color: var(--text-3); margin-top: 1px; }
+
+        .open-link {
             font-size: 12px;
-            color: #6e6e73;
-        }
-
-        .agent-open-link {
-            font-size: 13px;
-            font-weight: 500;
-            color: #007aff;
+            font-weight: 600;
+            color: var(--accent);
             text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 2px;
+            opacity: 0.85;
         }
 
-        /* ── LOADING & ERROR ── */
-        .loading {
-            text-align: center;
-            padding: 60px 40px;
-            font-size: 15px;
-            color: #6e6e73;
+        .open-link:hover { opacity: 1; }
+
+        /* Color palette — avatar + stripe */
+        .av-0 { background: linear-gradient(135deg,#007aff,#5856d6); }
+        .av-1 { background: linear-gradient(135deg,#30d158,#25a244); }
+        .av-2 { background: linear-gradient(135deg,#ff9f0a,#ff6b00); }
+        .av-3 { background: linear-gradient(135deg,#ff453a,#ff2d55); }
+        .av-4 { background: linear-gradient(135deg,#bf5af2,#9d4de6); }
+        .av-5 { background: linear-gradient(135deg,#5ac8fa,#007aff); }
+        .av-6 { background: linear-gradient(135deg,#ff6b35,#ff9f0a); }
+        .av-7 { background: linear-gradient(135deg,#32ade6,#007aff); }
+
+        .st-0 { background: linear-gradient(90deg,#007aff,#5856d6); }
+        .st-1 { background: linear-gradient(90deg,#30d158,#25a244); }
+        .st-2 { background: linear-gradient(90deg,#ff9f0a,#ff6b00); }
+        .st-3 { background: linear-gradient(90deg,#ff453a,#ff2d55); }
+        .st-4 { background: linear-gradient(90deg,#bf5af2,#9d4de6); }
+        .st-5 { background: linear-gradient(90deg,#5ac8fa,#007aff); }
+        .st-6 { background: linear-gradient(90deg,#ff6b35,#ff9f0a); }
+        .st-7 { background: linear-gradient(90deg,#32ade6,#007aff); }
+
+        /* ── SKELETON ── */
+        @keyframes shimmer {
+            0%   { background-position: -600px 0; }
+            100% { background-position: 600px 0; }
         }
 
-        .error-msg {
-            background: rgba(255,59,48,0.1);
-            color: #ff3b30;
-            padding: 16px;
-            border-radius: 12px;
+        .skeleton {
+            background: linear-gradient(90deg, #ebebeb 25%, #d8d8d8 50%, #ebebeb 75%);
+            background-size: 600px 100%;
+            animation: shimmer 1.4s ease-in-out infinite;
+            border-radius: 6px;
+        }
+
+        .skel-card {
+            background: var(--surface);
+            border-radius: var(--r);
+            padding: 20px;
+            border: 1px solid var(--border);
+            box-shadow: var(--shadow-sm);
+        }
+
+        /* ── EMPTY STATE ── */
+        .empty-state { text-align: center; padding: 64px 20px; color: var(--text-2); }
+        .empty-icon  { font-size: 56px; margin-bottom: 16px; }
+        .empty-title { font-size: 18px; font-weight: 600; color: var(--text-1); margin-bottom: 8px; }
+        .empty-sub   { font-size: 14px; color: var(--text-2); margin-bottom: 24px; }
+
+        /* ── MODAL ── */
+        .overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            z-index: 500;
+            background: rgba(0,0,0,0.28);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            align-items: center;
+            justify-content: center;
+        }
+
+        .overlay.open { display: flex; }
+
+        .modal {
+            background: var(--surface);
+            border-radius: var(--r-lg);
+            width: 520px;
+            max-width: 94vw;
+            max-height: 88vh;
+            overflow-y: auto;
+            box-shadow: var(--shadow-xl);
+            animation: modal-pop 0.22s cubic-bezier(0.34,1.56,0.64,1);
+        }
+
+        @keyframes modal-pop {
+            from { opacity: 0; transform: scale(0.94) translateY(12px); }
+            to   { opacity: 1; transform: scale(1) translateY(0); }
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 22px 24px 0;
+        }
+
+        .modal-title { font-size: 17px; font-weight: 700; color: var(--text-1); letter-spacing: -0.3px; }
+
+        .close-btn {
+            width: 28px; height: 28px;
+            border-radius: 50%;
+            background: var(--surface-2);
+            border: none;
+            font-size: 13px;
+            cursor: pointer;
+            color: var(--text-2);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.15s;
+        }
+
+        .close-btn:hover { background: rgba(0,0,0,0.1); }
+
+        .modal-body { padding: 20px 24px; }
+
+        .form-group { margin-bottom: 16px; }
+
+        .form-label {
+            display: block;
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-1);
+            margin-bottom: 6px;
+        }
+
+        .form-label .hint { font-weight: 400; color: var(--text-3); }
+
+        .form-input, .form-textarea, .form-select {
+            width: 100%;
+            background: var(--surface-2);
+            border: 1px solid transparent;
+            border-radius: var(--r-sm);
+            padding: 9px 12px;
             font-size: 14px;
+            font-family: inherit;
+            color: var(--text-1);
+            outline: none;
+            transition: all 0.2s;
+            -webkit-appearance: none;
         }
 
-        .empty-state {
-            text-align: center;
-            padding: 60px 20px;
-            color: #6e6e73;
+        .form-input:focus, .form-textarea:focus, .form-select:focus {
+            border-color: var(--accent);
+            background: white;
+            box-shadow: 0 0 0 3px rgba(0,122,255,0.12);
         }
 
-        .empty-state-icon {
-            font-size: 48px;
-            margin-bottom: 12px;
+        .form-textarea { resize: vertical; min-height: 80px; }
+
+        .modal-footer {
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+            padding: 0 24px 22px;
+            border-top: 1px solid var(--border);
+            padding-top: 16px;
+            margin-top: 4px;
         }
 
-        .empty-state p {
-            font-size: 15px;
+        /* ── TOAST ── */
+        #toasts {
+            position: fixed;
+            bottom: 28px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 9999;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            pointer-events: none;
         }
 
-        /* Avatar color palette */
-        .avatar-0 { background: #007aff; }
-        .avatar-1 { background: #34c759; }
-        .avatar-2 { background: #ff9f0a; }
-        .avatar-3 { background: #ff375f; }
-        .avatar-4 { background: #af52de; }
-        .avatar-5 { background: #5ac8fa; }
-        .avatar-6 { background: #ff6b35; }
-        .avatar-7 { background: #30b0c7; }
+        .toast {
+            display: flex;
+            align-items: center;
+            gap: 9px;
+            background: rgba(28,28,30,0.92);
+            backdrop-filter: blur(12px);
+            color: white;
+            padding: 11px 20px;
+            border-radius: 100px;
+            font-size: 14px;
+            font-weight: 500;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+            opacity: 0;
+            transform: translateY(16px) scale(0.95);
+            transition: all 0.3s cubic-bezier(0.34,1.56,0.64,1);
+            pointer-events: auto;
+            white-space: nowrap;
+        }
+
+        .toast.in  { opacity: 1; transform: translateY(0) scale(1); }
+        .toast.out { opacity: 0; transform: translateY(8px) scale(0.97); transition: all 0.2s ease; }
+
+        .t-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+        .t-dot.success { background: var(--success); }
+        .t-dot.error   { background: var(--danger); }
+        .t-dot.info    { background: var(--accent); }
+
+        /* ── SPINNER ── */
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        .spinner {
+            width: 13px; height: 13px;
+            border: 2px solid rgba(255,255,255,0.3);
+            border-top-color: white;
+            border-radius: 50%;
+            animation: spin 0.7s linear infinite;
+            display: inline-block;
+            vertical-align: middle;
+        }
+
+        /* ── ANIMATIONS ── */
+        @keyframes fade-up {
+            from { opacity: 0; transform: translateY(10px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+
+        .fade-up { animation: fade-up 0.3s ease forwards; }
     </style>
 </head>
 <body>
-    <div class="app">
-        <!-- SIDEBAR -->
-        <div class="sidebar">
-            <div class="sidebar-header">
-                <div class="app-icon">🤖</div>
-                <div class="app-name">Marketing AI</div>
-            </div>
-            <nav class="sidebar-nav">
-                <div class="nav-item active">🤖&nbsp; All Agents</div>
-                <div class="nav-item">📊&nbsp; Analytics</div>
-                <div class="nav-item">⚙️&nbsp; Settings</div>
-            </nav>
-            <div class="sidebar-stats" id="sidebar-stats">
-                <!-- populated by JS -->
-            </div>
-        </div>
-
-        <!-- MAIN CONTENT -->
-        <div class="main-content">
-            <!-- Window Chrome -->
-            <div class="window-chrome">
-                <div class="traffic-lights">
-                    <span class="tl red"></span>
-                    <span class="tl yellow"></span>
-                    <span class="tl green"></span>
-                </div>
-                <div class="window-title">Marketing AI Agent</div>
-                <div style="width:56px"></div>
-            </div>
-
-            <!-- Content Area -->
-            <div class="content-area">
-                <!-- Toolbar -->
-                <div class="toolbar">
-                    <div class="toolbar-title">Agents</div>
-                    <input class="search-input" type="text" placeholder="🔍 Search agents..." id="searchInput" oninput="filterAgents(this.value)">
-                    <button class="btn-secondary" onclick="loadDashboard()">↺ Refresh</button>
-                </div>
-
-                <!-- Stats Row -->
-                <div class="stats-row" id="stats">
-                    <div class="loading">Loading...</div>
-                </div>
-
-                <!-- Agents Grid -->
-                <div id="agents">
-                    <div class="loading">Loading agents...</div>
+<div class="app">
+    <!-- SIDEBAR -->
+    <nav class="sidebar">
+        <div class="sidebar-header">
+            <div class="brand">
+                <div class="brand-icon">🤖</div>
+                <div class="brand-text">
+                    <div class="brand-name">Marketing AI</div>
+                    <div class="brand-sub">Command Center</div>
                 </div>
             </div>
         </div>
-    </div>
 
-    <script>
-        let allAgents = [];
+        <div class="sidebar-nav">
+            <div class="nav-section">Workspace</div>
+            <div class="nav-item active"><span class="ni">⬡</span> All Agents</div>
+            <a class="nav-item" href="/inbox"><span class="ni">📥</span> Inbox</a>
+            <div class="nav-item" onclick="window.location='newsroom.html'"><span class="ni">📰</span> Newsroom</div>
+            <div class="nav-item"><span class="ni">📊</span> Analytics</div>
+            <div class="nav-item"><span class="ni">📅</span> Schedule</div>
+            <div class="nav-section">System</div>
+            <div class="nav-item"><span class="ni">⚙️</span> Settings</div>
+        </div>
 
-        const avatarColors = ['avatar-0','avatar-1','avatar-2','avatar-3','avatar-4','avatar-5','avatar-6','avatar-7'];
+        <div class="sidebar-footer" id="sidebar-footer">
+            <!-- populated by JS -->
+        </div>
+    </nav>
 
-        function getAvatarClass(name) {
-            let hash = 0;
-            for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
-            return avatarColors[Math.abs(hash) % avatarColors.length];
-        }
-
-        function viewAgentDetails(agentId) {
-            window.location.href = `/agent-detail.html?id=${agentId}`;
-        }
-
-        function filterAgents(query) {
-            const q = query.toLowerCase();
-            const filtered = allAgents.filter(a =>
-                a.agent_name.toLowerCase().includes(q) ||
-                a.brand.toLowerCase().includes(q) ||
-                (a.fields || []).some(f => f.toLowerCase().includes(q))
-            );
-            renderAgentCards(filtered);
-        }
-
-        function renderAgentCards(agents) {
-            if (!agents || agents.length === 0) {
-                document.getElementById('agents').innerHTML = `
-                    <div class="empty-state">
-                        <div class="empty-state-icon">🤖</div>
-                        <p>No agents found.</p>
+    <!-- MAIN -->
+    <div class="main">
+        <!-- TOPBAR -->
+        <header class="topbar">
+            <div class="traffic-lights">
+                <span class="tl red"></span>
+                <span class="tl yellow"></span>
+                <span class="tl green"></span>
+            </div>
+            <div class="topbar-center">Marketing AI</div>
+            <div class="topbar-right">
+                <div class="search-wrap">
+                    <span class="search-icon">🔍</span>
+                    <input class="search-input" type="text" placeholder="Search agents…" id="searchInput" oninput="filterAgents(this.value)">
+                </div>
+                <div style="position:relative">
+                    <button class="notif-bell" id="notif-bell" onclick="toggleNotifPanel()">🔔<span class="notif-badge hidden" id="notif-badge">0</span></button>
+                    <div class="notif-panel" id="notif-panel">
+                        <div class="notif-panel-header"><span>Notifications</span><button class="btn btn-ghost" style="font-size:11px;padding:2px 8px" onclick="markAllRead()">Mark all read</button></div>
+                        <div id="notif-list"></div>
                     </div>
-                `;
-                return;
-            }
+                </div>
+                <button class="btn btn-ghost" onclick="loadDashboard()" title="Refresh">↺</button>
+                <button class="btn btn-primary" onclick="openCreateModal()">+ New Agent</button>
+            </div>
+        </header>
 
-            document.getElementById('agents').innerHTML = `
+        <!-- CONTENT -->
+        <main class="content">
+            <!-- Stats -->
+            <div class="stats-grid" id="stats">
+                <!-- skeleton -->
+                <div class="skel-card" style="display:flex;align-items:center;gap:16px">
+                    <div class="skeleton" style="width:46px;height:46px;border-radius:12px"></div>
+                    <div style="flex:1">
+                        <div class="skeleton" style="height:26px;width:60%;margin-bottom:8px"></div>
+                        <div class="skeleton" style="height:13px;width:40%"></div>
+                    </div>
+                </div>
+                <div class="skel-card" style="display:flex;align-items:center;gap:16px">
+                    <div class="skeleton" style="width:46px;height:46px;border-radius:12px"></div>
+                    <div style="flex:1">
+                        <div class="skeleton" style="height:26px;width:60%;margin-bottom:8px"></div>
+                        <div class="skeleton" style="height:13px;width:40%"></div>
+                    </div>
+                </div>
+                <div class="skel-card" style="display:flex;align-items:center;gap:16px">
+                    <div class="skeleton" style="width:46px;height:46px;border-radius:12px"></div>
+                    <div style="flex:1">
+                        <div class="skeleton" style="height:26px;width:60%;margin-bottom:8px"></div>
+                        <div class="skeleton" style="height:13px;width:40%"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Editorial Team -->
+            <div class="section-header">
+                <div class="section-title">Editorial Team</div>
+            </div>
+            <div id="team-section">
                 <div class="agents-grid">
-                    ${agents.map(agent => {
-                        const initials = agent.agent_name ? agent.agent_name[0].toUpperCase() : '?';
-                        const colorClass = getAvatarClass(agent.agent_name);
-                        const fields = (agent.fields || []).slice(0, 4);
-                        const totalPosts = (agent.draft_posts || 0) + (agent.analytics?.total_posts || 0) + (agent.scheduled_posts || 0);
-                        return `
-                        <div class="agent-card" onclick="viewAgentDetails(${agent.agent_id})">
-                            <div class="agent-card-top">
-                                <div class="agent-avatar ${colorClass}">${initials}</div>
-                                <div class="agent-card-info">
-                                    <div class="agent-name">${agent.agent_name}</div>
-                                    <div class="agent-brand">${agent.brand}</div>
-                                </div>
-                            </div>
-                            ${fields.length > 0 ? `
-                            <div class="agent-fields">
-                                ${fields.map(f => `<span class="field-badge">${f}</span>`).join('')}
-                            </div>` : ''}
-                            <div class="agent-card-footer">
-                                <span class="agent-meta">${totalPosts} post${totalPosts !== 1 ? 's' : ''} &middot; ${agent.analytics?.total_interactions || 0} interactions</span>
-                                <a class="agent-open-link" href="/agent-detail.html?id=${agent.agent_id}" onclick="event.stopPropagation()">Open →</a>
-                            </div>
-                        </div>
-                        `;
-                    }).join('')}
+                    <div class="skel-card" style="height:120px"></div>
+                    <div class="skel-card" style="height:120px"></div>
+                    <div class="skel-card" style="height:120px"></div>
+                </div>
+            </div>
+
+            <!-- Agents -->
+            <div class="section-header" style="margin-top:12px">
+                <div class="section-title">Publishing Agents</div>
+            </div>
+
+            <div id="agents">
+                <div class="agents-grid">
+                    <div class="skel-card" style="height:168px"></div>
+                    <div class="skel-card" style="height:168px"></div>
+                    <div class="skel-card" style="height:168px"></div>
+                </div>
+            </div>
+        </main>
+    </div>
+</div>
+
+<!-- Create Agent Modal -->
+<div id="createOverlay" class="overlay">
+    <div class="modal">
+        <div class="modal-header">
+            <span class="modal-title">Create New Agent</span>
+            <button class="close-btn" onclick="closeCreateModal()">✕</button>
+        </div>
+        <form id="createForm">
+            <div class="modal-body">
+                <div class="form-group">
+                    <label class="form-label">Agent Name</label>
+                    <input class="form-input" type="text" id="c-name" placeholder="e.g., Alex Marketing" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Brand</label>
+                    <input class="form-input" type="text" id="c-brand" placeholder="e.g., Acme Corp" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Persona</label>
+                    <input class="form-input" type="text" id="c-persona" placeholder="e.g., Energetic and forward-thinking" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Tone of Voice</label>
+                    <input class="form-input" type="text" id="c-tone" placeholder="e.g., Professional, friendly, inspiring" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Fields <span class="hint">(comma-separated)</span></label>
+                    <input class="form-input" type="text" id="c-fields" placeholder="e.g., AI, Technology, Innovation" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Bio <span class="hint">(optional)</span></label>
+                    <textarea class="form-textarea" id="c-bio" placeholder="Short bio for this agent…"></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-ghost" onclick="closeCreateModal()">Cancel</button>
+                <button type="submit" class="btn btn-primary" id="createBtn">Create Agent</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Toast Container -->
+<div id="toasts"></div>
+
+<script>
+    let allAgents = [];
+
+    const palette = [
+        { av: 'av-0', st: 'st-0' }, { av: 'av-1', st: 'st-1' },
+        { av: 'av-2', st: 'st-2' }, { av: 'av-3', st: 'st-3' },
+        { av: 'av-4', st: 'st-4' }, { av: 'av-5', st: 'st-5' },
+        { av: 'av-6', st: 'st-6' }, { av: 'av-7', st: 'st-7' },
+    ];
+
+    function colorIdx(name) {
+        let h = 0;
+        for (let i = 0; i < name.length; i++) h = name.charCodeAt(i) + ((h << 5) - h);
+        return Math.abs(h) % palette.length;
+    }
+
+    // ── Toast ──
+    function toast(msg, type = 'success') {
+        const ct = document.getElementById('toasts');
+        const el = document.createElement('div');
+        el.className = 'toast';
+        el.innerHTML = `<span class="t-dot ${type}"></span>${msg}`;
+        ct.appendChild(el);
+        requestAnimationFrame(() => requestAnimationFrame(() => el.classList.add('in')));
+        setTimeout(() => {
+            el.classList.remove('in');
+            el.classList.add('out');
+            setTimeout(() => el.remove(), 220);
+        }, 3200);
+    }
+
+    // ── Counter animation ──
+    function countUp(el, target) {
+        const dur = 700, start = performance.now();
+        function step(now) {
+            const p = Math.min((now - start) / dur, 1);
+            el.textContent = Math.round((1 - Math.pow(1 - p, 3)) * target);
+            if (p < 1) requestAnimationFrame(step);
+        }
+        requestAnimationFrame(step);
+    }
+
+    // ── Navigation ──
+    function gotoAgent(id) { window.location.href = `/agent-detail.html?id=${id}`; }
+
+    function filterAgents(q) {
+        const lq = q.toLowerCase();
+        renderCards(allAgents.filter(a =>
+            a.agent_name.toLowerCase().includes(lq) ||
+            a.brand.toLowerCase().includes(lq) ||
+            (a.fields || []).some(f => f.toLowerCase().includes(lq))
+        ));
+    }
+
+    function renderCards(agents) {
+        const el = document.getElementById('agents');
+        if (!agents || agents.length === 0) {
+            el.innerHTML = `
+                <div class="empty-state fade-up">
+                    <div class="empty-icon">🤖</div>
+                    <div class="empty-title">No agents yet</div>
+                    <div class="empty-sub">Create your first AI marketing agent to get started.</div>
+                    <button class="btn btn-primary" onclick="openCreateModal()">+ Create First Agent</button>
                 </div>
             `;
+            return;
         }
 
-        async function loadDashboard() {
-            document.getElementById('stats').innerHTML = '<div class="loading">Loading...</div>';
-            document.getElementById('agents').innerHTML = '<div class="loading">Loading agents...</div>';
-
-            try {
-                const response = await fetch('/api/agents');
-                const data = await response.json();
-
-                allAgents = data.agents || [];
-
-                // Stats row
-                document.getElementById('stats').innerHTML = `
-                    <div class="stat-card">
-                        <div class="stat-number">${data.total_agents}</div>
-                        <div class="stat-label">Total Agents</div>
+        el.innerHTML = `<div class="agents-grid">
+            ${agents.map((a, i) => {
+                const ci = colorIdx(a.agent_name);
+                const c  = palette[ci];
+                const init  = (a.agent_name || '?')[0].toUpperCase();
+                const tags  = (a.fields || []).slice(0, 4);
+                const posts = a.analytics?.total_posts || 0;
+                const drafts = a.draft_posts || 0;
+                const sched  = a.scheduled_posts || 0;
+                const isRunning = (a.ai_auto_status || '').toLowerCase().includes('running');
+                const isGenerating = !!a.generating;
+                const apBadge = a.autopilot_enabled
+                    ? `<span class="badge-pill autopilot">🤖 Autopilot</span>` : '';
+                const aaBadge = a.ai_auto_enabled
+                    ? `<span class="badge-pill ai-auto${isRunning ? ' running' : ''}">${isRunning ? '⚡' : '🕵️'} AI Auto${isRunning ? ' — live' : ''}</span>` : '';
+                const genBadge = isGenerating
+                    ? `<span class="badge-pill generating gen-badge">⏳ Generating…</span>` : '';
+                const llmModel = a.llm_model || 'claude-sonnet-4-6';
+                const llmCls = llmModel.includes('image') ? 'gemini-img'
+                             : (a.llm_provider || '').includes('gemini') ? 'gemini' : 'claude';
+                const llmLabel = llmModel.replace('claude-', '').replace('gemini-', 'G ');
+                const llmBadge = `<span class="badge-pill llm-badge ${llmCls}">${llmLabel}</span>`;
+                return `
+                <div class="agent-card fade-up" id="acard-${a.agent_id}" style="animation-delay:${i * 0.04}s;${isGenerating ? 'opacity:0.75' : ''}" onclick="gotoAgent(${a.agent_id})">
+                    <div class="agent-stripe ${c.st}"></div>
+                    <div class="agent-body">
+                        <div class="agent-top">
+                            <div class="agent-avatar ${c.av}">${init}</div>
+                            <div class="agent-meta">
+                                <div class="agent-name">${a.agent_name}</div>
+                                <div class="agent-brand">${a.brand}</div>
+                            </div>
+                            <div class="agent-dot"></div>
+                        </div>
+                        ${tags.length > 0 ? `<div class="agent-tags">${tags.map(t => `<span class="tag">${t}</span>`).join('')}</div>` : ''}
+                        <div class="agent-badges" id="abadges-${a.agent_id}">${llmBadge}${genBadge}${apBadge}${aaBadge}</div>
                     </div>
-                    <div class="stat-card">
-                        <div class="stat-number">${data.total_posts}</div>
-                        <div class="stat-label">Total Posts</div>
+                    <div class="agent-footer">
+                        <div class="agent-counters">
+                            <div class="counter"><div class="counter-val">${posts}</div><div class="counter-lbl">Published</div></div>
+                            <div class="counter"><div class="counter-val">${drafts}</div><div class="counter-lbl">Drafts</div></div>
+                            <div class="counter"><div class="counter-val">${sched}</div><div class="counter-lbl">Scheduled</div></div>
+                        </div>
+                        <a class="open-link" href="/agent-detail.html?id=${a.agent_id}" onclick="event.stopPropagation()">Open ›</a>
                     </div>
-                    <div class="stat-card">
-                        <div class="stat-number">${data.total_interactions}</div>
-                        <div class="stat-label">Total Interactions</div>
-                    </div>
-                `;
+                </div>`;
+            }).join('')}
+        </div>`;
+    }
 
-                // Sidebar stats
-                document.getElementById('sidebar-stats').innerHTML = `
-                    <div class="sidebar-stat">
-                        <span class="sidebar-stat-label">Agents</span>
-                        <span class="sidebar-stat-value">${data.total_agents}</span>
-                    </div>
-                    <div class="sidebar-stat">
-                        <span class="sidebar-stat-label">Posts</span>
-                        <span class="sidebar-stat-value">${data.total_posts}</span>
-                    </div>
-                    <div class="sidebar-stat">
-                        <span class="sidebar-stat-label">Interactions</span>
-                        <span class="sidebar-stat-value">${data.total_interactions}</span>
-                    </div>
-                `;
+    async function loadTeamMembers() {
+        const el = document.getElementById('team-section');
+        try {
+            const r = await fetch('/api/team/members');
+            if (!r.ok) { el.innerHTML = ''; return; }
+            const members = await r.json();
+            if (!members || members.length === 0) { el.innerHTML = ''; return; }
 
-                renderAgentCards(allAgents);
+            el.innerHTML = `<div class="team-mini-grid">
+                ${members.map((m, i) => {
+                    const model = m.llm_model || 'claude-sonnet-4-6';
+                    const llmCls = model.includes('image') ? 'gemini-img'
+                                 : (m.llm_provider || '').includes('gemini') ? 'gemini' : 'claude';
+                    const llmLabel = model.replace('claude-', '').replace('gemini-', 'G ');
+                    return `
+                    <div class="team-mini-card fade-up" style="animation-delay:${i * 0.03}s" onclick="window.location='/newsroom.html'">
+                        <div class="team-mini-emoji">${m.emoji || '👤'}</div>
+                        <div class="team-mini-info">
+                            <div class="team-mini-name">${m.display_name}</div>
+                            <div class="team-mini-role">${m.role_title}</div>
+                            <div class="team-mini-llm ${llmCls}">${llmLabel}</div>
+                        </div>
+                    </div>`;
+                }).join('')}
+            </div>`;
+        } catch (e) {
+            el.innerHTML = '';
+        }
+    }
 
-            } catch (error) {
-                console.error('Error:', error);
-                document.getElementById('stats').innerHTML = '';
-                document.getElementById('agents').innerHTML = `
-                    <div class="error-msg">Error loading dashboard: ${error.message}</div>
-                `;
+    async function loadDashboard() {
+        try {
+            const r = await fetch('/api/agents');
+            const data = await r.json();
+            allAgents = data.agents || [];
+
+            // Stats
+            document.getElementById('stats').innerHTML = `
+                <div class="stat-card fade-up">
+                    <div class="stat-icon si-blue">🤖</div>
+                    <div class="stat-info"><div class="stat-num" id="sn0">0</div><div class="stat-lbl">Active Agents</div></div>
+                </div>
+                <div class="stat-card fade-up" style="animation-delay:.05s">
+                    <div class="stat-icon si-green">📝</div>
+                    <div class="stat-info"><div class="stat-num" id="sn1">0</div><div class="stat-lbl">Total Posts</div></div>
+                </div>
+                <div class="stat-card fade-up" style="animation-delay:.1s">
+                    <div class="stat-icon si-purple">💬</div>
+                    <div class="stat-info"><div class="stat-num" id="sn2">0</div><div class="stat-lbl">Interactions</div></div>
+                </div>
+            `;
+
+            countUp(document.getElementById('sn0'), data.total_agents || 0);
+            countUp(document.getElementById('sn1'), data.total_posts || 0);
+            countUp(document.getElementById('sn2'), data.total_interactions || 0);
+
+            // Sidebar footer
+            document.getElementById('sidebar-footer').innerHTML = `
+                <div class="sidebar-stat-row"><span class="ssl">Agents</span><span class="ssv">${data.total_agents}</span></div>
+                <div class="sidebar-stat-row"><span class="ssl">Posts</span><span class="ssv">${data.total_posts}</span></div>
+                <div class="sidebar-stat-row"><span class="ssl">Interactions</span><span class="ssv">${data.total_interactions}</span></div>
+                <div class="sidebar-ver">Marketing AI v1.0</div>
+            `;
+
+            renderCards(allAgents);
+            loadTeamMembers();
+            startAutopilotPoll();   // begin polling for live generation status
+
+        } catch (err) {
+            toast('Failed to load dashboard: ' + err.message, 'error');
+        }
+    }
+
+    // ── Autopilot live progress polling ──
+    let _apPollTimer = null;
+    let _apPrevActive = new Set();
+
+    function startAutopilotPoll() {
+        if (_apPollTimer) return;   // already running
+        pollAutopilotActive();      // fire immediately, don't wait 3.5s
+        _apPollTimer = setInterval(pollAutopilotActive, 3000);
+    }
+
+    async function pollAutopilotActive() {
+        try {
+            const r = await fetch('/api/autopilot/active?_t=' + Date.now());
+            if (!r.ok) return;
+            const data = await r.json();
+            const active = new Set(data.active || []);
+
+            // Add "generating" badge to newly active agents
+            active.forEach(id => {
+                const badges = document.getElementById(`abadges-${id}`);
+                if (badges && !badges.querySelector('.gen-badge')) {
+                    const b = document.createElement('span');
+                    b.className = 'badge-pill generating gen-badge';
+                    b.textContent = '⏳ Generating…';
+                    badges.prepend(b);
+                }
+                // Dim the card slightly
+                const card = document.getElementById(`acard-${id}`);
+                if (card) card.style.opacity = '0.75';
+            });
+
+            // Remove badge from agents no longer active
+            _apPrevActive.forEach(id => {
+                if (!active.has(id)) {
+                    const badges = document.getElementById(`abadges-${id}`);
+                    if (badges) badges.querySelectorAll('.gen-badge').forEach(b => b.remove());
+                    const card = document.getElementById(`acard-${id}`);
+                    if (card) card.style.opacity = '';
+                    // Reload dashboard stats once generation completes
+                    loadDashboard();
+                }
+            });
+
+            _apPrevActive = active;
+        } catch(e) { /* silent */ }
+    }
+
+    // ── Create Agent Modal ──
+    function openCreateModal() {
+        document.getElementById('createOverlay').classList.add('open');
+        document.getElementById('c-name').focus();
+    }
+
+    function closeCreateModal() {
+        document.getElementById('createOverlay').classList.remove('open');
+        document.getElementById('createForm').reset();
+    }
+
+    document.getElementById('createOverlay').addEventListener('click', e => {
+        if (e.target === e.currentTarget) closeCreateModal();
+    });
+
+    document.getElementById('createForm').addEventListener('submit', async e => {
+        e.preventDefault();
+        const btn = document.getElementById('createBtn');
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner"></span> Creating…';
+
+        const fields = document.getElementById('c-fields').value.split(',').map(s => s.trim()).filter(Boolean);
+
+        try {
+            const r = await fetch('/api/agents', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    name:          document.getElementById('c-name').value,
+                    brand:         document.getElementById('c-brand').value,
+                    persona:       document.getElementById('c-persona').value,
+                    tone_of_voice: document.getElementById('c-tone').value,
+                    fields,
+                    bio:           document.getElementById('c-bio').value,
+                })
+            });
+            const result = await r.json();
+
+            if (r.ok) {
+                closeCreateModal();
+                toast('Agent created successfully!', 'success');
+                loadDashboard();
+            } else {
+                toast('Error: ' + (result.error || 'Failed to create'), 'error');
             }
+        } catch (err) {
+            toast('Error: ' + err.message, 'error');
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = 'Create Agent';
         }
+    });
 
-        // Load on page load
-        window.addEventListener('load', loadDashboard);
-    </script>
+    window.addEventListener('load', () => {
+        loadDashboard();
+        loadNotifications();
+        setInterval(loadNotifications, 10000);
+    });
+
+    // ── Notifications ──
+    const _NI = {post_scheduled:'📅',workflow_completed:'✅',workflow_failed:'❌',content_ready:'📝'};
+    function toggleNotifPanel() { document.getElementById('notif-panel').classList.toggle('open'); }
+    document.addEventListener('click', e => {
+        const p = document.getElementById('notif-panel'), b = document.getElementById('notif-bell');
+        if (p && b && !p.contains(e.target) && !b.contains(e.target)) p.classList.remove('open');
+    });
+    function _esc(s) { const d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
+    function _ago(iso) { if(!iso)return''; const d=(Date.now()-new Date(iso).getTime())/1000; if(d<60)return'just now'; if(d<3600)return Math.floor(d/60)+'m ago'; if(d<86400)return Math.floor(d/3600)+'h ago'; return Math.floor(d/86400)+'d ago'; }
+    async function loadNotifications() {
+        try {
+            const r=await fetch('/api/notifications?limit=20&_t='+Date.now()); if(!r.ok)return;
+            const data=await r.json();
+            const badge=document.getElementById('notif-badge');
+            if(data.unread>0){badge.textContent=data.unread>99?'99+':data.unread;badge.classList.remove('hidden');}else{badge.classList.add('hidden');}
+            const list=document.getElementById('notif-list');
+            if(!data.notifications||!data.notifications.length){list.innerHTML='<div style="padding:24px;text-align:center;color:var(--text-3);font-size:12px">No notifications</div>';return;}
+            list.innerHTML=data.notifications.map(n=>`<div class="notif-item ${n.is_read?'':'unread'}" onclick="clickNotif(${n.id},'${_esc(n.link||'')}')"><div class="notif-icon">${_NI[n.type]||'🔔'}</div><div class="notif-content"><div class="notif-title">${_esc(n.title)}</div><div class="notif-body">${_esc(n.body||'')}</div><div class="notif-time">${_ago(n.created_at)}</div></div></div>`).join('');
+        }catch(e){}
+    }
+    async function clickNotif(id,link){try{await fetch('/api/notifications/read',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ids:[id]})});}catch(e){}if(link)window.location=link;else{loadNotifications();document.getElementById('notif-panel').classList.remove('open');}}
+    async function markAllRead(){try{await fetch('/api/notifications/read',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({})});}catch(e){}loadNotifications();}
+</script>
 </body>
 </html>

@@ -12,20 +12,35 @@ class Orchestrator:
     """Central orchestrator managing all agents and their activities"""
 
     def __init__(self):
-        self.db = get_db()
+        self._fallback_db = None
         self.agents = {}
         self.scheduler = PostScheduler()
         self.analytics_engine = AnalyticsEngine()
-        self._load_agents()
 
-    def _load_agents(self):
-        """Load all active agents from database"""
-        agents = self.db.query(Agent).filter(Agent.is_active == True).all()
-        for agent in agents:
-            try:
-                self.agents[agent.id] = BaseAgent(agent.id)
-            except Exception as e:
-                print(f"Error loading agent {agent.id}: {e}")
+    @property
+    def db(self):
+        """Always return the current request's DB session (never a stale one)."""
+        try:
+            from flask import g, has_request_context
+            if has_request_context() and hasattr(g, 'db') and g.db is not None:
+                return g.db
+        except Exception:
+            pass
+        # Fallback for non-request contexts (background threads, CLI)
+        if self._fallback_db is None:
+            self._fallback_db = get_db()
+        return self._fallback_db
+
+    @db.setter
+    def db(self, value):
+        """Accept assignment for backwards compat but ignore — property handles it."""
+        pass
+
+    def _ensure_agent(self, agent_id: int) -> 'BaseAgent':
+        """Lazy-load a BaseAgent only when needed for content generation."""
+        if agent_id not in self.agents:
+            self.agents[agent_id] = BaseAgent(agent_id)
+        return self.agents[agent_id]
 
     def create_agent(
         self,
@@ -68,7 +83,9 @@ class Orchestrator:
         fields: Optional[List[str]] = None,
         bio: Optional[str] = None,
         avatar_url: Optional[str] = None,
-        image_style: Optional[str] = None
+        image_style: Optional[str] = None,
+        llm_provider: Optional[str] = None,
+        llm_model: Optional[str] = None
     ) -> bool:
         """Update an existing agent"""
         agent = self.db.query(Agent).filter(Agent.id == agent_id).first()
@@ -92,6 +109,10 @@ class Orchestrator:
             agent.avatar_url = avatar_url
         if image_style is not None:
             agent.image_style = image_style
+        if llm_provider is not None:
+            agent.llm_provider = llm_provider
+        if llm_model is not None:
+            agent.llm_model = llm_model
 
         # Update timestamp
         agent.updated_at = datetime.utcnow()
@@ -122,10 +143,11 @@ class Orchestrator:
         return True
 
     def get_agent(self, agent_id: int) -> Optional[BaseAgent]:
-        """Get agent by ID"""
-        if agent_id not in self.agents:
-            self._load_agents()
-        return self.agents.get(agent_id)
+        """Get agent by ID (lazy-loads BaseAgent on first use)"""
+        try:
+            return self._ensure_agent(agent_id)
+        except Exception:
+            return None
 
     def generate_content_for_agent(
         self,
@@ -217,43 +239,58 @@ class Orchestrator:
 
         return results
 
-    def get_agent_dashboard(self, agent_id: int) -> Dict[str, Any]:
-        """Get dashboard data for an agent"""
-        agent = self.get_agent(agent_id)
-        if not agent:
-            raise ValueError(f"Agent {agent_id} not found")
+    def _agent_dashboard_from_db(self, agent) -> Dict[str, Any]:
+        """Build dashboard dict directly from an Agent DB row (no BaseAgent needed)."""
+        from src.database.models import Analytics
+        # Analytics
+        analytics_row = self.db.query(Analytics).filter(Analytics.agent_id == agent.id).first()
+        analytics = {
+            'total_posts': analytics_row.total_posts if analytics_row else 0,
+            'total_interactions': analytics_row.total_interactions if analytics_row else 0,
+            'accounts': 0,
+            'is_active': agent.is_active,
+        } if analytics_row else {'total_posts': 0, 'total_interactions': 0, 'accounts': 0, 'is_active': agent.is_active}
 
-        analytics = agent.get_analytics()
-
-        dashboard = {
-            'agent_id': agent_id,
-            'agent_name': agent.agent.name,
-            'brand': agent.agent.brand,
-            'persona': agent.agent.persona,
-            'tone': agent.agent.tone_of_voice,
-            'fields': agent.agent.fields,
-            'image_style': agent.agent.image_style or 'ultra realistic photography',
-            'bio': agent.agent.bio or '',
+        return {
+            'agent_id': agent.id,
+            'agent_name': agent.name,
+            'brand': agent.brand,
+            'persona': agent.persona,
+            'tone': agent.tone_of_voice,
+            'fields': agent.fields,
+            'image_style': getattr(agent, 'image_style', None) or 'ultra realistic photography',
+            'bio': agent.bio or '',
             'analytics': analytics,
             'draft_posts': self.db.query(Content).filter(
-                Content.agent_id == agent_id,
+                Content.agent_id == agent.id,
                 Content.status == 'draft'
             ).count(),
             'scheduled_posts': self.db.query(Content).filter(
-                Content.agent_id == agent_id,
+                Content.agent_id == agent.id,
                 Content.status == 'scheduled'
             ).count(),
             'pending_interactions': self.db.query(Interaction).filter(
-                Interaction.agent_id == agent_id,
+                Interaction.agent_id == agent.id,
                 Interaction.status == 'pending'
-            ).count()
+            ).count(),
+            # LLM info
+            'llm_provider': getattr(agent, 'llm_provider', None) or 'claude',
+            'llm_model': getattr(agent, 'llm_model', None) or 'claude-sonnet-4-6',
+            # Feature flags
+            'autopilot_enabled': bool(agent.autopilot_enabled),
+            'ai_auto_enabled':   bool(agent.ai_auto_enabled),
+            'ai_auto_status':    agent.ai_auto_status or 'idle',
         }
 
-        return dashboard
+    def get_agent_dashboard(self, agent_id: int) -> Dict[str, Any]:
+        """Get dashboard data for an agent"""
+        agent = self.db.query(Agent).filter(Agent.id == agent_id).first()
+        if not agent:
+            raise ValueError(f"Agent {agent_id} not found")
+        return self._agent_dashboard_from_db(agent)
 
     def get_all_agents_dashboard(self) -> Dict[str, Any]:
         """Get overview dashboard for all agents"""
-        # Get agents directly from DB instead of from self.agents (which may have load errors)
         db_agents = self.db.query(Agent).filter(Agent.is_active == True).all()
         total_agents = len(db_agents)
         total_posts = self.db.query(Content).count()
@@ -262,32 +299,16 @@ class Orchestrator:
         agents_data = []
         for agent in db_agents:
             try:
-                # Load agent if not already in memory
-                if agent.id not in self.agents:
-                    self.agents[agent.id] = BaseAgent(agent.id)
-                agents_data.append(self.get_agent_dashboard(agent.id))
+                agents_data.append(self._agent_dashboard_from_db(agent))
             except Exception as e:
-                # If agent fails to load, still return basic info
                 agents_data.append({
                     'agent_id': agent.id,
                     'agent_name': agent.name,
                     'brand': agent.brand,
-                    'persona': agent.persona,
-                    'tone': agent.tone_of_voice,
                     'fields': agent.fields,
+                    'llm_provider': getattr(agent, 'llm_provider', None) or 'claude',
+                    'llm_model': getattr(agent, 'llm_model', None) or 'claude-sonnet-4-6',
                     'analytics': {},
-                    'draft_posts': self.db.query(Content).filter(
-                        Content.agent_id == agent.id,
-                        Content.status == 'draft'
-                    ).count(),
-                    'scheduled_posts': self.db.query(Content).filter(
-                        Content.agent_id == agent.id,
-                        Content.status == 'scheduled'
-                    ).count(),
-                    'pending_interactions': self.db.query(Interaction).filter(
-                        Interaction.agent_id == agent.id,
-                        Interaction.status == 'pending'
-                    ).count()
                 })
 
         return {

@@ -11,11 +11,14 @@ from src.api.image_generator import GeminiImageGenerator
 class BaseAgent:
     """Base class for all AI agents"""
 
-    def __init__(self, agent_id: int, llm_provider: str = 'claude', api_key: Optional[str] = None):
+    def __init__(self, agent_id: int, llm_provider: str = None, api_key: Optional[str] = None):
         self.agent_id = agent_id
         self.db = get_db()
         self.agent = self._load_agent_config()
-        self.llm = LLMProvider(provider=llm_provider, custom_api_key=api_key)
+        # Use agent's configured provider/model, fallback to parameter, then default
+        provider = llm_provider or getattr(self.agent, 'llm_provider', None) or 'claude'
+        model = getattr(self.agent, 'llm_model', None)
+        self.llm = LLMProvider(provider=provider, custom_api_key=api_key, model=model)
 
     def _load_agent_config(self) -> Agent:
         """Load agent configuration from database"""
@@ -142,6 +145,9 @@ Make it authentic, engaging, and aligned with the brand voice."""
 
         def generate_images_fn():
             try:
+                import random as _rng
+                # Vary carousel size organically: 1 image ~20%, 2 ~30%, 3 ~30%, 4 ~20%
+                num_imgs = _rng.choices([1, 2, 3, 4], weights=[20, 30, 30, 20], k=1)[0]
                 img_gen = GeminiImageGenerator()
                 prompts = img_gen.build_image_prompts(
                     post_text=topic,
@@ -150,7 +156,7 @@ Make it authentic, engaging, and aligned with the brand voice."""
                     persona=self.agent.persona,
                     topic=topic,
                     image_style=getattr(self.agent, 'image_style', None) or 'ultra realistic photography',
-                    num_images=3
+                    num_images=num_imgs
                 )
                 images = img_gen.generate_carousel(prompts)
                 image_result["images"] = images
@@ -168,7 +174,7 @@ Make it authentic, engaging, and aligned with the brand voice."""
 
         text_thread.join()
         if image_thread:
-            image_thread.join(timeout=30)
+            image_thread.join(timeout=120)  # up to 4 images × ~25s each
 
         post = Content(
             agent_id=self.agent_id,
@@ -176,6 +182,51 @@ Make it authentic, engaging, and aligned with the brand voice."""
             body=text_result.get('caption', ''),
             hashtags=text_result.get('hashtags', []),
             media_urls=image_result["images"],  # base64 images stored here
+            platform=platform,
+            status='draft'
+        )
+
+        self.db.add(post)
+        self.db.commit()
+        return post.id
+
+    def create_custom_post(
+        self,
+        platform: str,
+        custom_text: str,
+        hashtags: Optional[List[str]] = None,
+        num_images: int = 3
+    ) -> int:
+        """Create a post with user-written text + AI-generated images"""
+        image_result = {"images": []}
+
+        def generate_images_fn():
+            try:
+                img_gen = GeminiImageGenerator()
+                prompts = img_gen.build_image_prompts(
+                    post_text=custom_text,
+                    platform=platform,
+                    brand=self.agent.brand,
+                    persona=self.agent.persona,
+                    topic=custom_text[:100],
+                    image_style=getattr(self.agent, 'image_style', None) or 'ultra realistic photography',
+                    num_images=num_images
+                )
+                images = img_gen.generate_carousel(prompts)
+                image_result["images"] = images
+            except Exception as e:
+                print(f"Image generation skipped: {e}")
+
+        image_thread = threading.Thread(target=generate_images_fn)
+        image_thread.start()
+        image_thread.join(timeout=60)
+
+        post = Content(
+            agent_id=self.agent_id,
+            title=custom_text[:100],
+            body=custom_text,
+            hashtags=hashtags or [],
+            media_urls=image_result["images"],
             platform=platform,
             status='draft'
         )

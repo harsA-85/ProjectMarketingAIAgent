@@ -1,0 +1,18 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "V-Founder",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["start"],
+      "port": 3000,
+      "cwd": "V-Founder"
+    },
+    {
+      "name": "Dashboard API",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["dashboard/app.py"],
+      "port": 5000
+    }
+  ]
+}
