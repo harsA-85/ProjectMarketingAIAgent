@@ -187,6 +187,23 @@ class Notification(Base):
         return f"<Notification {self.type}: {self.title[:40]}>"
 
 
+class CompanyVision(Base):
+    """Single-row company vision — the north star for all agents."""
+    __tablename__ = 'company_vision'
+
+    id              = Column(Integer, primary_key=True)
+    mission         = Column(Text, default='')          # One-liner
+    vision_statement = Column(Text, default='')         # Full vision doc
+    values          = Column(Text, default='[]')        # JSON string of core values
+    milestones      = Column(Text, default='[]')        # JSON [{title, target_date, status}]
+    okrs            = Column(Text, default='[]')        # JSON [{objective, key_results}]
+    updated_at      = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    updated_by      = Column(String(100), default='supervisor')
+
+    def __repr__(self):
+        return f"<CompanyVision: {self.mission[:50]}>"
+
+
 class Task(Base):
     """Tasks assigned to/by team members and agents — startup-style hierarchy."""
     __tablename__ = 'tasks'

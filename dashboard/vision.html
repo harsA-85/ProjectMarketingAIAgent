@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Vision — Marketing AI</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{--bg:#f5f5f7;--surface:#fff;--surface-2:#f2f2f7;--sidebar-bg:#fafafa;--text-1:#1c1c1e;--text-2:#6e6e73;--text-3:#aeaeb2;--accent:#007aff;--accent-dim:rgba(0,122,255,0.1);--success:#30d158;--warning:#ff9f0a;--danger:#ff453a;--border:rgba(0,0,0,0.07);--border-strong:rgba(0,0,0,0.12);--r:12px;--r-sm:8px;--r-lg:16px;--shadow-sm:0 1px 3px rgba(0,0,0,0.05),0 2px 8px rgba(0,0,0,0.04);--shadow-lg:0 8px 32px rgba(0,0,0,0.1),0 2px 8px rgba(0,0,0,0.06)}
+html,body{height:100%;overflow:hidden}
+body{font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text-1);-webkit-font-smoothing:antialiased}
+.app{display:flex;height:100vh}
+.sidebar{width:228px;background:var(--sidebar-bg);border-right:1px solid var(--border);display:flex;flex-direction:column;flex-shrink:0}
+.sidebar-header{padding:18px 16px 12px}
+.brand{display:flex;align-items:center;gap:10px}
+.brand-icon{width:36px;height:36px;border-radius:10px;background:linear-gradient(135deg,#007aff,#5856d6);display:flex;align-items:center;justify-content:center;font-size:18px}
+.brand-name{font-size:15px;font-weight:700;color:var(--text-1);letter-spacing:-0.3px}
+.brand-sub{font-size:10px;color:var(--text-3);font-weight:500}
+.sidebar-nav{flex:1;padding:4px 10px}
+.nav-section{font-size:10px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:0.8px;padding:12px 10px 4px}
+.nav-item{display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:7px;font-size:13px;font-weight:500;color:var(--text-2);cursor:pointer;transition:all .15s;text-decoration:none}
+.nav-item:hover{background:rgba(0,0,0,0.04);color:var(--text-1)}
+.nav-item.active{background:var(--accent-dim);color:var(--accent);font-weight:600}
+.ni{font-size:15px;width:20px;text-align:center}
+.main{flex:1;display:flex;flex-direction:column;overflow:hidden}
+.topbar{display:flex;align-items:center;padding:10px 20px;border-bottom:1px solid var(--border);background:rgba(255,255,255,0.85);backdrop-filter:blur(20px);flex-shrink:0}
+.tl{width:12px;height:12px;border-radius:50%}.tl.red{background:#ff5f57}.tl.yellow{background:#febc2e}.tl.green{background:#28c840}
+.topbar-center{flex:1;text-align:center;font-size:13px;font-weight:600;color:var(--text-2)}
+
+/* ── LAYOUT ── */
+.vision-layout{display:flex;flex:1;overflow:hidden}
+.vision-main{flex:1;overflow-y:auto;padding:32px 40px}
+.vision-chat{width:380px;border-left:1px solid var(--border);display:flex;flex-direction:column;background:var(--surface);flex-shrink:0}
+
+/* ── HERO ── */
+.vision-hero{background:linear-gradient(135deg,#1c1c1e,#2c2c2e);border-radius:var(--r-lg);padding:36px 40px;color:#fff;margin-bottom:28px;position:relative;overflow:hidden}
+.vision-hero::before{content:'';position:absolute;top:-50%;right:-20%;width:300px;height:300px;background:radial-gradient(circle,rgba(0,122,255,0.15),transparent);border-radius:50%}
+.vision-hero-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:rgba(255,255,255,0.4);margin-bottom:10px}
+.vision-mission{font-size:26px;font-weight:800;letter-spacing:-0.5px;line-height:1.25;position:relative}
+.vision-mission-input{background:none;border:none;color:#fff;font-size:26px;font-weight:800;letter-spacing:-0.5px;width:100%;outline:none;font-family:inherit;line-height:1.25}
+.vision-mission-input::placeholder{color:rgba(255,255,255,0.3)}
+.vision-updated{font-size:10px;color:rgba(255,255,255,0.3);margin-top:10px;position:relative}
+
+/* ── SECTIONS ── */
+.v-section{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:24px;margin-bottom:20px;box-shadow:var(--shadow-sm)}
+.v-section-title{font-size:14px;font-weight:700;color:var(--text-1);margin-bottom:12px;display:flex;align-items:center;gap:8px}
+.v-section-title .v-icon{font-size:18px}
+.v-textarea{width:100%;border:1px solid var(--border);border-radius:var(--r-sm);padding:12px 14px;font-size:13px;line-height:1.6;font-family:inherit;outline:none;resize:vertical;color:var(--text-1);background:var(--surface-2);min-height:100px}
+.v-textarea:focus{border-color:var(--accent)}
+
+/* ── VALUES ── */
+.v-values-list{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px}
+.v-value-tag{padding:5px 12px;border-radius:100px;font-size:12px;font-weight:600;background:var(--accent-dim);color:var(--accent);display:flex;align-items:center;gap:5px}
+.v-value-tag .v-remove{cursor:pointer;opacity:0.5;font-size:14px}.v-value-tag .v-remove:hover{opacity:1}
+.v-add-row{display:flex;gap:6px}
+.v-add-input{flex:1;border:1px solid var(--border);border-radius:var(--r-sm);padding:6px 10px;font-size:12px;outline:none;font-family:inherit}
+
+/* ── MILESTONES ── */
+.ms-list{display:flex;flex-direction:column;gap:8px}
+.ms-item{display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--surface-2);border-radius:var(--r-sm);border:1px solid var(--border)}
+.ms-status{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.ms-status.todo{background:var(--text-3)}.ms-status.in_progress{background:var(--accent)}.ms-status.done{background:var(--success)}
+.ms-title{flex:1;font-size:13px;font-weight:600;color:var(--text-1)}
+.ms-date{font-size:11px;color:var(--text-3)}
+.ms-toggle{font-size:10px;font-weight:600;padding:2px 8px;border-radius:100px;border:1px solid var(--border);background:none;cursor:pointer;color:var(--text-2)}
+
+/* ── CHAT ── */
+.chat-header{padding:14px 18px;display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--border);background:var(--surface-2)}
+.chat-avatar{width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,#ff6b35,#ff3b30);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0}
+.chat-header-name{font-size:14px;font-weight:700;color:var(--text-1)}
+.chat-header-role{font-size:11px;color:var(--text-3)}
+.chat-messages{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:10px;min-height:0}
+.chat-msg{max-width:88%;padding:10px 14px;border-radius:14px;font-size:13px;line-height:1.5;word-wrap:break-word;white-space:pre-wrap}
+.chat-msg.user{align-self:flex-end;background:var(--accent);color:#fff;border-bottom-right-radius:4px}
+.chat-msg.ai{align-self:flex-start;background:var(--surface-2);color:var(--text-1);border-bottom-left-radius:4px}
+.chat-msg .v-label{font-size:10px;font-weight:700;color:#ff6b35;margin-bottom:3px}
+.chat-msg .bubble-time{font-size:9px;color:var(--text-3);margin-top:4px;text-align:right}
+.chat-msg.user .bubble-time{color:rgba(255,255,255,0.5)}
+.chat-typing{align-self:flex-start;padding:10px 14px;background:var(--surface-2);border-radius:14px;border-bottom-left-radius:4px;font-size:13px;color:var(--text-3)}
+.chat-typing span{animation:blink 1.2s infinite}.chat-typing span:nth-child(2){animation-delay:.2s}.chat-typing span:nth-child(3){animation-delay:.4s}
+@keyframes blink{0%,80%,100%{opacity:.2}40%{opacity:1}}
+.chat-input-bar{padding:12px;border-top:1px solid var(--border);display:flex;gap:8px;background:var(--surface)}
+.chat-input{flex:1;border:1px solid var(--border);border-radius:10px;padding:8px 12px;font-size:13px;outline:none;background:var(--surface-2);color:var(--text-1);font-family:inherit}
+.chat-input:focus{border-color:var(--accent)}
+.chat-send{width:36px;height:36px;border-radius:10px;background:var(--accent);color:#fff;border:none;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center}
+.chat-send:hover{background:#0062d6}.chat-send:disabled{opacity:.4}
+
+/* ── VISION UPDATED CARD ── */
+.vision-card{margin-top:8px;padding:8px 12px;background:rgba(88,86,214,0.06);border:1px solid rgba(88,86,214,0.15);border-radius:var(--r-sm);font-size:11px;color:#5856d6}
+.vision-card-label{font-weight:700;text-transform:uppercase;font-size:9px;letter-spacing:0.5px;margin-bottom:3px}
+
+.btn{border:none;border-radius:var(--r-sm);font-family:inherit;font-weight:600;cursor:pointer;transition:all .15s}
+.btn-primary{background:var(--accent);color:#fff;padding:7px 14px;font-size:12px}.btn-primary:hover{background:#0062d6}
+.btn-ghost{background:none;color:var(--text-2);padding:5px 10px;font-size:12px}.btn-ghost:hover{background:var(--surface-2)}
+.btn-sm{padding:4px 10px;font-size:11px}
+#toasts{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);z-index:9999;display:flex;flex-direction:column;gap:8px;align-items:center}
+.toast{padding:10px 20px;border-radius:100px;font-size:13px;font-weight:600;box-shadow:var(--shadow-lg);animation:toast-in .3s ease}
+.toast.success{background:#1a1a1a;color:#fff}.toast.error{background:var(--danger);color:#fff}
+@keyframes toast-in{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+</style>
+</head>
+<body>
+<div class="app">
+    <nav class="sidebar">
+        <div class="sidebar-header"><div class="brand"><div class="brand-icon">🤖</div><div><div class="brand-name">Marketing AI</div><div class="brand-sub">Command Center</div></div></div></div>
+        <div class="sidebar-nav">
+            <div class="nav-section">Workspace</div>
+            <a class="nav-item" href="/"><span class="ni">⬡</span> All Agents</a>
+            <a class="nav-item" href="/inbox"><span class="ni">📥</span> Inbox</a>
+            <a class="nav-item active" href="/vision"><span class="ni">🚀</span> Vision</a>
+            <a class="nav-item" href="/newsroom.html"><span class="ni">📰</span> Newsroom</a>
+            <div class="nav-item"><span class="ni">📊</span> Analytics</div>
+            <div class="nav-item"><span class="ni">📅</span> Schedule</div>
+            <div class="nav-section">System</div>
+            <div class="nav-item"><span class="ni">⚙️</span> Settings</div>
+        </div>
+    </nav>
+
+    <div class="main">
+        <header class="topbar">
+            <div style="display:flex;gap:8px;margin-right:16px"><span class="tl red"></span><span class="tl yellow"></span><span class="tl green"></span></div>
+            <div class="topbar-center">Company Vision</div>
+            <div></div>
+        </header>
+
+        <div class="vision-layout">
+            <!-- LEFT: VISION CONTENT -->
+            <div class="vision-main">
+                <!-- HERO -->
+                <div class="vision-hero">
+                    <div class="vision-hero-label">Our Mission</div>
+                    <input class="vision-mission-input" id="v-mission" placeholder="What's the one-line mission that drives everything?" maxlength="200">
+                    <div class="vision-updated" id="v-updated"></div>
+                </div>
+
+                <!-- VISION STATEMENT -->
+                <div class="v-section">
+                    <div class="v-section-title"><span class="v-icon">📖</span> Vision Statement</div>
+                    <textarea class="v-textarea" id="v-statement" rows="5" placeholder="The full vision — where are we going? What does the world look like when we succeed? Why does this matter?"></textarea>
+                </div>
+
+                <!-- CORE VALUES -->
+                <div class="v-section">
+                    <div class="v-section-title"><span class="v-icon">💎</span> Core Values</div>
+                    <div class="v-values-list" id="v-values"></div>
+                    <div class="v-add-row">
+                        <input class="v-add-input" id="v-value-input" placeholder="Add a value..." onkeydown="if(event.key==='Enter'){event.preventDefault();addValue()}">
+                        <button class="btn btn-primary btn-sm" onclick="addValue()">Add</button>
+                    </div>
+                </div>
+
+                <!-- MILESTONES -->
+                <div class="v-section">
+                    <div class="v-section-title"><span class="v-icon">🎯</span> Milestones</div>
+                    <div class="ms-list" id="v-milestones"></div>
+                    <div class="v-add-row" style="margin-top:10px">
+                        <input class="v-add-input" id="v-ms-title" placeholder="Milestone title...">
+                        <input class="v-add-input" id="v-ms-date" placeholder="Q3 2026" style="width:100px">
+                        <button class="btn btn-primary btn-sm" onclick="addMilestone()">Add</button>
+                    </div>
+                </div>
+
+                <button class="btn btn-primary" onclick="saveVision()" id="save-btn" style="margin-bottom:40px">Save Vision</button>
+            </div>
+
+            <!-- RIGHT: COFOUNDER CHAT -->
+            <div class="vision-chat">
+                <div class="chat-header">
+                    <div class="chat-avatar">🚀</div>
+                    <div>
+                        <div class="chat-header-name">Marc Andersen</div>
+                        <div class="chat-header-role">Cofounder & Chief Strategist</div>
+                    </div>
+                </div>
+                <div class="chat-messages" id="chat-messages">
+                    <div class="chat-msg ai">
+                        <div class="v-label">Marc Andersen</div>
+                        Hey. Let's shape the vision. Tell me: what problem are you solving, and why are you the right team to solve it? Don't give me the polished version — give me the raw truth. We'll refine from there.
+                    </div>
+                </div>
+                <div class="chat-input-bar">
+                    <input class="chat-input" id="chat-input" placeholder="Discuss the vision with Marc..." autocomplete="off">
+                    <button class="chat-send" id="chat-send-btn" onclick="sendChat()">➤</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+<div id="toasts"></div>
+
+<script>
+let visionData = { mission:'', vision_statement:'', values:[], milestones:[], okrs:[] };
+let chatThreadId = null;
+
+function esc(s){const d=document.createElement('div');d.textContent=String(s||'');return d.innerHTML}
+function toast(msg,type='success'){const t=document.createElement('div');t.className='toast '+type;t.textContent=msg;document.getElementById('toasts').appendChild(t);setTimeout(()=>t.remove(),3000)}
+
+/* ── LOAD VISION ── */
+async function loadVision() {
+    try {
+        const r = await fetch('/api/vision');
+        if (!r.ok) return;
+        visionData = await r.json();
+        document.getElementById('v-mission').value = visionData.mission || '';
+        document.getElementById('v-statement').value = visionData.vision_statement || '';
+        if (visionData.updated_at) {
+            document.getElementById('v-updated').textContent = 'Last updated: ' + new Date(visionData.updated_at).toLocaleString() + ' by ' + (visionData.updated_by || 'you');
+        }
+        renderValues();
+        renderMilestones();
+    } catch(e) {}
+}
+
+function renderValues() {
+    const el = document.getElementById('v-values');
+    const vals = visionData.values || [];
+    el.innerHTML = vals.map((v, i) => `<span class="v-value-tag">${esc(v)}<span class="v-remove" onclick="removeValue(${i})">x</span></span>`).join('');
+}
+
+function addValue() {
+    const input = document.getElementById('v-value-input');
+    const val = input.value.trim();
+    if (!val) return;
+    visionData.values = visionData.values || [];
+    visionData.values.push(val);
+    input.value = '';
+    renderValues();
+}
+
+function removeValue(idx) {
+    visionData.values.splice(idx, 1);
+    renderValues();
+}
+
+function renderMilestones() {
+    const el = document.getElementById('v-milestones');
+    const ms = visionData.milestones || [];
+    if (!ms.length) { el.innerHTML = '<div style="color:var(--text-3);font-size:12px;padding:8px">No milestones yet. Add some or ask Marc to help define them.</div>'; return; }
+    el.innerHTML = ms.map((m, i) => {
+        const st = m.status || 'todo';
+        return `<div class="ms-item">
+            <div class="ms-status ${st}"></div>
+            <div class="ms-title">${esc(m.title)}</div>
+            <div class="ms-date">${esc(m.target_date || '')}</div>
+            <button class="ms-toggle" onclick="cycleMilestone(${i})">${st}</button>
+        </div>`;
+    }).join('');
+}
+
+function cycleMilestone(idx) {
+    const ms = visionData.milestones[idx];
+    const next = {todo:'in_progress',in_progress:'done',done:'todo'}[ms.status||'todo']||'todo';
+    ms.status = next;
+    renderMilestones();
+}
+
+function addMilestone() {
+    const title = document.getElementById('v-ms-title').value.trim();
+    if (!title) return;
+    const date = document.getElementById('v-ms-date').value.trim();
+    visionData.milestones = visionData.milestones || [];
+    visionData.milestones.push({ title, target_date: date, status: 'todo' });
+    document.getElementById('v-ms-title').value = '';
+    document.getElementById('v-ms-date').value = '';
+    renderMilestones();
+}
+
+/* ── SAVE VISION ── */
+async function saveVision() {
+    const btn = document.getElementById('save-btn');
+    btn.disabled = true; btn.textContent = 'Saving...';
+    try {
+        const r = await fetch('/api/vision', {
+            method: 'PUT',
+            headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({
+                mission: document.getElementById('v-mission').value,
+                vision_statement: document.getElementById('v-statement').value,
+                values: visionData.values || [],
+                milestones: visionData.milestones || [],
+            })
+        });
+        if (r.ok) toast('Vision saved!');
+        else toast('Failed to save', 'error');
+    } catch(e) { toast('Error', 'error'); }
+    finally { btn.disabled = false; btn.textContent = 'Save Vision'; }
+}
+
+/* ── COFOUNDER CHAT ── */
+function appendMsg(role, text) {
+    const msgs = document.getElementById('chat-messages');
+    const div = document.createElement('div');
+    div.className = 'chat-msg ' + role;
+    if (role === 'ai') {
+        div.innerHTML = '<div class="v-label">Marc Andersen</div>' + esc(text).replace(/\n/g,'<br>');
+    } else {
+        div.textContent = text;
+    }
+    msgs.appendChild(div);
+    msgs.scrollTop = msgs.scrollHeight;
+}
+
+async function sendChat() {
+    const input = document.getElementById('chat-input');
+    const msg = input.value.trim();
+    if (!msg) return;
+    input.value = '';
+    appendMsg('user', msg);
+
+    const msgs = document.getElementById('chat-messages');
+    const typing = document.createElement('div');
+    typing.className = 'chat-typing';
+    typing.innerHTML = '<span>.</span><span>.</span><span>.</span>';
+    msgs.appendChild(typing);
+    msgs.scrollTop = msgs.scrollHeight;
+    document.getElementById('chat-send-btn').disabled = true;
+
+    try {
+        const r = await fetch('/api/inbox/chat', {
+            method: 'POST',
+            headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({
+                entity_type: 'team_member',
+                entity_key: 'cofounder',
+                thread_id: chatThreadId || '',
+                message: msg
+            })
+        });
+        typing.remove();
+        const data = await r.json();
+        if (r.ok) {
+            appendMsg('ai', data.reply);
+            if (data.thread_id) chatThreadId = data.thread_id;
+            // If vision was updated by the cofounder
+            if (data.vision_updated) {
+                const vu = data.vision_updated;
+                const card = document.createElement('div');
+                card.className = 'chat-msg ai';
+                card.innerHTML = `<div class="vision-card"><div class="vision-card-label">Vision Updated</div>${vu.mission ? 'Mission: ' + esc(vu.mission) : 'Vision document updated'}</div>`;
+                msgs.appendChild(card);
+                msgs.scrollTop = msgs.scrollHeight;
+                loadVision(); // Refresh the left panel
+                toast('Vision updated by Marc!', 'success');
+            }
+        } else {
+            appendMsg('ai', data.error || 'Something went wrong.');
+        }
+    } catch(e) {
+        typing.remove();
+        appendMsg('ai', 'Connection error.');
+    } finally {
+        document.getElementById('chat-send-btn').disabled = false;
+        input.focus();
+    }
+}
+
+document.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.shiftKey && document.activeElement?.id === 'chat-input') {
+        e.preventDefault();
+        sendChat();
+    }
+});
+
+/* ── INIT ── */
+loadVision();
+</script>
+</body>
+</html>

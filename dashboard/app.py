@@ -790,6 +790,20 @@ def create_agent():
         avatar_url=data.get('avatar_url', '')
     )
 
+    # Set extra fields not in create_agent signature
+    from flask import g
+    from src.database.models import Agent
+    db = g.db
+    agent = db.query(Agent).filter(Agent.id == agent_id).first()
+    if agent:
+        if data.get('image_style'):
+            agent.image_style = data['image_style']
+        if data.get('llm_provider'):
+            agent.llm_provider = data['llm_provider']
+        if data.get('llm_model'):
+            agent.llm_model = data['llm_model']
+        db.commit()
+
     return jsonify({'agent_id': agent_id, 'message': 'Agent created successfully'}), 201
 
 
@@ -1715,6 +1729,100 @@ INSTRUCTIONS:
 
 
 # ═══════════════════════════════════════════════════════════════
+# ═══════════════════════════════════════════════════════════════
+# VISION — Company north star
+# ═══════════════════════════════════════════════════════════════
+
+@app.route('/vision')
+def vision_page():
+    return send_file(os.path.join(os.path.dirname(__file__), 'vision.html'))
+
+
+@app.route('/api/vision', methods=['GET'])
+def get_vision():
+    """Get the current company vision."""
+    from flask import g
+    from src.database.models import CompanyVision
+    import json as _json
+    db = g.db
+    v = db.query(CompanyVision).first()
+    if not v:
+        return jsonify({'mission': '', 'vision_statement': '', 'values': [], 'milestones': [], 'okrs': [], 'updated_at': None}), 200
+    def _p(s):
+        try: return _json.loads(s) if s else []
+        except Exception: return []
+    return jsonify({
+        'mission': v.mission or '',
+        'vision_statement': v.vision_statement or '',
+        'values': _p(v.values),
+        'milestones': _p(v.milestones),
+        'okrs': _p(v.okrs),
+        'updated_at': v.updated_at.isoformat() if v.updated_at else None,
+        'updated_by': v.updated_by or '',
+    }), 200
+
+
+@app.route('/api/vision', methods=['PUT'])
+def update_vision():
+    """Update the company vision."""
+    from flask import g
+    from src.database.models import CompanyVision
+    import json as _json
+    db = g.db
+    data = request.json or {}
+    v = db.query(CompanyVision).first()
+    if not v:
+        v = CompanyVision()
+        db.add(v)
+    if 'mission' in data:
+        v.mission = data['mission']
+    if 'vision_statement' in data:
+        v.vision_statement = data['vision_statement']
+    if 'values' in data:
+        v.values = _json.dumps(data['values']) if isinstance(data['values'], list) else data['values']
+    if 'milestones' in data:
+        v.milestones = _json.dumps(data['milestones']) if isinstance(data['milestones'], list) else data['milestones']
+    if 'okrs' in data:
+        v.okrs = _json.dumps(data['okrs']) if isinstance(data['okrs'], list) else data['okrs']
+    v.updated_by = data.get('updated_by', 'supervisor')
+    db.commit()
+    return jsonify({'ok': True}), 200
+
+
+def _extract_vision_update(reply_text, db):
+    """Parse ```vision JSON from cofounder reply, update CompanyVision."""
+    import re, json as _json
+    from src.database.models import CompanyVision
+    pattern = r'```vision\s*\n?(.*?)\n?```'
+    match = re.search(pattern, reply_text, re.DOTALL)
+    if not match:
+        return reply_text, None
+    clean = re.sub(pattern, '', reply_text, flags=re.DOTALL).strip()
+    try:
+        vdata = _json.loads(match.group(1))
+        v = db.query(CompanyVision).first()
+        if not v:
+            v = CompanyVision()
+            db.add(v)
+        if vdata.get('mission'):
+            v.mission = vdata['mission']
+        if vdata.get('vision_statement'):
+            v.vision_statement = vdata['vision_statement']
+        if vdata.get('values'):
+            v.values = _json.dumps(vdata['values'])
+        if vdata.get('milestones'):
+            v.milestones = _json.dumps(vdata['milestones'])
+        if vdata.get('okrs'):
+            v.okrs = _json.dumps(vdata['okrs'])
+        v.updated_by = 'cofounder'
+        db.commit()
+        return clean, vdata
+    except Exception as e:
+        logging.warning(f"Vision extraction error: {e}")
+    return clean, None
+
+
+# ═══════════════════════════════════════════════════════════════
 # INBOX — Unified messages & chat with any entity
 # ═══════════════════════════════════════════════════════════════
 
@@ -1763,9 +1871,25 @@ Rules:
 """
 
 
+def _get_vision_block(db):
+    """Load the company vision for injection into all system prompts."""
+    from src.database.models import CompanyVision
+    v = db.query(CompanyVision).first()
+    if not v or not v.mission:
+        return ''
+    return (
+        f"\n═══ COMPANY VISION ═══\n"
+        f"Mission: {v.mission}\n"
+        f"{v.vision_statement}\n"
+        f"══════════════════════\n"
+        f"Everything you do must serve this vision. Your content, decisions, and priorities align with it.\n"
+    )
+
+
 def _build_team_system_prompt(db, member):
     """Build a rich system prompt for a team member chat."""
     from src.database.models import TeamMember, WorkflowRun, Agent, Content, Task
+    vision_block = _get_vision_block(db)
     members = db.query(TeamMember).all()
     team_info = '\n'.join(f"- {m.role_key}: {m.display_name} ({m.role_title}), reports to: {m.reports_to or 'supervisor'}" for m in members)
     recent_wfs = db.query(WorkflowRun).order_by(WorkflowRun.id.desc()).limit(3).all()
@@ -1780,7 +1904,7 @@ def _build_team_system_prompt(db, member):
     tasks_info = '\n'.join(f"- [{t.priority}] {t.title} (status: {t.status})" for t in my_tasks) if my_tasks else 'No pending tasks.'
 
     return f"""{member.system_prompt}
-
+{vision_block}
 You are {member.display_name}, {member.role_title} on the editorial team.
 You're chatting with the supervisor. Be helpful, stay in character, and be concise.
 
@@ -1799,14 +1923,18 @@ YOUR CURRENT TASKS:
 {TASK_INSTRUCTION}"""
 
 
-def _build_agent_system_prompt(agent):
+def _build_agent_system_prompt(db_or_none, agent):
     """Build a system prompt for chatting with a publishing agent."""
+    vision_block = ''
+    if db_or_none:
+        vision_block = _get_vision_block(db_or_none)
     return (
         f"You are {agent.name}, a social media content creator for {agent.brand}.\n"
         f"Persona: {agent.persona}\n"
         f"Tone: {agent.tone_of_voice}\n"
         f"Expertise: {', '.join(agent.fields or [])}\n"
-        f"Bio: {agent.bio or ''}\n\n"
+        f"Bio: {agent.bio or ''}\n"
+        f"{vision_block}\n"
         f"You're chatting with your supervisor. Be helpful, stay in character, respond concisely.\n"
         f"{TASK_INSTRUCTION}"
     )
@@ -1927,6 +2055,55 @@ def _extract_hire_proposals(reply_text):
     except Exception as e:
         logging.warning(f"Hire extraction error: {e}")
     return clean_text, []
+
+
+@app.route('/api/team/generate-agent-profile', methods=['POST'])
+def generate_agent_profile():
+    """Use the GM to generate a full agent profile from a description."""
+    from flask import g
+    from src.database.models import TeamMember
+    data = request.json or {}
+    description = data.get('description', '').strip()
+    if not description:
+        return jsonify({'error': 'description required'}), 400
+
+    db = g.db
+    gm = db.query(TeamMember).filter(TeamMember.role_key == 'general_manager').first()
+    provider = gm.llm_provider if gm else 'claude'
+    model = gm.llm_model if gm else 'claude-opus-4-6'
+
+    system_prompt = (
+        "You are Alexander Voss, General Manager designing a new AI agent for the team. "
+        "Given a role description, create a complete, realistic agent profile. "
+        "The agent must feel like a real person with 10+ years of experience. "
+        "Respond ONLY in JSON with these exact keys: "
+        "name (realistic full name), brand (social media handle), "
+        "persona (3-4 sentences: background, experience, personality, motivations), "
+        "tone_of_voice (how they communicate), "
+        "fields (array of 3-5 expertise areas), "
+        "bio (1-2 sentence public bio followers would see). "
+        "Make the persona detailed, specific, and authentic. Include years of experience, "
+        "past companies or roles, unique perspective, and what drives them."
+    )
+
+    try:
+        from src.api.llm_provider import LLMProvider
+        llm = LLMProvider(provider=provider, model=model)
+        raw = llm.generate_content(
+            prompt=f"Design an agent for: {description}",
+            max_tokens=800,
+            temperature=0.8,
+            system_prompt=system_prompt
+        )
+        import json as _json
+        # Try to parse JSON from the response
+        raw = raw.strip()
+        if raw.startswith('```'):
+            raw = raw.split('\n', 1)[1].rsplit('```', 1)[0]
+        profile = _json.loads(raw)
+        return jsonify({'profile': profile}), 200
+    except Exception as e:
+        return jsonify({'error': f'Generation failed: {str(e)}'}), 500
 
 
 @app.route('/api/team/hire/approve', methods=['POST'])
@@ -2104,7 +2281,7 @@ def inbox_chat():
         provider = getattr(entity, 'llm_provider', None) or 'claude'
         model = getattr(entity, 'llm_model', None) or 'claude-sonnet-4-6'
         temp = 0.7
-        sys_prompt = _build_agent_system_prompt(entity)
+        sys_prompt = _build_agent_system_prompt(db, entity)
     else:
         return jsonify({'error': 'entity_type must be team_member or agent'}), 400
 
@@ -2155,6 +2332,9 @@ def inbox_chat():
         # Extract hire proposals (if AI proposed hiring)
         clean_reply, hires_proposed = _extract_hire_proposals(clean_reply)
 
+        # Extract vision update (if cofounder updated vision)
+        clean_reply, vision_updated = _extract_vision_update(clean_reply, db)
+
         # Save AI reply (cleaned of command JSON)
         ai_row = InternalMessage(
             from_type=entity_type, from_key=entity_key,
@@ -2173,6 +2353,7 @@ def inbox_chat():
             'tasks_created': tasks_created,
             'workflow_launched': workflow_launched,
             'hires_proposed': hires_proposed,
+            'vision_updated': vision_updated,
         }), 200
     except Exception as e:
         return jsonify({'error': f'{name} is unavailable: {str(e)}'}), 500

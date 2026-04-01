@@ -674,6 +674,7 @@
             <div class="nav-section">Workspace</div>
             <div class="nav-item active"><span class="ni">⬡</span> All Agents</div>
             <a class="nav-item" href="/inbox"><span class="ni">📥</span> Inbox</a>
+            <a class="nav-item" href="/vision"><span class="ni">🚀</span> Vision</a>
             <div class="nav-item" onclick="window.location='newsroom.html'"><span class="ni">📰</span> Newsroom</div>
             <div class="nav-item"><span class="ni">📊</span> Analytics</div>
             <div class="nav-item"><span class="ni">📅</span> Schedule</div>
@@ -771,36 +772,82 @@
 
 <!-- Create Agent Modal -->
 <div id="createOverlay" class="overlay">
-    <div class="modal">
+    <div class="modal" style="width:580px">
         <div class="modal-header">
             <span class="modal-title">Create New Agent</span>
             <button class="close-btn" onclick="closeCreateModal()">✕</button>
         </div>
         <form id="createForm">
-            <div class="modal-body">
+            <div class="modal-body" style="max-height:65vh;overflow-y:auto">
+                <!-- AI ASSIST -->
+                <div style="background:linear-gradient(135deg,rgba(0,122,255,0.06),rgba(88,86,214,0.06));border:1px solid rgba(0,122,255,0.15);border-radius:var(--r);padding:12px 14px;margin-bottom:16px">
+                    <div style="font-size:11px;font-weight:700;color:var(--accent);margin-bottom:6px">🏛️ AI Assist — Let Alexander Voss design this agent</div>
+                    <div style="display:flex;gap:6px">
+                        <input class="form-input" type="text" id="c-ai-prompt" placeholder="e.g., Luxury real estate influencer for Miami market" style="flex:1;font-size:12px;padding:7px 10px">
+                        <button type="button" class="btn btn-primary" style="font-size:11px;padding:6px 12px;white-space:nowrap" onclick="aiGenerateAgent()" id="c-ai-btn">Generate</button>
+                    </div>
+                    <div style="font-size:10px;color:var(--text-3);margin-top:4px">Describe the role and the GM will design the full agent profile</div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Role</label>
+                    <select class="form-select" id="c-role" onchange="onRoleChange()">
+                        <option value="influencer">Influencer / Content Creator</option>
+                        <option value="brand_ambassador">Brand Ambassador</option>
+                        <option value="industry_analyst">Industry Analyst</option>
+                        <option value="community_manager">Community Manager</option>
+                        <option value="thought_leader">Thought Leader / Expert</option>
+                        <option value="investigative">Investigative Reporter</option>
+                        <option value="lifestyle">Lifestyle / Aspirational</option>
+                        <option value="educator">Educator / Explainer</option>
+                        <option value="custom">Custom Role</option>
+                    </select>
+                </div>
                 <div class="form-group">
                     <label class="form-label">Agent Name</label>
-                    <input class="form-input" type="text" id="c-name" placeholder="e.g., Alex Marketing" required>
+                    <input class="form-input" type="text" id="c-name" placeholder="e.g., Sofia Rivera" required>
                 </div>
                 <div class="form-group">
-                    <label class="form-label">Brand</label>
-                    <input class="form-input" type="text" id="c-brand" placeholder="e.g., Acme Corp" required>
+                    <label class="form-label">Brand Handle</label>
+                    <input class="form-input" type="text" id="c-brand" placeholder="e.g., sofia_luxury_re" required>
                 </div>
                 <div class="form-group">
-                    <label class="form-label">Persona</label>
-                    <input class="form-input" type="text" id="c-persona" placeholder="e.g., Energetic and forward-thinking" required>
+                    <label class="form-label">Persona <span class="hint">(personality, background, motivations)</span></label>
+                    <textarea class="form-textarea" id="c-persona" rows="3" placeholder="e.g., Former luxury real estate broker with 12 years in Miami's high-end market. Sophisticated, data-driven, with a sharp eye for undervalued properties..." required></textarea>
                 </div>
                 <div class="form-group">
                     <label class="form-label">Tone of Voice</label>
-                    <input class="form-input" type="text" id="c-tone" placeholder="e.g., Professional, friendly, inspiring" required>
+                    <input class="form-input" type="text" id="c-tone" placeholder="e.g., Confident, insider knowledge, aspirational but grounded" required>
                 </div>
                 <div class="form-group">
-                    <label class="form-label">Fields <span class="hint">(comma-separated)</span></label>
-                    <input class="form-input" type="text" id="c-fields" placeholder="e.g., AI, Technology, Innovation" required>
+                    <label class="form-label">Fields <span class="hint">(comma-separated expertise areas)</span></label>
+                    <input class="form-input" type="text" id="c-fields" placeholder="e.g., Luxury Real Estate, Miami Market, Investment Strategy" required>
                 </div>
                 <div class="form-group">
-                    <label class="form-label">Bio <span class="hint">(optional)</span></label>
-                    <textarea class="form-textarea" id="c-bio" placeholder="Short bio for this agent…"></textarea>
+                    <label class="form-label">Bio <span class="hint">(public-facing bio)</span></label>
+                    <textarea class="form-textarea" id="c-bio" rows="2" placeholder="The bio followers see on the profile..."></textarea>
+                </div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+                    <div class="form-group">
+                        <label class="form-label">LLM Model</label>
+                        <select class="form-select" id="c-llm">
+                            <option value="claude|claude-sonnet-4-6">Claude Sonnet 4.6</option>
+                            <option value="claude|claude-opus-4-6">Claude Opus 4.6</option>
+                            <option value="claude|claude-haiku-4-5-20251001">Claude Haiku 4.5</option>
+                            <option value="gemini|gemini-3-flash-preview">Gemini 3 Flash</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Image Style</label>
+                        <select class="form-select" id="c-style">
+                            <option value="ultra realistic photography">📷 Realistic Photo</option>
+                            <option value="cinematic film photography, dramatic lighting">🎬 Cinematic</option>
+                            <option value="luxury high-end editorial photography">💎 Luxury Editorial</option>
+                            <option value="dark moody aesthetic, high contrast">🌑 Dark / Moody</option>
+                            <option value="bold vibrant graphic design, pop art style">🎭 Bold / Pop Art</option>
+                            <option value="minimalist clean graphic design, flat colors">🎨 Minimalist</option>
+                        </select>
+                    </div>
                 </div>
             </div>
             <div class="modal-footer">
@@ -1055,12 +1102,49 @@
     // ── Create Agent Modal ──
     function openCreateModal() {
         document.getElementById('createOverlay').classList.add('open');
-        document.getElementById('c-name').focus();
+        document.getElementById('c-ai-prompt').focus();
     }
 
     function closeCreateModal() {
         document.getElementById('createOverlay').classList.remove('open');
         document.getElementById('createForm').reset();
+    }
+
+    function onRoleChange() {
+        // Could pre-fill hints based on role — kept simple for now
+    }
+
+    async function aiGenerateAgent() {
+        const prompt = document.getElementById('c-ai-prompt').value.trim();
+        if (!prompt) { toast('Describe the agent you need', 'error'); return; }
+        const btn = document.getElementById('c-ai-btn');
+        btn.disabled = true;
+        btn.textContent = 'Generating...';
+        try {
+            const r = await fetch('/api/team/generate-agent-profile', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ description: prompt })
+            });
+            const data = await r.json();
+            if (r.ok && data.profile) {
+                const p = data.profile;
+                if (p.name) document.getElementById('c-name').value = p.name;
+                if (p.brand) document.getElementById('c-brand').value = p.brand;
+                if (p.persona) document.getElementById('c-persona').value = p.persona;
+                if (p.tone_of_voice) document.getElementById('c-tone').value = p.tone_of_voice;
+                if (p.fields) document.getElementById('c-fields').value = (Array.isArray(p.fields) ? p.fields.join(', ') : p.fields);
+                if (p.bio) document.getElementById('c-bio').value = p.bio;
+                toast('Agent profile generated!', 'success');
+            } else {
+                toast(data.error || 'Generation failed', 'error');
+            }
+        } catch (e) {
+            toast('Connection error', 'error');
+        } finally {
+            btn.disabled = false;
+            btn.textContent = 'Generate';
+        }
     }
 
     document.getElementById('createOverlay').addEventListener('click', e => {
@@ -1074,6 +1158,7 @@
         btn.innerHTML = '<span class="spinner"></span> Creating…';
 
         const fields = document.getElementById('c-fields').value.split(',').map(s => s.trim()).filter(Boolean);
+        const llmParts = (document.getElementById('c-llm').value || 'claude|claude-sonnet-4-6').split('|');
 
         try {
             const r = await fetch('/api/agents', {
@@ -1086,6 +1171,9 @@
                     tone_of_voice: document.getElementById('c-tone').value,
                     fields,
                     bio:           document.getElementById('c-bio').value,
+                    image_style:   document.getElementById('c-style').value,
+                    llm_provider:  llmParts[0],
+                    llm_model:     llmParts[1],
                 })
             });
             const result = await r.json();

@@ -910,6 +910,7 @@
             <div class="nav-section">Workspace</div>
             <a class="nav-item" href="/"><span class="ni">⬡</span> All Agents</a>
             <a class="nav-item" href="/inbox"><span class="ni">📥</span> Inbox</a>
+            <a class="nav-item" href="/vision"><span class="ni">🚀</span> Vision</a>
             <a class="nav-item active" href="/newsroom"><span class="ni">📰</span> Newsroom</a>
             <a class="nav-item" href="#"><span class="ni">📊</span> Analytics</a>
             <a class="nav-item" href="#"><span class="ni">📅</span> Schedule</a>
@@ -1340,11 +1341,17 @@ async function renderOrgChart() {
 
     el.innerHTML = `
         <div class="org-chart">
-            <!-- Level 0: EIC -->
+            <!-- Level 0: General Manager -->
+            ${byKey['general_manager'] ? `
+            <div class="org-level">${node('general_manager')}</div>
+            ${vline()}
+            ` : ''}
+
+            <!-- Level 1: EIC -->
             <div class="org-level">${node('eic')}</div>
             ${vline()}
 
-            <!-- Level 1: Direct reports to EIC -->
+            <!-- Level 2: Direct reports to EIC -->
             <div style="position:relative;display:flex;justify-content:center">
                 <div style="position:absolute;top:0;left:50%;transform:translateX(-50%);width:calc(100% - 120px);height:2px;background:var(--border-strong)"></div>
                 <div style="display:flex;gap:24px;align-items:flex-start;padding-top:0">
@@ -1406,6 +1413,8 @@ async function renderOrgChart() {
             <div style="margin-top:24px;padding:14px 20px;background:var(--surface-2);border-radius:var(--r);border:1px solid var(--border)">
                 <div style="font-size:11px;font-weight:600;color:var(--text-2);margin-bottom:8px">WORKFLOW SEQUENCE</div>
                 <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:11px;font-weight:500">
+                    <span style="color:var(--text-1)">🏛️ GM Approves</span>
+                    <span style="color:var(--text-3)">→</span>
                     <span style="color:var(--success)">🔍 Intelligence</span>
                     <span style="color:var(--text-3)">→</span>
                     <span style="color:var(--accent)">👑 EIC + 🎨 CD</span>
