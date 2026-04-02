@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Marketing AI — Newsroom</title>
+    <title>Axel — Newsroom</title>
     <style>
         :root {
             --bg: #f5f5f7;
@@ -102,7 +102,7 @@
         .sidebar-ver { font-size: 10px; color: var(--text-3); margin-top: 10px; text-align: center; }
 
         /* ── MAIN ── */
-        .main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+        .main { flex: 1; display: flex; flex-direction: column; overflow: hidden; position: relative; }
 
         /* ── TOPBAR ── */
         .topbar {
@@ -142,31 +142,58 @@
             align-items: center; justify-content: center; padding: 0 4px;
         }
         .notif-badge.hidden { display: none; }
-        .notif-panel {
-            display: none; position: absolute; top: 44px; right: 0;
-            width: 360px; max-height: 480px; overflow-y: auto;
-            background: var(--surface); border: 1px solid var(--border);
-            border-radius: var(--r); box-shadow: var(--shadow-lg);
-            z-index: 999;
+
+        /* Notifications drawer */
+        .notif-backdrop {
+            display: none; position: fixed; inset: 0;
+            background: rgba(0,0,0,0.3); backdrop-filter: blur(2px);
+            z-index: 9998;
         }
-        .notif-panel.open { display: block; }
+        .notif-backdrop.open { display: block; }
+        .notif-panel {
+            position: fixed; top: 0; right: 0; height: 100vh;
+            width: 400px; max-width: 95vw;
+            background: var(--surface); border-left: 1px solid var(--border);
+            box-shadow: var(--shadow-xl);
+            z-index: 9999;
+            display: flex; flex-direction: column;
+            transform: translateX(100%);
+            transition: transform 0.25s cubic-bezier(0.4,0,0.2,1);
+        }
+        .notif-panel.open { transform: translateX(0); }
         .notif-panel-header {
             display: flex; align-items: center; justify-content: space-between;
-            padding: 12px 14px; border-bottom: 1px solid var(--border);
-            font-size: 13px; font-weight: 600;
+            padding: 16px 18px; border-bottom: 1px solid var(--border);
+            flex-shrink: 0;
+        }
+        .notif-panel-title { font-size: 15px; font-weight: 700; color: var(--text-1); }
+        .notif-panel-body { flex: 1; overflow-y: auto; }
+        .notif-section-label {
+            font-size: 10px; font-weight: 700; text-transform: uppercase;
+            letter-spacing: 0.8px; color: var(--text-3);
+            padding: 12px 16px 6px;
         }
         .notif-item {
-            display: flex; gap: 10px; padding: 10px 14px;
+            display: flex; gap: 10px; padding: 11px 16px;
             border-bottom: 1px solid var(--border); cursor: pointer;
             transition: background 0.1s;
         }
         .notif-item:hover { background: var(--surface-2); }
-        .notif-item.unread { background: rgba(0,122,255,0.04); }
-        .notif-icon { font-size: 20px; flex-shrink: 0; margin-top: 2px; }
+        .notif-item.unread { background: rgba(0,122,255,0.03); border-left: 3px solid var(--accent); }
+        .notif-item.action-required { background: rgba(255,149,0,0.04); border-left: 3px solid var(--warning); }
+        .notif-icon { font-size: 18px; flex-shrink: 0; margin-top: 2px; }
         .notif-content { flex: 1; min-width: 0; }
         .notif-title { font-size: 12px; font-weight: 600; color: var(--text-1); }
-        .notif-body { font-size: 11px; color: var(--text-2); margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .notif-time { font-size: 10px; color: var(--text-3); margin-top: 3px; }
+        .notif-body { font-size: 11px; color: var(--text-2); margin-top: 2px; line-height: 1.4; }
+        .notif-time { font-size: 10px; color: var(--text-3); margin-top: 4px; }
+        .notif-actions { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+        .notif-btn {
+            padding: 4px 10px; border-radius: 5px; font-size: 10px; font-weight: 600;
+            cursor: pointer; border: none; transition: all 0.15s;
+        }
+        .notif-btn-primary { background: var(--accent); color: #fff; }
+        .notif-btn-danger  { background: rgba(255,69,58,0.12); color: var(--danger); }
+        .notif-btn-ghost   { background: var(--surface-2); color: var(--text-2); border: 1px solid var(--border); }
 
         /* ── BUTTONS ── */
         .btn {
@@ -201,9 +228,26 @@
         .section-header { display: flex; align-items: center; margin-bottom: 18px; }
         .section-header .section-title { flex: 1; }
 
+        /* ── TABS ── */
+        .tab-bar {
+            display: flex; gap: 2px; padding: 0 0 0 2px;
+            border-bottom: 1px solid var(--border);
+            margin-bottom: 24px;
+        }
+        .tab-btn {
+            padding: 8px 16px; font-size: 13px; font-weight: 500;
+            color: var(--text-2); background: none; border: none;
+            cursor: pointer; border-bottom: 2px solid transparent;
+            margin-bottom: -1px; transition: all 0.15s; border-radius: var(--r-sm) var(--r-sm) 0 0;
+        }
+        .tab-btn:hover { color: var(--text-1); background: var(--surface-2); }
+        .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+        .tab-pane { display: none; }
+        .tab-pane.active { display: block; }
+
         /* ── TEAM PANEL ── */
         .team-panel {
-            margin-bottom: 28px;
+            margin-bottom: 20px;
         }
 
         .team-grid {
@@ -255,9 +299,62 @@
 
         /* ── ORG CHART ── */
         .org-section { margin-bottom: 28px; }
+        .dept-section { margin-top: 32px; }
+        .dept-header { display: flex; align-items: center; gap: 8px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: var(--text-3); margin-bottom: 16px; padding: 0 4px; }
+        .dept-header::before { content: ''; flex: 1; height: 1px; background: var(--border-strong); }
+        .dept-header::after  { content: ''; flex: 1; height: 1px; background: var(--border-strong); }
+        .dept-columns { display: flex; gap: 40px; justify-content: center; align-items: flex-start; flex-wrap: wrap; }
+        .dept-col { display: flex; flex-direction: column; align-items: center; gap: 0; }
+        .dept-col-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: var(--text-3); margin-bottom: 10px; padding: 3px 10px; border-radius: 100px; background: var(--surface-2); border: 1px solid var(--border); }
+
+        /* ── DEPARTMENT CARDS ── */
+        .dept-card {
+            background: var(--surface); border: 1px solid var(--border);
+            border-radius: var(--r-lg); padding: 24px;
+            box-shadow: var(--shadow-sm); margin-bottom: 20px;
+        }
+        .dept-card-header {
+            display: flex; align-items: center; justify-content: space-between;
+            margin-bottom: 20px; padding-bottom: 14px;
+            border-bottom: 1px solid var(--border);
+        }
+        .dept-card-title {
+            font-size: 13px; font-weight: 700; color: var(--text-1);
+            display: flex; align-items: center; gap: 8px;
+        }
+        .dept-card-title span { font-size: 18px; }
+        .dept-chat-btn {
+            font-size: 11px; font-weight: 600; padding: 5px 12px;
+            border-radius: 100px; border: 1px solid var(--border);
+            background: var(--surface-2); color: var(--text-2);
+            cursor: pointer; transition: all 0.15s; display: flex; align-items: center; gap: 5px;
+        }
+        .dept-chat-btn:hover { background: var(--accent-dim); border-color: var(--accent); color: var(--accent); }
+        .dept-workflow-bar {
+            margin-top: 20px; padding: 12px 16px;
+            background: var(--surface-2); border-radius: var(--r);
+            border: 1px solid var(--border);
+        }
+        .dept-workflow-label {
+            font-size: 9px; font-weight: 700; text-transform: uppercase;
+            letter-spacing: 1px; color: var(--text-3); margin-bottom: 8px;
+        }
+        .dept-workflow-steps {
+            display: flex; align-items: center; gap: 5px; flex-wrap: wrap;
+        }
+        .wf-pill {
+            font-size: 10px; font-weight: 600; padding: 3px 9px;
+            border-radius: 100px; background: var(--surface);
+            border: 1px solid var(--border); color: var(--text-1);
+            white-space: nowrap;
+        }
+        .wf-arrow { color: var(--text-3); font-size: 11px; }
+        .dept-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        @media (max-width: 900px) { .dept-grid { grid-template-columns: 1fr; } }
+
         .org-chart {
             display: flex; flex-direction: column; align-items: center;
-            gap: 0; padding: 20px 0;
+            gap: 0; padding: 4px 0;
         }
         .org-level { display: flex; gap: 16px; justify-content: center; align-items: flex-start; position: relative; }
         .org-node {
@@ -273,6 +370,8 @@
         .org-node.intelligence { border-color: rgba(48,209,88,0.3); background: rgba(48,209,88,0.03); }
         .org-node.production { border-color: rgba(255,159,10,0.3); background: rgba(255,159,10,0.03); }
         .org-node.distribution { border-color: rgba(255,69,58,0.3); background: rgba(255,69,58,0.03); }
+        .org-node.tech  { border-color: rgba(90,200,250,0.4); background: rgba(90,200,250,0.04); }
+        .org-node.sales { border-color: rgba(52,199,89,0.4);  background: rgba(52,199,89,0.04); }
         .org-emoji { font-size: 22px; }
         .org-name { font-size: 11px; font-weight: 600; color: var(--text-1); margin-top: 4px; }
         .org-title { font-size: 9px; color: var(--text-2); text-align: center; max-width: 100px; }
@@ -535,6 +634,8 @@
         }
 
         .wf-table tbody tr:hover { background: rgba(0,122,255,0.03); }
+        .wf-table tbody tr.wf-selected > td { background: var(--accent-dim); }
+        .wf-table tbody tr.wf-detail-row:hover { background: none; }
 
         .wf-table tbody td {
             padding: 11px 16px;
@@ -800,27 +901,31 @@
         .muted { color: var(--text-3); }
         .mono  { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 12px; }
 
-        /* ── VICTORIA CHAT ── */
-        .chat-fab {
-            position: fixed; bottom: 24px; right: 24px; z-index: 900;
-            width: 56px; height: 56px; border-radius: 50%;
-            background: linear-gradient(135deg, #b36a00, #e08a20);
-            color: #fff; border: none; cursor: pointer;
-            box-shadow: 0 4px 16px rgba(179,106,0,0.35);
-            font-size: 24px; display: flex; align-items: center; justify-content: center;
-            transition: transform 0.2s, box-shadow 0.2s;
+        /* ── HISTORY INLINE PIPELINE ── */
+        .wf-detail-row td { padding: 0 !important; }
+        .wf-inline-pipeline {
+            background: var(--surface-2); border-top: 1px solid var(--border);
+            padding: 20px 24px; animation: fadeIn 0.2s ease;
         }
-        .chat-fab:hover { transform: scale(1.08); box-shadow: 0 6px 24px rgba(179,106,0,0.45); }
-
-        .chat-panel {
-            position: fixed; bottom: 90px; right: 24px; z-index: 901;
-            width: 380px; max-height: 520px;
-            background: var(--surface); border: 1px solid var(--border);
-            border-radius: 16px; box-shadow: 0 12px 40px rgba(0,0,0,0.15);
-            display: none; flex-direction: column; overflow: hidden;
+        @keyframes fadeIn { from { opacity:0; } to { opacity:1; } }
+        .wf-inline-stepper { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; margin-bottom: 16px; }
+        .wf-inline-step {
+            display: flex; flex-direction: column; align-items: center; gap: 4px;
+            cursor: pointer; padding: 6px 10px; border-radius: var(--r-sm);
+            transition: background 0.15s; min-width: 70px;
         }
-        .chat-panel.open { display: flex; animation: chat-pop 0.22s cubic-bezier(0.34,1.56,0.64,1); }
-        @keyframes chat-pop { from { opacity: 0; transform: translateY(16px) scale(0.95); } to { opacity: 1; transform: none; } }
+        .wf-inline-step:hover { background: var(--surface); }
+        .wf-inline-step.selected { background: var(--accent-dim); }
+        .wf-inline-step-icon {
+            width: 32px; height: 32px; border-radius: 50%; border: 2px solid var(--border);
+            display: flex; align-items: center; justify-content: center; font-size: 14px;
+            background: var(--surface);
+        }
+        .wf-inline-step.completed .wf-inline-step-icon { border-color: var(--success); background: rgba(48,209,88,0.1); }
+        .wf-inline-step.running .wf-inline-step-icon { border-color: var(--accent); background: var(--accent-dim); }
+        .wf-inline-step.failed .wf-inline-step-icon { border-color: var(--danger); background: rgba(255,69,58,0.1); }
+        .wf-inline-step-line { width: 24px; height: 2px; background: var(--border-strong); flex-shrink: 0; }
+        .wf-inline-step-label { font-size: 9px; font-weight: 500; color: var(--text-3); text-align: center; }
 
         .chat-header {
             padding: 14px 18px; display: flex; align-items: center; gap: 10px;
@@ -898,10 +1003,10 @@
     <nav class="sidebar">
         <div class="sidebar-header">
             <div class="brand">
-                <div class="brand-icon">🤖</div>
+                <div class="brand-icon">⚡</div>
                 <div class="brand-text">
-                    <div class="brand-name">Marketing AI</div>
-                    <div class="brand-sub">Command Center</div>
+                    <div class="brand-name">Axel</div>
+                    <div class="brand-sub">Unicorn in Progress</div>
                 </div>
             </div>
         </div>
@@ -938,74 +1043,70 @@
                     <button class="notif-bell" id="notif-bell" onclick="toggleNotifPanel()">
                         🔔<span class="notif-badge hidden" id="notif-badge">0</span>
                     </button>
+                    <div class="notif-backdrop" id="notif-backdrop" onclick="toggleNotifPanel()"></div>
                     <div class="notif-panel" id="notif-panel">
                         <div class="notif-panel-header">
-                            <span>Notifications</span>
-                            <button class="btn btn-ghost" style="font-size:11px;padding:2px 8px" onclick="markAllRead()">Mark all read</button>
+                            <div class="notif-panel-title">🔔 Notifications</div>
+                            <div style="display:flex;gap:8px;align-items:center">
+                                <button class="btn btn-ghost" style="font-size:11px;padding:3px 9px" onclick="markAllRead()">Mark all read</button>
+                                <button onclick="toggleNotifPanel()" style="background:none;border:none;cursor:pointer;font-size:18px;color:var(--text-3);padding:2px 6px">×</button>
+                            </div>
                         </div>
-                        <div id="notif-list"></div>
+                        <div class="notif-panel-body" id="notif-list"></div>
                     </div>
                 </div>
-                <button class="btn btn-primary" onclick="openNewWorkflowModal()">▶ New Workflow</button>
+                <button class="btn btn-primary" onclick="openNewWorkflowModal()">💡 New Idea</button>
             </div>
         </header>
 
         <!-- CONTENT -->
         <div class="content">
 
-            <!-- TEAM PANEL -->
+            <!-- TEAM STRIP (always visible) -->
             <div class="team-panel fade-up">
-                <div class="section-header">
-                    <div>
-                        <div class="section-title">Editorial Team</div>
-                        <div class="section-subtitle">Click a member to edit their system prompt and settings</div>
-                    </div>
-                </div>
                 <div class="team-grid" id="team-grid">
                     <!-- populated by loadTeam() -->
                 </div>
             </div>
 
-            <!-- ORG CHART -->
-            <div class="org-section fade-up" style="animation-delay:0.04s">
-                <div class="section-header">
-                    <div>
-                        <div class="section-title">Organization & Workflow</div>
-                        <div class="section-subtitle">Hierarchy, team assignments, and LLM models</div>
-                    </div>
-                </div>
-                <div id="org-chart" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);padding:24px;box-shadow:var(--shadow-sm);overflow-x:auto">
-                    <!-- rendered by renderOrgChart() -->
-                </div>
+            <!-- TAB BAR -->
+            <div class="tab-bar">
+                <button class="tab-btn active" onclick="switchTab('pipeline', this)">▶ Pipeline</button>
+                <button class="tab-btn" onclick="switchTab('orgchart', this)">🏛 Org Chart</button>
+                <button class="tab-btn" onclick="switchTab('history', this)">📋 History</button>
             </div>
 
-            <!-- PIPELINE VIEW -->
-            <div class="pipeline-panel fade-up" style="animation-delay:0.06s">
-                <div class="section-header" style="margin-bottom:20px">
-                    <div class="section-title" style="flex:1">Pipeline</div>
-                    <div style="display:flex;align-items:center;gap:10px">
-                        <div id="pipeline-run-label" class="muted" style="font-size:12px;font-weight:500"></div>
-                        <button class="btn btn-ghost" id="btn-stop-wf" style="display:none;font-size:11px;padding:4px 10px;color:var(--danger);border:1px solid var(--danger)" onclick="stopWorkflow()">⬜ Stop</button>
+            <!-- TAB: PIPELINE -->
+            <div class="tab-pane active" id="tab-pipeline">
+                <div class="pipeline-panel fade-up">
+                    <div class="section-header" style="margin-bottom:20px">
+                        <div class="section-title" style="flex:1">Pipeline</div>
+                        <div style="display:flex;align-items:center;gap:10px">
+                            <div id="pipeline-run-label" class="muted" style="font-size:12px;font-weight:500"></div>
+                            <button class="btn btn-ghost" id="btn-stop-wf" style="display:none;font-size:11px;padding:4px 10px;color:var(--danger);border:1px solid var(--danger)" onclick="stopWorkflow()">⬜ Stop</button>
+                        </div>
                     </div>
-                </div>
-
-                <div class="stepper" id="stepper">
-                    <!-- steps rendered by JS -->
-                </div>
-
-                <div class="artifact-preview" id="artifact-preview">
-                    <div class="artifact-empty">
-                        <div class="artifact-empty-icon">📄</div>
-                        Select a pipeline step to preview its output
+                    <div class="stepper" id="stepper"></div>
+                    <div class="artifact-preview" id="artifact-preview">
+                        <div class="artifact-empty">
+                            <div class="artifact-empty-icon">📄</div>
+                            Select a pipeline step to preview its output
+                        </div>
                     </div>
                 </div>
             </div>
 
-            <!-- WORKFLOW HISTORY -->
-            <div class="fade-up" style="animation-delay:0.12s">
-                <div class="section-header">
-                    <div class="section-title" style="flex:1">Workflow History</div>
+            <!-- TAB: ORG CHART -->
+            <div class="tab-pane" id="tab-orgchart">
+                <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);padding:28px 24px;box-shadow:var(--shadow-sm);overflow-x:auto;min-height:400px">
+                    <div id="org-chart">
+                        <!-- rendered by renderOrgChart() -->
+                    </div>
                 </div>
+            </div>
+
+            <!-- TAB: HISTORY -->
+            <div class="tab-pane" id="tab-history">
                 <div class="wf-table-wrap">
                     <table class="wf-table">
                         <thead>
@@ -1026,6 +1127,7 @@
             </div>
 
         </div><!-- /content -->
+
     </div><!-- /main -->
 </div><!-- /app -->
 
@@ -1033,7 +1135,7 @@
 <div class="overlay" id="overlay-new-wf">
     <div class="modal wide">
         <div class="modal-header">
-            <div class="modal-title">New Workflow</div>
+            <div class="modal-title">New Pipeline Idea</div>
             <button class="close-btn" onclick="closeModal('overlay-new-wf')">✕</button>
         </div>
         <div class="modal-body">
@@ -1138,37 +1240,139 @@ let editingRoleKey   = null;
    NOTIFICATIONS
 ───────────────────────────────────────────── */
 const NOTIF_ICONS = {
-    post_scheduled: '📅',
     workflow_completed: '✅',
-    workflow_failed: '❌',
-    content_ready: '📝',
+    workflow_failed:    '❌',
+    workflow_started:   '▶️',
+    post_scheduled:     '📅',
+    post_published:     '🚀',
+    task_approval_needed: '⚡',
+    task_completed:     '✅',
+    task_failed:        '❌',
+    task_cascade_started: '⚡',
+    workflow_launched:  '🚀',
+    approval_needed:    '⚡',
+    new_agent:          '🤖',
+    default:            '🔔',
 };
 
 function toggleNotifPanel() {
-    document.getElementById('notif-panel').classList.toggle('open');
+    const panel = document.getElementById('notif-panel');
+    const backdrop = document.getElementById('notif-backdrop');
+    const isOpen = panel.classList.toggle('open');
+    backdrop.classList.toggle('open', isOpen);
+    if (isOpen) loadNotifications();
 }
 
 async function loadNotifications() {
     try {
-        const r = await fetch('/api/notifications?limit=20&_t=' + Date.now());
-        if (!r.ok) return;
-        const data = await r.json();
+        const [notifRes, taskRes] = await Promise.all([
+            fetch('/api/notifications?limit=50&_t=' + Date.now()),
+            fetch('/api/tasks/pending_approval'),
+        ]);
+        const notifData = notifRes.ok ? await notifRes.json() : { notifications: [], unread: 0 };
+        const taskData  = taskRes.ok  ? await taskRes.json()  : { tasks: [] };
+
+        // Update badge
+        const pendingTasks = (taskData.tasks || []).length;
+        const totalUnread = (notifData.unread || 0) + pendingTasks;
         const badge = document.getElementById('notif-badge');
-        if (data.unread > 0) {
-            badge.textContent = data.unread > 99 ? '99+' : data.unread;
+        if (totalUnread > 0) {
+            badge.textContent = totalUnread > 99 ? '99+' : totalUnread;
             badge.classList.remove('hidden');
         } else {
             badge.classList.add('hidden');
         }
+
         const list = document.getElementById('notif-list');
-        if (!data.notifications || data.notifications.length === 0) {
-            list.innerHTML = '<div style="padding:24px;text-align:center;color:var(--text-3);font-size:12px">No notifications yet</div>';
-            return;
+        if (!list) return;
+        let html = '';
+
+        // ── SECTION 1: Failed pipelines (critical) ──
+        const failedWorkflows = (notifData.notifications || []).filter(n => n.type === 'workflow_failed' && !n.is_read);
+
+        if (failedWorkflows.length > 0) {
+            html += `<div class="notif-section-label">🚨 Pipeline Failures (${failedWorkflows.length})</div>`;
+            failedWorkflows.forEach(n => {
+                const wfId = n.workflow_run_id || (n.link || '').match(/\d+/)?.[0] || '';
+                const ago = timeAgo(n.created_at);
+                const emailSubject = encodeURIComponent(`[Axel] Pipeline #${wfId} failed`);
+                const emailBody = encodeURIComponent(`Pipeline #${wfId} failed.\n\nError: ${n.body}\n\nOptions:\n1. Restart from failed step\n2. Restart from scratch\n3. Cancel\n\nDashboard: http://localhost:5000/newsroom.html`);
+                html += `
+                <div class="notif-item action-required" style="flex-direction:column;cursor:default;padding:12px 16px">
+                    <div style="display:flex;gap:10px;align-items:flex-start">
+                        <div style="font-size:20px">❌</div>
+                        <div style="flex:1;min-width:0">
+                            <div style="font-size:12px;font-weight:700;color:var(--text-1)">${esc(n.title)}</div>
+                            <div style="font-size:11px;color:var(--text-2);margin-top:2px;line-height:1.4;word-break:break-word">${esc((n.body || '').substring(0, 150))}</div>
+                            <div style="font-size:10px;color:var(--text-3);margin-top:3px">${ago}</div>
+                        </div>
+                    </div>
+                    <div style="display:flex;gap:6px;margin-top:8px;padding-left:30px;flex-wrap:wrap">
+                        <button class="notif-btn notif-btn-ghost" onclick="_restartWorkflow(${wfId},'current_step',this)">↺ Resume</button>
+                        <button class="notif-btn notif-btn-ghost" onclick="_restartWorkflow(${wfId},'beginning',this)">⟳ Restart</button>
+                        <button class="notif-btn notif-btn-danger" onclick="_cancelWorkflowNotif(${wfId},${n.id},this)">✕ Cancel</button>
+                        <button class="notif-btn notif-btn-primary" onclick="window.location='mailto:?subject=${emailSubject}&body=${emailBody}'">✉ Email</button>
+                    </div>
+                </div>`;
+            });
         }
-        list.innerHTML = data.notifications.map(n => {
-            const icon = NOTIF_ICONS[n.type] || '🔔';
-            const ago = timeAgo(n.created_at);
-            return `
+
+        // ── SECTION 2: Pending task approvals (compact) ──
+        const pendingApprovalTasks = taskData.tasks || [];
+        if (pendingApprovalTasks.length > 0) {
+            const urgentCount = pendingApprovalTasks.filter(t => t.priority === 'urgent' || t.priority === 'high').length;
+            html += `
+            <div class="notif-section-label">⚡ Pending Approvals (${pendingApprovalTasks.length})</div>
+            <div style="padding:10px 16px 6px;display:flex;gap:6px;flex-wrap:wrap;border-bottom:1px solid var(--border)">
+                <button class="notif-btn notif-btn-primary" onclick="_approveAllFromNotif(this)" style="padding:5px 14px;font-size:11px">✓ Approve All (${pendingApprovalTasks.length})</button>
+                <a href="/inbox" class="notif-btn notif-btn-ghost" style="text-decoration:none;padding:5px 14px;font-size:11px">Open Inbox →</a>
+                ${urgentCount > 0 ? `<span style="font-size:10px;color:var(--danger);align-self:center;font-weight:600">${urgentCount} urgent</span>` : ''}
+            </div>`;
+
+            // Compact task list — show first 8, collapse rest
+            const visibleTasks = pendingApprovalTasks.slice(0, 8);
+            const hiddenTasks = pendingApprovalTasks.slice(8);
+
+            visibleTasks.forEach(t => {
+                const priColor = t.priority === 'urgent' ? 'var(--danger)' : t.priority === 'high' ? 'var(--warning)' : 'var(--text-3)';
+                html += `
+                <div style="display:flex;align-items:center;gap:8px;padding:7px 16px;border-bottom:1px solid var(--border);font-size:11px" id="notif-task-${t.id}">
+                    <span style="width:4px;height:4px;border-radius:50%;background:${priColor};flex-shrink:0"></span>
+                    <div style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text-1);font-weight:500">${esc(t.title)}</div>
+                    <span style="color:var(--text-3);font-size:10px;flex-shrink:0;max-width:70px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(t.assignee_name || '')}</span>
+                    <button onclick="_approveTaskFromNotif(${t.id},this)" style="padding:2px 7px;background:var(--success);color:#fff;border:none;border-radius:4px;font-size:9px;font-weight:700;cursor:pointer;flex-shrink:0" title="Approve">✓</button>
+                    <button onclick="_rejectTaskFromNotif(${t.id},this)" style="padding:2px 7px;background:rgba(255,69,58,0.12);color:var(--danger);border:none;border-radius:4px;font-size:9px;font-weight:700;cursor:pointer;flex-shrink:0" title="Reject">✕</button>
+                </div>`;
+            });
+
+            if (hiddenTasks.length > 0) {
+                html += `
+                <div id="notif-more-tasks" style="display:none">
+                    ${hiddenTasks.map(t => {
+                        const priColor = t.priority === 'urgent' ? 'var(--danger)' : t.priority === 'high' ? 'var(--warning)' : 'var(--text-3)';
+                        return `<div style="display:flex;align-items:center;gap:8px;padding:7px 16px;border-bottom:1px solid var(--border);font-size:11px" id="notif-task-${t.id}">
+                            <span style="width:4px;height:4px;border-radius:50%;background:${priColor};flex-shrink:0"></span>
+                            <div style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text-1);font-weight:500">${esc(t.title)}</div>
+                            <span style="color:var(--text-3);font-size:10px;flex-shrink:0;max-width:70px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(t.assignee_name || '')}</span>
+                            <button onclick="_approveTaskFromNotif(${t.id},this)" style="padding:2px 7px;background:var(--success);color:#fff;border:none;border-radius:4px;font-size:9px;font-weight:700;cursor:pointer;flex-shrink:0">✓</button>
+                            <button onclick="_rejectTaskFromNotif(${t.id},this)" style="padding:2px 7px;background:rgba(255,69,58,0.12);color:var(--danger);border:none;border-radius:4px;font-size:9px;font-weight:700;cursor:pointer;flex-shrink:0">✕</button>
+                        </div>`;
+                    }).join('')}
+                </div>
+                <button onclick="document.getElementById('notif-more-tasks').style.display='block';this.remove()" style="display:block;width:100%;padding:8px;background:none;border:none;border-bottom:1px solid var(--border);color:var(--accent);font-size:11px;font-weight:600;cursor:pointer;text-align:center">
+                    Show ${hiddenTasks.length} more tasks…
+                </button>`;
+            }
+        }
+
+        // ── SECTION 2: Recent activity (exclude failure + approval dupes) ──
+        const regularNotifs = (notifData.notifications || []).filter(n => n.type !== 'workflow_failed' && n.type !== 'task_approval_needed');
+        if (regularNotifs.length > 0) {
+            html += `<div class="notif-section-label">📬 Recent Activity</div>`;
+            regularNotifs.forEach(n => {
+                const icon = NOTIF_ICONS[n.type] || NOTIF_ICONS.default;
+                const ago = timeAgo(n.created_at);
+                html += `
                 <div class="notif-item ${n.is_read ? '' : 'unread'}" onclick="clickNotif(${n.id}, '${esc(n.link || '')}')">
                     <div class="notif-icon">${icon}</div>
                     <div class="notif-content">
@@ -1176,9 +1380,17 @@ async function loadNotifications() {
                         <div class="notif-body">${esc(n.body || '')}</div>
                         <div class="notif-time">${ago}</div>
                     </div>
+                    ${!n.is_read ? '<div style="width:7px;height:7px;border-radius:50%;background:var(--accent);margin-top:6px;flex-shrink:0"></div>' : ''}
                 </div>`;
-        }).join('');
-    } catch(e) { /* silent */ }
+            });
+        }
+
+        if (!html) {
+            html = '<div style="padding:40px 24px;text-align:center;color:var(--text-3)"><div style="font-size:32px;margin-bottom:12px">🔔</div><div style="font-size:13px;font-weight:500">All caught up!</div><div style="font-size:11px;margin-top:4px">No pending actions or notifications</div></div>';
+        }
+
+        list.innerHTML = html;
+    } catch(e) { console.error('loadNotifications:', e); }
 }
 
 function timeAgo(iso) {
@@ -1191,15 +1403,87 @@ function timeAgo(iso) {
 }
 
 async function clickNotif(id, link) {
-    // Mark as read
     try { await fetch('/api/notifications/read', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ids: [id]}) }); } catch(e) {}
-    if (link) window.location = link;
-    else { loadNotifications(); document.getElementById('notif-panel').classList.remove('open'); }
+    if (link && link !== 'null' && link !== '') {
+        if (link.startsWith('/') || link.startsWith('http')) window.location = link;
+    }
+    loadNotifications();
 }
 
 async function markAllRead() {
     try { await fetch('/api/notifications/read', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({}) }); } catch(e) {}
     loadNotifications();
+}
+
+async function _approveTaskFromNotif(taskId, btn) {
+    btn.textContent = '…'; btn.disabled = true;
+    try {
+        const r = await fetch(`/api/tasks/${taskId}/approve`, { method: 'POST' });
+        if (!r.ok) throw new Error('Failed');
+        btn.textContent = '✓';
+        btn.style.background = 'var(--success)';
+        // Fade out the row
+        const row = document.getElementById('notif-task-' + taskId);
+        if (row) { row.style.opacity = '0.4'; row.style.transition = 'opacity 0.3s'; }
+        setTimeout(() => loadNotifications(), 800);
+    } catch(e) { btn.textContent = '✓'; btn.disabled = false; }
+}
+
+async function _approveAllFromNotif(btn) {
+    btn.textContent = '⏳ Approving…'; btn.disabled = true;
+    try {
+        const r = await fetch('/api/tasks/approve_all', { method: 'POST' });
+        const data = await r.json();
+        if (data.error) throw new Error(data.error);
+        btn.textContent = `✅ Approved ${data.approved || 'all'}`;
+        btn.style.background = 'var(--success)';
+        setTimeout(() => loadNotifications(), 1000);
+    } catch(e) { btn.textContent = '✓ Approve All'; btn.disabled = false; alert('Error: ' + e.message); }
+}
+
+async function _rejectTaskFromNotif(taskId, btn) {
+    btn.textContent = '…'; btn.disabled = true;
+    try {
+        const r = await fetch(`/api/tasks/${taskId}/reject`, { method: 'POST' });
+        if (!r.ok) throw new Error('Failed');
+        btn.textContent = '✕';
+        const row = document.getElementById('notif-task-' + taskId);
+        if (row) { row.style.opacity = '0.4'; row.style.transition = 'opacity 0.3s'; }
+        setTimeout(() => loadNotifications(), 800);
+    } catch(e) { btn.textContent = '✕'; btn.disabled = false; }
+}
+
+async function _restartWorkflow(runId, mode, btn) {
+    btn.textContent = '⏳…'; btn.disabled = true;
+    try {
+        const r = await fetch(`/api/team/workflow/${runId}/restart`, {
+            method: 'POST',
+            headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({ mode }),
+        });
+        const data = await r.json();
+        if (data.error) throw new Error(data.error);
+        btn.textContent = '✅ Started';
+        btn.style.background = 'var(--success)';
+        btn.style.color = '#fff';
+        // Mark original failure notification read
+        setTimeout(() => { loadNotifications(); loadWorkflowHistory(); }, 1500);
+    } catch(e) {
+        btn.textContent = '↺ Retry'; btn.disabled = false;
+        alert('Error: ' + e.message);
+    }
+}
+
+async function _cancelWorkflowNotif(runId, notifId, btn) {
+    if (!confirm(`Cancel pipeline #${runId}? This cannot be undone.`)) return;
+    btn.textContent = '…'; btn.disabled = true;
+    try {
+        // Stop the workflow (mark as failed/cancelled)
+        await fetch(`/api/team/workflow/${runId}/stop`, { method: 'POST' });
+        // Mark notification as read
+        await fetch('/api/notifications/read', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ ids: [notifId] }) });
+        setTimeout(() => { loadNotifications(); loadWorkflowHistory(); }, 500);
+    } catch(e) { btn.textContent = '✕ Cancel'; btn.disabled = false; }
 }
 
 /* ─────────────────────────────────────────────
@@ -1213,12 +1497,40 @@ document.addEventListener('DOMContentLoaded', () => {
     setInterval(loadNotifications, 10000);  // poll every 10s
 });
 
-// Close notif panel on outside click
-document.addEventListener('click', e => {
-    const panel = document.getElementById('notif-panel');
-    const bell = document.getElementById('notif-bell');
-    if (panel && bell && !panel.contains(e.target) && !bell.contains(e.target)) {
-        panel.classList.remove('open');
+/* ── TABS ── */
+function switchTab(name, btn) {
+    document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.getElementById('tab-' + name).classList.add('active');
+    btn.classList.add('active');
+    if (name === 'orgchart') renderOrgChart();
+}
+
+function openInPipelineTab(runId) {
+    // Switch to Pipeline tab
+    const pipelineBtn = document.querySelector('.tab-btn');
+    switchTab('pipeline', pipelineBtn);
+    // Load the specific run
+    viewWorkflow(runId);
+    // Scroll to top of content
+    const content = document.querySelector('.content');
+    if (content) content.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+/* ── CHAT WITH DEPT HEAD ── */
+function chatWithHead(roleKey) {
+    window.location = `/inbox?entity_type=team_member&entity_key=${encodeURIComponent(roleKey)}`;
+}
+
+// Close notif panel on outside click (backdrop handles this now, but keep for safety)
+document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') {
+        const panel = document.getElementById('notif-panel');
+        const backdrop = document.getElementById('notif-backdrop');
+        if (panel && panel.classList.contains('open')) {
+            panel.classList.remove('open');
+            if (backdrop) backdrop.classList.remove('open');
+        }
     }
 });
 
@@ -1339,101 +1651,128 @@ async function renderOrgChart() {
 
     const agentCards = allAgents.map((a, i) => agentNode(a, i)).join('');
 
+    function wfBar(steps) {
+        return `<div class="dept-workflow-bar">
+            <div class="dept-workflow-label">Workflow Sequence</div>
+            <div class="dept-workflow-steps">
+                ${steps.map((s, i) => `
+                    <span class="wf-pill">${s}</span>
+                    ${i < steps.length - 1 ? '<span class="wf-arrow">→</span>' : ''}
+                `).join('')}
+            </div>
+        </div>`;
+    }
+
+    function chatBtn(roleKey, label) {
+        return `<button class="dept-chat-btn" onclick="chatWithHead('${roleKey}')">💬 Chat with ${label}</button>`;
+    }
+
     el.innerHTML = `
-        <div class="org-chart">
-            <!-- Level 0: General Manager -->
-            ${byKey['general_manager'] ? `
-            <div class="org-level">${node('general_manager')}</div>
-            ${vline()}
-            ` : ''}
-
-            <!-- Level 1: EIC -->
-            <div class="org-level">${node('eic')}</div>
-            ${vline()}
-
-            <!-- Level 2: Direct reports to EIC -->
-            <div style="position:relative;display:flex;justify-content:center">
-                <div style="position:absolute;top:0;left:50%;transform:translateX(-50%);width:calc(100% - 120px);height:2px;background:var(--border-strong)"></div>
-                <div style="display:flex;gap:24px;align-items:flex-start;padding-top:0">
-                    <!-- Creative Director branch -->
-                    <div class="org-branch">
-                        <div class="org-branch-line"></div>
-                        ${node('creative_director')}
-                        ${vline()}
-                        <div style="position:relative;display:flex;justify-content:center">
-                            <div style="position:absolute;top:0;left:50%;transform:translateX(-50%);width:calc(100% - 40px);height:2px;background:var(--border-strong)"></div>
-                            <div style="display:flex;gap:12px;padding-top:0">
-                                <div class="org-branch"><div class="org-branch-line"></div>${node('prompt_engineer_1')}</div>
-                                <div class="org-branch"><div class="org-branch-line"></div>${node('prompt_engineer_2')}</div>
+        <!-- ══ EDITORIAL DEPARTMENT ══ -->
+        <div class="dept-card">
+            <div class="dept-card-header">
+                <div class="dept-card-title"><span>📰</span> Editorial & Content</div>
+                ${byKey['general_manager'] ? chatBtn('general_manager', byKey['general_manager'].display_name.split(' ')[0]) : ''}
+            </div>
+            <div class="org-chart">
+                ${byKey['general_manager'] ? `<div class="org-level">${node('general_manager')}</div>${vline()}` : ''}
+                <div class="org-level">${node('eic')}</div>
+                ${vline()}
+                <div style="position:relative;display:flex;justify-content:center">
+                    <div style="position:absolute;top:0;left:50%;transform:translateX(-50%);width:calc(100% - 60px);height:2px;background:var(--border-strong)"></div>
+                    <div style="display:flex;gap:20px;align-items:flex-start;padding-top:0">
+                        <div class="org-branch">
+                            <div class="org-branch-line"></div>
+                            ${node('head_intelligence')}
+                        </div>
+                        <div class="org-branch">
+                            <div class="org-branch-line"></div>
+                            ${node('creative_director')}
+                            ${vline()}
+                            <div style="position:relative;display:flex;justify-content:center">
+                                <div style="position:absolute;top:0;left:50%;transform:translateX(-50%);width:calc(100% - 10px);height:2px;background:var(--border-strong)"></div>
+                                <div style="display:flex;gap:10px">
+                                    <div class="org-branch"><div class="org-branch-line"></div>${node('prompt_engineer_1')}</div>
+                                    <div class="org-branch"><div class="org-branch-line"></div>${node('prompt_engineer_2')}</div>
+                                </div>
                             </div>
                         </div>
-                    </div>
-
-                    <!-- Head of Intelligence -->
-                    <div class="org-branch">
-                        <div class="org-branch-line"></div>
-                        ${node('head_intelligence')}
-                    </div>
-
-                    <!-- Production Manager branch -->
-                    <div class="org-branch">
-                        <div class="org-branch-line"></div>
-                        ${node('production_manager')}
-                        ${vline()}
-                        <div style="position:relative;display:flex;justify-content:center">
-                            <div style="position:absolute;top:0;left:50%;transform:translateX(-50%);width:calc(100% - 40px);height:2px;background:var(--border-strong)"></div>
-                            <div style="display:flex;gap:12px;padding-top:0">
-                                <div class="org-branch"><div class="org-branch-line"></div>${node('copywriter_1')}</div>
-                                <div class="org-branch"><div class="org-branch-line"></div>${node('copywriter_2')}</div>
+                        <div class="org-branch">
+                            <div class="org-branch-line"></div>
+                            ${node('production_manager')}
+                            ${vline()}
+                            <div style="position:relative;display:flex;justify-content:center">
+                                <div style="position:absolute;top:0;left:50%;transform:translateX(-50%);width:calc(100% - 10px);height:2px;background:var(--border-strong)"></div>
+                                <div style="display:flex;gap:10px">
+                                    <div class="org-branch"><div class="org-branch-line"></div>${node('copywriter_1')}</div>
+                                    <div class="org-branch"><div class="org-branch-line"></div>${node('copywriter_2')}</div>
+                                </div>
                             </div>
                         </div>
-                    </div>
-
-                    <!-- Distribution Specialist -->
-                    <div class="org-branch">
-                        <div class="org-branch-line"></div>
-                        ${node('distribution_specialist')}
+                        <div class="org-branch">
+                            <div class="org-branch-line"></div>
+                            ${node('distribution_specialist')}
+                        </div>
                     </div>
                 </div>
-            </div>
-
-            ${vline()}
-
-            <!-- Level 3: AGENTS / INFLUENCERS -->
-            <div style="width:100%;padding:16px;background:var(--surface-2);border-radius:var(--r);border:1px dashed var(--border-strong)">
-                <div style="text-align:center;font-size:10px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:12px">
-                    📢 Influencer Agents — Content Recipients
-                </div>
-                <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center">
-                    ${agentCards || '<div style="color:var(--text-3);font-size:12px">No agents created yet</div>'}
+                ${vline()}
+                <div style="width:100%;padding:14px;background:var(--surface-2);border-radius:var(--r);border:1px dashed var(--border-strong)">
+                    <div style="text-align:center;font-size:9px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px">📢 Influencer Agents — Content Recipients</div>
+                    <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center">
+                        ${agentCards || '<div style="color:var(--text-3);font-size:12px">No agents yet</div>'}
+                    </div>
                 </div>
             </div>
+            ${wfBar(['🏛️ GM Approves','🔍 Intel Scan','👑 EIC Brief','🎨 Visual Direction','🖊️ Writers Draft','📸 Prompt Eng.','⚙️ Production QC','✅ Fact-Check','🚀 Distribution',`📢 ${allAgents.length} Agents`,'📅 Auto-Schedule','🔔 You Review'])}
+        </div>
 
-            <!-- Workflow arrows -->
-            <div style="margin-top:24px;padding:14px 20px;background:var(--surface-2);border-radius:var(--r);border:1px solid var(--border)">
-                <div style="font-size:11px;font-weight:600;color:var(--text-2);margin-bottom:8px">WORKFLOW SEQUENCE</div>
-                <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:11px;font-weight:500">
-                    <span style="color:var(--text-1)">🏛️ GM Approves</span>
-                    <span style="color:var(--text-3)">→</span>
-                    <span style="color:var(--success)">🔍 Intelligence</span>
-                    <span style="color:var(--text-3)">→</span>
-                    <span style="color:var(--accent)">👑 EIC + 🎨 CD</span>
-                    <span style="color:var(--text-3)">→</span>
-                    <span style="color:var(--warning)">🖊️ Writers + 📸🖌️ Prompt Eng.</span>
-                    <span style="color:var(--text-3)">→</span>
-                    <span style="color:var(--warning)">⚙️ Production QC</span>
-                    <span style="color:var(--text-3)">→</span>
-                    <span style="color:var(--success)">🔍 Fact-Check</span>
-                    <span style="color:var(--text-3)">→</span>
-                    <span style="color:var(--danger)">🚀 Distribution</span>
-                    <span style="color:var(--text-3)">→</span>
-                    <span style="padding:2px 8px;background:rgba(0,122,255,0.1);border-radius:100px;color:var(--accent)">📢 ${allAgents.length} Agents</span>
-                    <span style="color:var(--text-3)">→</span>
-                    <span style="color:var(--text-2)">📅 Auto-Schedule</span>
-                    <span style="color:var(--text-3)">→</span>
-                    <span style="color:var(--text-2)">🔔 You Review</span>
+        <!-- ══ TECH + SALES SIDE BY SIDE ══ -->
+        <div class="dept-grid">
+
+            <!-- TECH DEPARTMENT -->
+            <div class="dept-card" style="border-top: 3px solid rgba(90,200,250,0.6)">
+                <div class="dept-card-header">
+                    <div class="dept-card-title"><span>💻</span> Tech Department</div>
+                    ${byKey['cto'] ? chatBtn('cto', byKey['cto'].display_name.split(' ')[0]) : ''}
                 </div>
+                ${byKey['cto'] || byKey['lead_engineer'] ? `
+                <div class="org-chart">
+                    ${byKey['cto'] ? `<div class="org-level">${node('cto')}</div>` : ''}
+                    ${(byKey['lead_engineer'] || byKey['data_engineer']) ? `
+                    ${vline()}
+                    <div style="position:relative;display:flex;justify-content:center">
+                        <div style="position:absolute;top:0;left:50%;transform:translateX(-50%);width:calc(100% - 20px);height:2px;background:var(--border-strong)"></div>
+                        <div style="display:flex;gap:14px">
+                            ${byKey['lead_engineer'] ? `<div class="org-branch"><div class="org-branch-line"></div>${node('lead_engineer')}</div>` : ''}
+                            ${byKey['data_engineer'] ? `<div class="org-branch"><div class="org-branch-line"></div>${node('data_engineer')}</div>` : ''}
+                        </div>
+                    </div>` : ''}
+                </div>` : '<div style="color:var(--text-3);font-size:12px;text-align:center;padding:20px">Restart server to load Tech team</div>'}
+                ${wfBar(['📐 Architecture','🗓️ Sprint Plan','⚡ Development','🔍 Code Review','🧪 Testing','🚢 Deploy','📊 Monitor & Iterate'])}
             </div>
+
+            <!-- SALES DEPARTMENT -->
+            <div class="dept-card" style="border-top: 3px solid rgba(52,199,89,0.6)">
+                <div class="dept-card-header">
+                    <div class="dept-card-title"><span>🤝</span> Sales & Partnerships</div>
+                    ${byKey['vp_sales'] ? chatBtn('vp_sales', byKey['vp_sales'].display_name.split(' ')[0]) : ''}
+                </div>
+                ${byKey['vp_sales'] || byKey['biz_dev'] ? `
+                <div class="org-chart">
+                    ${byKey['vp_sales'] ? `<div class="org-level">${node('vp_sales')}</div>` : ''}
+                    ${(byKey['biz_dev'] || byKey['account_exec']) ? `
+                    ${vline()}
+                    <div style="position:relative;display:flex;justify-content:center">
+                        <div style="position:absolute;top:0;left:50%;transform:translateX(-50%);width:calc(100% - 20px);height:2px;background:var(--border-strong)"></div>
+                        <div style="display:flex;gap:14px">
+                            ${byKey['biz_dev'] ? `<div class="org-branch"><div class="org-branch-line"></div>${node('biz_dev')}</div>` : ''}
+                            ${byKey['account_exec'] ? `<div class="org-branch"><div class="org-branch-line"></div>${node('account_exec')}</div>` : ''}
+                        </div>
+                    </div>` : ''}
+                </div>` : '<div style="color:var(--text-3);font-size:12px;text-align:center;padding:20px">Restart server to load Sales team</div>'}
+                ${wfBar(['🎯 Lead Gen','🔎 Qualify','📧 Outreach','🎤 Demo','📄 Proposal','🤝 Negotiate','✅ Close','🚀 Onboard'])}
+            </div>
+
         </div>`;
 }
 
@@ -1448,7 +1787,7 @@ async function loadWorkflows() {
         const data = await res.json();
         const runs = Array.isArray(data) ? data : (data.workflows || []);
         if (runs.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="6" class="wf-empty">No workflows yet. Click "New Workflow" to start your first pipeline.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="6" class="wf-empty">No pipelines yet. Click "💡 New Idea" to launch your first pipeline.</td></tr>';
             return;
         }
         tbody.innerHTML = runs.map(r => {
@@ -1486,8 +1825,37 @@ async function loadWorkflows() {
 
 function viewWorkflow(runId) {
     currentRunId = runId;
-    document.getElementById('pipeline-run-label').textContent = 'Run #' + runId;
     selectedStep = null;
+
+    // ── Immediate visual feedback ──────────────────────────────
+    // 1. Update run label
+    document.getElementById('pipeline-run-label').textContent = 'Run #' + runId;
+
+    // 2. Reset stepper to pending (shows change instantly before fetch)
+    renderStepper(null);
+
+    // 3. Clear artifact panel with a loading indicator
+    const preview = document.getElementById('artifact-preview');
+    if (preview) preview.innerHTML = '<div style="color:var(--text-3);font-size:13px;padding:24px;text-align:center">Loading run #' + runId + '…</div>';
+
+    // 4. Highlight selected history row, deselect others
+    document.querySelectorAll('#wf-history-body tr').forEach(tr => {
+        tr.style.background = '';
+        tr.style.fontWeight = '';
+    });
+    const rows = document.querySelectorAll('#wf-history-body tr');
+    rows.forEach(tr => {
+        if (tr.getAttribute('onclick') && tr.getAttribute('onclick').includes("'" + runId + "'")) {
+            tr.style.background = 'var(--accent-dim)';
+            tr.style.fontWeight = '600';
+        }
+    });
+
+    // 5. Scroll pipeline into view
+    const pipelineEl = document.getElementById('stepper');
+    if (pipelineEl) pipelineEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+    // ── Now fetch real data ────────────────────────────────────
     pollWorkflow(runId);
     loadArtifacts(runId);
 }
@@ -1732,7 +2100,17 @@ function _formatArtifact(stepName, data) {
         let h = '';
         if (data.anchor_points && data.anchor_points.length) {
             h += `<div style="margin-top:8px"><strong style="font-size:11px;color:var(--text-3)">ANCHOR POINTS</strong></div>`;
-            h += `<div class="step-detail-output">${data.anchor_points.map(p => '- ' + esc(p)).join('\n')}</div>`;
+            h += `<div class="step-detail-output">${data.anchor_points.map(p => {
+                if (typeof p === 'string') return '- ' + esc(p);
+                const pts = Array.isArray(p.data_points) ? p.data_points : (p.data_points ? [p.data_points] : []);
+                return `<div style="margin-bottom:10px">` +
+                    `<div style="font-weight:700;color:var(--text-1)">${esc(p.topic || '')}</div>` +
+                    (p.relevance_score ? `<div style="font-size:10px;color:var(--accent);margin-bottom:2px">Relevance: ${p.relevance_score}/10</div>` : '') +
+                    `<div style="color:var(--text-2)">${esc(p.summary || '')}</div>` +
+                    (pts.length ? `<div style="font-size:11px;color:var(--text-3);margin-top:3px">${pts.map(d => '• ' + esc(String(d))).join('<br>')}</div>` : '') +
+                    (p.content_angle_suggestion ? `<div style="font-size:11px;color:var(--success);margin-top:3px">→ ${esc(p.content_angle_suggestion)}</div>` : '') +
+                    `</div>`;
+            }).join('')}</div>`;
         }
         if (data.market_context) {
             h += `<div style="margin-top:8px"><strong style="font-size:11px;color:var(--text-3)">MARKET CONTEXT</strong></div>`;
@@ -1755,7 +2133,17 @@ function _formatArtifact(stepName, data) {
             h += `<div style="margin-top:8px;font-size:12px"><strong>Fact-check:</strong> ${data.fact_check_passed ? '✅ Passed' : '❌ Issues found'}</div>`;
         }
         if (data.fact_check_notes && data.fact_check_notes.length) {
-            h += `<div class="step-detail-output" style="margin-top:4px">${data.fact_check_notes.map(n => '- ' + esc(n)).join('\n')}</div>`;
+            h += `<div class="step-detail-output" style="margin-top:4px">${data.fact_check_notes.map(n => {
+                if (typeof n === 'string') return '- ' + esc(n);
+                const icon = n.passed ? '✅' : '❌';
+                const issues = Array.isArray(n.issues) && n.issues.length
+                    ? `<div style="font-size:11px;color:var(--warning);margin-top:2px">${n.issues.map(i => '• ' + esc(typeof i === 'string' ? i : (i.issue || JSON.stringify(i)))).join('<br>')}</div>`
+                    : '';
+                const sources = Array.isArray(n.sources_verified) && n.sources_verified.length
+                    ? `<div style="font-size:10px;color:var(--text-3);margin-top:2px">Sources: ${n.sources_verified.map(s => esc(s)).join(', ')}</div>`
+                    : '';
+                return `<div style="margin-bottom:6px">${icon} Loop ${n.loop}: ${esc(n.assessment || '')}${issues}${sources}</div>`;
+            }).join('')}</div>`;
         }
         return h;
     }
@@ -2011,104 +2399,367 @@ function formatTime(ts) {
                d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
     } catch { return ts; }
 }
-/* ── VICTORIA CHAT ── */
-let _chatOpen = false;
-function toggleChat() {
-    _chatOpen = !_chatOpen;
-    document.getElementById('chat-panel').classList.toggle('open', _chatOpen);
-    if (_chatOpen) {
-        document.getElementById('chat-input').focus();
-        const msgs = document.getElementById('chat-messages');
-        if (msgs.children.length === 0) {
-            appendMsg('victoria', "Hello! I'm Victoria Crane, your Editor-in-Chief. Ask me about our workflow status, team assignments, content strategy, or what topics we should tackle next. How can I help?");
-        }
-    }
-}
+/* ── HISTORY INLINE PIPELINE ── */
+let _expandedRunId = null;
 
-function appendMsg(role, text) {
-    const msgs = document.getElementById('chat-messages');
-    const div = document.createElement('div');
-    div.className = 'chat-msg ' + role;
-    if (role === 'victoria') {
-        div.innerHTML = '<div class="v-label">Victoria Crane</div>' + esc(text).replace(/\n/g, '<br>');
+function viewWorkflow(runId) {
+    currentRunId = runId;
+    selectedStep = null;
+
+    // If we're on the Pipeline tab, update it there too
+    document.getElementById('pipeline-run-label').textContent = 'Run #' + runId;
+    renderStepper(null);
+    const preview = document.getElementById('artifact-preview');
+    if (preview) preview.innerHTML = '<div style="color:var(--text-3);font-size:13px;padding:24px;text-align:center">Loading run #' + runId + '…</div>';
+
+    // Toggle inline expansion in History tab
+    const tbody = document.getElementById('wf-tbody');
+    const existing = document.getElementById('wf-detail-' + runId);
+
+    // Collapse previously expanded row
+    if (_expandedRunId && _expandedRunId !== runId) {
+        const prev = document.getElementById('wf-detail-' + _expandedRunId);
+        if (prev) prev.remove();
+        document.querySelectorAll('#wf-tbody tr.wf-selected').forEach(r => r.classList.remove('wf-selected'));
+    }
+
+    if (existing) {
+        // Already open — collapse it
+        existing.remove();
+        _expandedRunId = null;
+        return;
+    }
+
+    _expandedRunId = runId;
+
+    // Highlight the clicked row
+    document.querySelectorAll('#wf-tbody tr').forEach(r => r.classList.remove('wf-selected'));
+    const clickedRow = [...tbody.querySelectorAll('tr')].find(r => (r.getAttribute('onclick') || '').includes("'" + runId + "'"));
+    if (clickedRow) clickedRow.classList.add('wf-selected');
+
+    // Insert detail row immediately after clicked row
+    const detailRow = document.createElement('tr');
+    detailRow.id = 'wf-detail-' + runId;
+    detailRow.className = 'wf-detail-row';
+    detailRow.innerHTML = `<td colspan="6"><div class="wf-inline-pipeline" id="wf-inline-${runId}">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+            <div style="font-size:12px;font-weight:700;color:var(--text-2)">Run #${runId} — Pipeline</div>
+            <button onclick="openInPipelineTab(${runId})" style="font-size:11px;padding:3px 10px;border:1px solid var(--border);border-radius:6px;background:none;cursor:pointer;color:var(--accent);font-weight:600">↗ Open in Pipeline</button>
+        </div>
+        <div class="wf-inline-stepper" id="wf-inline-stepper-${runId}">
+            ${STEPS.map((s,i) => `
+                <div class="wf-inline-step pending" id="wf-is-${runId}-${s.key}" onclick="selectInlineStep('${runId}','${s.key}',this)">
+                    <div class="wf-inline-step-icon">${s.icon}</div>
+                    <div class="wf-inline-step-label">${s.label}</div>
+                </div>
+                ${i < STEPS.length-1 ? '<div class="wf-inline-step-line"></div>' : ''}
+            `).join('')}
+        </div>
+        <div id="wf-inline-artifact-${runId}" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:16px;min-height:80px;font-size:12px;color:var(--text-3)">
+            Click a step above to see its output
+        </div>
+    </div></td>`;
+
+    if (clickedRow) {
+        clickedRow.after(detailRow);
     } else {
-        div.textContent = text;
+        tbody.appendChild(detailRow);
     }
-    msgs.appendChild(div);
-    msgs.scrollTop = msgs.scrollHeight;
+
+    // Fetch step statuses from step_logs
+    fetch(`/api/team/workflow/${runId}`)
+        .then(r => r.json())
+        .then(data => {
+            const logs = data.step_logs || [];
+            // Compute per-step status: completed if all done, failed if any failed
+            const stepMap = {};
+            logs.forEach(l => {
+                const k = l.step;
+                if (!stepMap[k]) stepMap[k] = 'completed';
+                if (l.status === 'failed') stepMap[k] = 'failed';
+                else if (l.status === 'running' && stepMap[k] !== 'failed') stepMap[k] = 'running';
+            });
+            STEPS.forEach(s => {
+                const el = document.getElementById(`wf-is-${runId}-${s.key}`);
+                if (!el) return;
+                const st = stepMap[s.key] || 'pending';
+                el.className = 'wf-inline-step ' + st;
+            });
+        }).catch(() => {});
+
+    detailRow.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
-async function sendChat() {
-    const input = document.getElementById('chat-input');
-    const msg = input.value.trim();
-    if (!msg) return;
+// Map inline step key → artifact field name used by _formatArtifact
+const _STEP_ARTIFACT_MAP = {
+    signal:      'trend_report',
+    angle:       'content_brief',
+    co_creation: 'master_content',
+    fact_check:  'master_content',
+    atomization: 'atomized',
+};
 
-    input.value = '';
-    appendMsg('user', msg);
-
-    // Show typing indicator
-    const msgs = document.getElementById('chat-messages');
-    const typing = document.createElement('div');
-    typing.className = 'chat-typing';
-    typing.id = 'chat-typing';
-    typing.innerHTML = '<span>.</span><span>.</span><span>.</span>';
-    msgs.appendChild(typing);
-    msgs.scrollTop = msgs.scrollHeight;
-
-    const sendBtn = document.getElementById('chat-send-btn');
-    sendBtn.disabled = true;
-
+async function selectInlineStep(runId, stepKey, el) {
+    document.querySelectorAll(`#wf-inline-stepper-${runId} .wf-inline-step`).forEach(s => s.classList.remove('selected'));
+    el.classList.add('selected');
+    const art = document.getElementById(`wf-inline-artifact-${runId}`);
+    art.innerHTML = '<div style="color:var(--text-3);font-size:12px;text-align:center;padding:20px">Loading…</div>';
     try {
-        const r = await fetch('/api/team/chat', {
+        const r = await fetch(`/api/team/workflow/${runId}/artifacts`);
+        const data = await r.json();
+
+        const artifactKey = _STEP_ARTIFACT_MAP[stepKey] || stepKey;
+        const artifactData = data[artifactKey];
+
+        if (!artifactData || (Array.isArray(artifactData) && artifactData.length === 0)) {
+            art.innerHTML = '<div style="color:var(--text-3);font-size:12px;text-align:center;padding:20px">No output recorded for this step</div>';
+            return;
+        }
+
+        // Atomization: render posts as inline cards
+        if (stepKey === 'atomization') {
+            window._lastAtomizedData = artifactData;
+            art.innerHTML = _renderInlineAtomized(artifactData, data.step_logs || [], runId);
+            // Populate redispatch dropdowns
+            setTimeout(() => _populateRedispatchDropdowns(), 100);
+            return;
+        }
+
+        // All other steps: use existing _formatArtifact renderer
+        const rendered = _formatArtifact(artifactKey, artifactData);
+        art.innerHTML = rendered || '<div style="color:var(--text-3);font-size:12px;padding:16px">No structured output available</div>';
+
+    } catch(e) {
+        art.innerHTML = '<div style="color:var(--danger);font-size:12px;padding:16px">Failed to load step output</div>';
+    }
+}
+
+// ── POST PREVIEW MODAL (atomization inline) ──
+function _openAtomPostModal(post) {
+    const platformIcons = { instagram:'📸', twitter:'🐦', 'twitter/x':'𝕏', linkedin:'💼', tiktok:'🎵', facebook:'📘', blog:'📝', default:'📄' };
+    const icon = platformIcons[(post.platform||'').toLowerCase()] || platformIcons.default;
+    const tags = (post.hashtags||[]).map(h => `<span style="color:var(--accent);margin-right:4px">#${esc(h)}</span>`).join('');
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.55);backdrop-filter:blur(4px);z-index:9999;display:flex;align-items:center;justify-content:center';
+    overlay.onclick = e => { if(e.target===overlay) overlay.remove(); };
+    overlay.innerHTML = `
+        <div style="background:var(--surface);border-radius:var(--r-lg);padding:28px;max-width:560px;width:90%;max-height:80vh;overflow-y:auto;box-shadow:var(--shadow-xl);position:relative">
+            <button onclick="this.closest('[style*=fixed]').remove()" style="position:absolute;top:14px;right:14px;background:var(--surface-2);border:none;border-radius:50%;width:28px;height:28px;cursor:pointer;font-size:16px;color:var(--text-2)">×</button>
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:18px">
+                <span style="font-size:24px">${icon}</span>
+                <div>
+                    <div style="font-size:14px;font-weight:700;color:var(--text-1)">${esc(post.format_type||post.platform||'Post')}</div>
+                    <div style="font-size:11px;color:var(--text-3)">For ${esc(post.agent_name||'Agent')} ${post.agent_username?`· @${esc(post.agent_username)}`:''}
+                        <span style="margin-left:8px;padding:1px 6px;border-radius:3px;font-size:10px;background:${post.status==='published'?'rgba(48,209,88,0.15)':'rgba(255,149,0,0.12)'};color:${post.status==='published'?'var(--success)':'var(--warning)'}">
+                            ${esc(post.status||'draft')}
+                        </span>
+                    </div>
+                </div>
+            </div>
+            <div style="font-size:13px;line-height:1.65;color:var(--text-1);white-space:pre-wrap;background:var(--surface-2);border-radius:var(--r-sm);padding:14px;margin-bottom:12px">${esc(post.body||'')}</div>
+            ${tags ? `<div style="margin-bottom:12px;font-size:12px">${tags}</div>` : ''}
+            ${(post.media_urls||[]).length > 0 ? `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">${post.media_urls.slice(0,4).map(u=>`<img src="${u}" style="width:80px;height:80px;object-fit:cover;border-radius:8px">`).join('')}</div>` : ''}
+        </div>`;
+    document.body.appendChild(overlay);
+}
+
+function _renderInlineAtomized(items, logs, runId) {
+    if (!items || items.length === 0) return '<div style="color:var(--text-3);font-size:12px;text-align:center;padding:20px">No posts generated</div>';
+
+    const platformIcons = { instagram:'📸', twitter:'🐦', 'twitter/x':'𝕏', linkedin:'💼', tiktok:'🎵', facebook:'📘', blog:'📝', default:'📄' };
+    const formatLabels  = { ig_post:'Instagram Post', twitter_thread:'X Thread', linkedin_post:'LinkedIn Post', tiktok_script:'TikTok Script', default:'Post' };
+
+    // Group by agent_id
+    const byAgent = {};
+    items.forEach(item => {
+        const key = item.agent_id || 'unknown';
+        if (!byAgent[key]) byAgent[key] = {
+            id: key,
+            name: item.agent_name || `Agent ${key}`,
+            username: item.agent_username || '',
+            posts: []
+        };
+        byAgent[key].posts.push(item);
+    });
+
+    const rid = runId || '';
+
+    let html = `
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid var(--border);flex-wrap:wrap">
+        <div style="font-size:11px;color:var(--text-3);flex:1">
+            ⚛️ <strong style="color:var(--text-2)">${items.length} posts</strong> across <strong style="color:var(--text-2)">${Object.keys(byAgent).length} agents</strong>
+        </div>
+        <button onclick="_atomScheduleAll(${rid})" style="padding:5px 12px;background:var(--accent);color:#fff;border:none;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer">📅 Schedule All</button>
+        <button onclick="_atomEicSchedule(${rid}, this)" style="padding:5px 12px;background:var(--surface-2);color:var(--text-1);border:1px solid var(--border);border-radius:6px;font-size:11px;font-weight:600;cursor:pointer">📋 EIC Schedule</button>
+    </div>
+    <div id="atom-eic-schedule-${rid}"></div>`;
+
+    Object.values(byAgent).forEach(agent => {
+        html += `
+        <div style="margin-bottom:18px;border:1px solid var(--border);border-radius:var(--r-sm);overflow:hidden">
+            <div style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--surface-2);border-bottom:1px solid var(--border)">
+                <div style="font-size:13px;font-weight:700;color:var(--text-1);flex:1">
+                    📣 ${esc(agent.name)}
+                    ${agent.username ? `<span style="font-size:11px;font-weight:400;color:var(--text-3);margin-left:4px">@${esc(agent.username)}</span>` : ''}
+                </div>
+                <span style="font-size:11px;color:var(--text-3)">${agent.posts.length} post${agent.posts.length!==1?'s':''}</span>
+                <select onchange="_atomRedispatch(${rid}, ${agent.id}, this)" style="font-size:10px;padding:2px 6px;border:1px solid var(--border);border-radius:5px;background:var(--surface);color:var(--text-2);cursor:pointer" title="Reassign all posts to different agent">
+                    <option value="">↳ Redispatch to…</option>
+                </select>
+                <button onclick="_atomScheduleAgent(${rid}, [${agent.posts.map(p=>p.id).join(',')}])" style="padding:3px 9px;background:var(--accent-dim);color:var(--accent);border:none;border-radius:5px;font-size:10px;font-weight:600;cursor:pointer">📅 Schedule</button>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px;padding:10px">`;
+
+        agent.posts.forEach(post => {
+            const platform = (post.platform || '').toLowerCase();
+            const icon = platformIcons[platform] || platformIcons.default;
+            const label = formatLabels[post.format_type] || post.format_type || 'Post';
+            const preview = (post.body || '').substring(0, 100);
+            const tags = (post.hashtags || []).slice(0, 2).join(' #');
+            const postJson = encodeURIComponent(JSON.stringify(post));
+            html += `
+                <div onclick="_openAtomPostModal(JSON.parse(decodeURIComponent('${postJson}')))" data-post-json="${esc(JSON.stringify(post))}" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--r-sm);padding:10px;font-size:11px;cursor:pointer;transition:all 0.15s"
+                     onmouseenter="this.style.borderColor='var(--accent)';this.style.boxShadow='var(--shadow-sm)'"
+                     onmouseleave="this.style.borderColor='var(--border)';this.style.boxShadow='none'">
+                    <div style="display:flex;align-items:center;gap:5px;margin-bottom:5px">
+                        <span style="font-size:13px">${icon}</span>
+                        <span style="font-weight:700;color:var(--text-1);flex:1">${esc(label)}</span>
+                        <span style="font-size:9px;padding:1px 5px;border-radius:3px;background:${post.status==='pushed_to_agent'||post.status==='scheduled'?'rgba(48,209,88,0.15)':'rgba(255,149,0,0.12)'};color:${post.status==='pushed_to_agent'||post.status==='scheduled'?'var(--success)':'var(--warning)'}">
+                            ${post.status==='pushed_to_agent'?'scheduled':esc(post.status||'draft')}
+                        </span>
+                    </div>
+                    <div style="color:var(--text-2);line-height:1.4">${esc(preview)}${preview.length>=100?'…':''}</div>
+                    ${tags ? `<div style="color:var(--accent);margin-top:4px;font-size:10px">#${esc(tags)}</div>` : ''}
+                    <div style="margin-top:6px;font-size:9px;color:var(--text-3);text-align:right">click to preview</div>
+                </div>`;
+        });
+
+        html += `</div></div>`;
+    });
+
+    return html;
+}
+
+async function _populateRedispatchDropdowns() {
+    try {
+        const r = await fetch('/api/agents');
+        const data = await r.json();
+        const agents = data.agents || [];
+        document.querySelectorAll('select[onchange*="_atomRedispatch"]').forEach(sel => {
+            // Clear existing options except first
+            while (sel.options.length > 1) sel.remove(1);
+            agents.forEach(ag => {
+                const o = document.createElement('option');
+                o.value = ag.agent_id || ag.id;
+                o.textContent = (ag.agent_name || ag.name) + (ag.brand ? ' · '+ag.brand : '');
+                sel.appendChild(o);
+            });
+        });
+    } catch(e) {}
+}
+
+async function _atomScheduleAll(runId) {
+    if (!confirm(`Schedule ALL draft posts from workflow #${runId} at optimal times?`)) return;
+    const btn = event.currentTarget;
+    btn.textContent = '⏳ Scheduling…'; btn.disabled = true;
+    try {
+        const r = await fetch(`/api/team/workflow/${runId}/schedule_all`, { method: 'POST' });
+        const data = await r.json();
+        if (data.error) throw new Error(data.error);
+        btn.textContent = `✅ Scheduled ${data.scheduled} posts`;
+        btn.style.background = 'var(--success)';
+        // Refresh after 2s
+        setTimeout(() => selectInlineStep(runId, 'atomization', document.querySelector(`#wf-inline-stepper-${runId} .wf-inline-step.selected`)), 2000);
+    } catch(e) {
+        btn.textContent = '❌ Error'; btn.disabled = false;
+        alert('Error: ' + e.message);
+    }
+}
+
+async function _atomScheduleAgent(runId, ids) {
+    if (!confirm(`Schedule ${ids.length} posts at optimal times?`)) return;
+    try {
+        const r = await fetch(`/api/team/workflow/${runId}/approve`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ message: msg })
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ atomized_ids: ids }),
         });
         const data = await r.json();
-        typing.remove();
-        if (r.ok) {
-            appendMsg('victoria', data.reply);
-        } else {
-            appendMsg('victoria', data.error || 'Sorry, I had trouble processing that. Try again?');
-        }
-    } catch (e) {
-        typing.remove();
-        appendMsg('victoria', 'Connection error. Is the server running?');
-    } finally {
-        sendBtn.disabled = false;
-        input.focus();
-    }
+        if (data.error) throw new Error(data.error);
+        alert(`✅ Scheduled ${data.pushed} posts!`);
+        selectInlineStep(runId, 'atomization', document.querySelector(`#wf-inline-stepper-${runId} .wf-inline-step.selected`));
+    } catch(e) { alert('Error: ' + e.message); }
 }
 
-document.addEventListener('keydown', e => {
-    if (e.key === 'Enter' && !e.shiftKey && document.activeElement?.id === 'chat-input') {
-        e.preventDefault();
-        sendChat();
+async function _atomRedispatch(runId, currentAgentId, sel) {
+    const newAgentId = sel.value;
+    if (!newAgentId) return;
+    const items = (window._lastAtomizedData || []).filter(i => i.agent_id == currentAgentId);
+    if (!items.length) { sel.value = ''; return; }
+    if (!confirm(`Reassign ${items.length} posts from this agent to the selected agent?`)) { sel.value = ''; return; }
+    try {
+        await Promise.all(items.map(item =>
+            fetch(`/api/team/workflow/${runId}/redispatch`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ atom_id: item.id, new_agent_id: parseInt(newAgentId) }),
+            })
+        ));
+        alert('✅ Reassigned! Reloading…');
+        selectInlineStep(runId, 'atomization', document.querySelector(`#wf-inline-stepper-${runId} .wf-inline-step.selected`));
+    } catch(e) { alert('Error: ' + e.message); sel.value = ''; }
+}
+
+async function _atomEicSchedule(runId, btn) {
+    btn.textContent = '⏳ Victoria is preparing…'; btn.disabled = true;
+    try {
+        const r = await fetch(`/api/team/workflow/${runId}/eic_schedule`, { method: 'POST' });
+        const data = await r.json();
+        if (data.error) throw new Error(data.error);
+        const sched = data.schedule || {};
+        const container = document.getElementById(`atom-eic-schedule-${runId}`);
+        if (!container) return;
+
+        const posts = sched.posts || [];
+        const postsHtml = posts.map(p => `
+            <div style="display:flex;align-items:flex-start;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)">
+                <div style="min-width:70px;font-size:10px;color:var(--accent);font-weight:600">${p.recommended_time ? new Date(p.recommended_time).toLocaleDateString('en-US',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}) : '—'}</div>
+                <div style="flex:1">
+                    <div style="font-size:11px;font-weight:600;color:var(--text-1)">${esc(p.agent_name||'')} <span style="font-weight:400;color:var(--text-3)">· ${esc(p.platform||'')} ${esc(p.format_type||'')}</span></div>
+                    <div style="font-size:11px;color:var(--text-2);margin-top:2px">${esc((p.body_preview||'').substring(0,80))}…</div>
+                    ${p.rationale ? `<div style="font-size:10px;color:var(--text-3);margin-top:2px;font-style:italic">${esc(p.rationale)}</div>` : ''}
+                </div>
+                <span style="font-size:9px;padding:2px 6px;border-radius:3px;background:${p.priority==='high'?'rgba(255,69,58,0.12)':p.priority==='medium'?'rgba(255,149,0,0.12)':'rgba(0,0,0,0.05)'};color:${p.priority==='high'?'var(--danger)':p.priority==='medium'?'var(--warning)':'var(--text-3)'}">${p.priority||'low'}</span>
+            </div>`).join('');
+
+        container.innerHTML = `
+            <div style="background:linear-gradient(135deg,rgba(0,122,255,0.05),rgba(88,86,214,0.05));border:1px solid rgba(0,122,255,0.15);border-radius:var(--r-sm);padding:14px;margin-bottom:14px">
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+                    <div style="width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,#007aff,#5856d6);display:flex;align-items:center;justify-content:center;font-size:14px">📋</div>
+                    <div>
+                        <div style="font-size:12px;font-weight:700;color:var(--text-1)">Victoria's Publishing Schedule</div>
+                        <div style="font-size:10px;color:var(--text-3)">${posts.length} posts · Awaiting your approval</div>
+                    </div>
+                    <button onclick="this.closest('[style*=linear-gradient]').remove()" style="margin-left:auto;background:none;border:none;color:var(--text-3);cursor:pointer;font-size:16px">×</button>
+                </div>
+                ${sched.schedule_summary ? `<div style="font-size:11px;color:var(--text-2);margin-bottom:10px;line-height:1.5">${esc(sched.schedule_summary)}</div>` : ''}
+                <div style="max-height:240px;overflow-y:auto">${postsHtml}</div>
+                ${sched.victoria_note ? `<div style="margin-top:10px;padding:8px 10px;background:rgba(0,0,0,0.03);border-left:3px solid var(--accent);border-radius:0 var(--r-sm) var(--r-sm) 0;font-size:11px;color:var(--text-2);font-style:italic">"${esc(sched.victoria_note)}"<div style="font-size:10px;font-weight:600;color:var(--text-3);margin-top:4px;font-style:normal">— Victoria Crane, EIC</div></div>` : ''}
+                <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+                    <button onclick="_atomScheduleAll(${runId})" style="padding:6px 14px;background:var(--accent);color:#fff;border:none;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer">✅ Approve & Publish Schedule</button>
+                    <button onclick="this.closest('[style*=linear-gradient]').remove()" style="padding:6px 14px;background:var(--surface-2);color:var(--text-2);border:1px solid var(--border);border-radius:6px;font-size:11px;cursor:pointer">✏️ Review Individually</button>
+                    <button onclick="this.closest('[style*=linear-gradient]').remove()" style="padding:6px 14px;background:rgba(255,69,58,0.1);color:var(--danger);border:none;border-radius:6px;font-size:11px;cursor:pointer">✕ Deny All</button>
+                </div>
+            </div>`;
+        btn.textContent = '📋 EIC Schedule'; btn.disabled = false;
+    } catch(e) {
+        btn.textContent = '📋 EIC Schedule'; btn.disabled = false;
+        alert('Error: ' + e.message);
     }
-});
+}
 
 </script>
 
-<!-- VICTORIA CHAT FAB + PANEL -->
-<button class="chat-fab" onclick="toggleChat()" title="Chat with Victoria Crane">
-    👑
-</button>
-
-<div class="chat-panel" id="chat-panel">
-    <div class="chat-header">
-        <div class="chat-avatar">👑</div>
-        <div class="chat-header-info">
-            <div class="chat-header-name">Victoria Crane</div>
-            <div class="chat-header-role">Editor-in-Chief &middot; opus-4-6</div>
-        </div>
-        <button style="background:none;border:none;cursor:pointer;font-size:16px;color:var(--text-3)" onclick="toggleChat()">✕</button>
-    </div>
-    <div class="chat-messages" id="chat-messages"></div>
-    <div class="chat-input-bar">
-        <input class="chat-input" id="chat-input" placeholder="Ask Victoria..." autocomplete="off">
-        <button class="chat-send" id="chat-send-btn" onclick="sendChat()">➤</button>
-    </div>
-</div>
-
+<script src="/js/marc.js"></script>
 </body>
 </html>

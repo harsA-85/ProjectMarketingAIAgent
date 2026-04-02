@@ -226,6 +226,9 @@ class Task(Base):
     # Timeline
     due_date       = Column(DateTime, nullable=True)
     completed_at   = Column(DateTime, nullable=True)
+    # Approval flow — cofounder-proposed tasks need sign-off before activation
+    requires_approval = Column(Boolean, default=False)
+    approved_at    = Column(DateTime, nullable=True)
     # Context
     thread_id      = Column(String(100), nullable=True)        # chat thread that spawned this
     created_at     = Column(DateTime, default=datetime.utcnow)

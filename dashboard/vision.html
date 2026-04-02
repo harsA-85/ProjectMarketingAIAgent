@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Vision — Marketing AI</title>
+<title>Vision — Axel</title>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{--bg:#f5f5f7;--surface:#fff;--surface-2:#f2f2f7;--sidebar-bg:#fafafa;--text-1:#1c1c1e;--text-2:#6e6e73;--text-3:#aeaeb2;--accent:#007aff;--accent-dim:rgba(0,122,255,0.1);--success:#30d158;--warning:#ff9f0a;--danger:#ff453a;--border:rgba(0,0,0,0.07);--border-strong:rgba(0,0,0,0.12);--r:12px;--r-sm:8px;--r-lg:16px;--shadow-sm:0 1px 3px rgba(0,0,0,0.05),0 2px 8px rgba(0,0,0,0.04);--shadow-lg:0 8px 32px rgba(0,0,0,0.1),0 2px 8px rgba(0,0,0,0.06)}
@@ -13,7 +13,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',sy
 .sidebar{width:228px;background:var(--sidebar-bg);border-right:1px solid var(--border);display:flex;flex-direction:column;flex-shrink:0}
 .sidebar-header{padding:18px 16px 12px}
 .brand{display:flex;align-items:center;gap:10px}
-.brand-icon{width:36px;height:36px;border-radius:10px;background:linear-gradient(135deg,#007aff,#5856d6);display:flex;align-items:center;justify-content:center;font-size:18px}
+.brand-icon{width:36px;height:36px;border-radius:10px;background:linear-gradient(135deg,#ff6b35,#ff3b30);display:flex;align-items:center;justify-content:center;font-size:18px}
 .brand-name{font-size:15px;font-weight:700;color:var(--text-1);letter-spacing:-0.3px}
 .brand-sub{font-size:10px;color:var(--text-3);font-weight:500}
 .sidebar-nav{flex:1;padding:4px 10px}
@@ -70,9 +70,15 @@ body{font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',sy
 .chat-header-name{font-size:14px;font-weight:700;color:var(--text-1)}
 .chat-header-role{font-size:11px;color:var(--text-3)}
 .chat-messages{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:10px;min-height:0}
-.chat-msg{max-width:88%;padding:10px 14px;border-radius:14px;font-size:13px;line-height:1.5;word-wrap:break-word;white-space:pre-wrap}
-.chat-msg.user{align-self:flex-end;background:var(--accent);color:#fff;border-bottom-right-radius:4px}
+.chat-msg{max-width:88%;padding:10px 14px;border-radius:14px;font-size:13px;line-height:1.5;word-wrap:break-word}
+.chat-msg.user{align-self:flex-end;background:var(--accent);color:#fff;border-bottom-right-radius:4px;white-space:pre-wrap}
 .chat-msg.ai{align-self:flex-start;background:var(--surface-2);color:var(--text-1);border-bottom-left-radius:4px}
+.chat-msg.ai ul{margin:5px 0 5px 16px;padding:0}
+.chat-msg.ai li{margin-bottom:2px}
+.chat-msg.ai strong{font-weight:700}
+.chat-msg.ai em{font-style:italic}
+.chat-msg.ai .ai-h2{font-weight:700;font-size:13px;margin:9px 0 3px;display:block}
+.chat-msg.ai .ai-h3{font-weight:600;font-size:12px;color:var(--text-2);margin:7px 0 2px;display:block}
 .chat-msg .v-label{font-size:10px;font-weight:700;color:#ff6b35;margin-bottom:3px}
 .chat-msg .bubble-time{font-size:9px;color:var(--text-3);margin-top:4px;text-align:right}
 .chat-msg.user .bubble-time{color:rgba(255,255,255,0.5)}
@@ -80,14 +86,31 @@ body{font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',sy
 .chat-typing span{animation:blink 1.2s infinite}.chat-typing span:nth-child(2){animation-delay:.2s}.chat-typing span:nth-child(3){animation-delay:.4s}
 @keyframes blink{0%,80%,100%{opacity:.2}40%{opacity:1}}
 .chat-input-bar{padding:12px;border-top:1px solid var(--border);display:flex;gap:8px;background:var(--surface)}
-.chat-input{flex:1;border:1px solid var(--border);border-radius:10px;padding:8px 12px;font-size:13px;outline:none;background:var(--surface-2);color:var(--text-1);font-family:inherit}
+.chat-input{flex:1;border:1px solid var(--border);border-radius:10px;padding:8px 12px;font-size:13px;outline:none;background:var(--surface-2);color:var(--text-1);font-family:inherit;resize:none;overflow-y:hidden;min-height:36px;max-height:160px;line-height:1.5;display:block}
 .chat-input:focus{border-color:var(--accent)}
-.chat-send{width:36px;height:36px;border-radius:10px;background:var(--accent);color:#fff;border:none;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center}
+.chat-send{width:36px;height:36px;border-radius:10px;background:var(--accent);color:#fff;border:none;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;align-self:flex-end}
 .chat-send:hover{background:#0062d6}.chat-send:disabled{opacity:.4}
+.attach-btn{width:32px;height:32px;border-radius:8px;border:none;background:none;color:var(--text-3);font-size:17px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;align-self:flex-end;transition:color .15s}
+.attach-btn:hover{color:var(--accent)}
+.attachment-preview{display:none;padding:6px 12px 0;gap:6px;flex-wrap:wrap}
+.attachment-preview.has-item{display:flex}
+.att-pill{display:flex;align-items:center;gap:5px;padding:4px 10px;background:var(--accent-dim);border:1px solid var(--accent);border-radius:100px;font-size:11px;color:var(--accent);font-weight:600;max-width:180px}
+.att-pill img{width:20px;height:20px;object-fit:cover;border-radius:3px}
+.att-pill .att-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.att-remove{cursor:pointer;opacity:.6;font-size:13px;line-height:1}
+.att-remove:hover{opacity:1}
 
-/* ── VISION UPDATED CARD ── */
-.vision-card{margin-top:8px;padding:8px 12px;background:rgba(88,86,214,0.06);border:1px solid rgba(88,86,214,0.15);border-radius:var(--r-sm);font-size:11px;color:#5856d6}
-.vision-card-label{font-weight:700;text-transform:uppercase;font-size:9px;letter-spacing:0.5px;margin-bottom:3px}
+/* ── VISION PROPOSAL CARD ── */
+.vision-card{margin-top:8px;padding:12px 14px;background:rgba(255,149,0,0.06);border:1px solid rgba(255,149,0,0.3);border-radius:var(--r-sm);font-size:12px;color:var(--text-1)}
+.vision-card-label{font-weight:700;text-transform:uppercase;font-size:9px;letter-spacing:0.5px;color:var(--warning);margin-bottom:8px;display:flex;align-items:center;gap:5px}
+.vision-diff-row{margin-bottom:6px;padding:6px 8px;background:var(--surface);border-radius:6px;border:1px solid var(--border)}
+.vision-diff-key{font-size:10px;font-weight:700;color:var(--text-3);text-transform:uppercase;margin-bottom:2px}
+.vision-diff-val{font-size:12px;color:var(--text-1);line-height:1.4;max-height:80px;overflow-y:auto}
+.vision-proposal-actions{display:flex;gap:8px;margin-top:10px}
+.btn-apply{background:var(--success);color:#fff;border:none;border-radius:8px;padding:6px 16px;font-size:12px;font-weight:700;cursor:pointer}
+.btn-apply:hover{background:#25a244}
+.btn-discard{background:none;color:var(--text-2);border:1px solid var(--border);border-radius:8px;padding:6px 14px;font-size:12px;font-weight:600;cursor:pointer}
+.btn-discard:hover{background:var(--surface-2)}
 
 .btn{border:none;border-radius:var(--r-sm);font-family:inherit;font-weight:600;cursor:pointer;transition:all .15s}
 .btn-primary{background:var(--accent);color:#fff;padding:7px 14px;font-size:12px}.btn-primary:hover{background:#0062d6}
@@ -102,7 +125,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',sy
 <body>
 <div class="app">
     <nav class="sidebar">
-        <div class="sidebar-header"><div class="brand"><div class="brand-icon">🤖</div><div><div class="brand-name">Marketing AI</div><div class="brand-sub">Command Center</div></div></div></div>
+        <div class="sidebar-header"><div class="brand"><div class="brand-icon">⚡</div><div><div class="brand-name">Axel</div><div class="brand-sub">Unicorn in Progress</div></div></div></div>
         <div class="sidebar-nav">
             <div class="nav-section">Workspace</div>
             <a class="nav-item" href="/"><span class="ni">⬡</span> All Agents</a>
@@ -168,18 +191,21 @@ body{font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',sy
                 <div class="chat-header">
                     <div class="chat-avatar">🚀</div>
                     <div>
-                        <div class="chat-header-name">Marc Andersen</div>
+                        <div class="chat-header-name">Marc Andreessen</div>
                         <div class="chat-header-role">Cofounder & Chief Strategist</div>
                     </div>
                 </div>
                 <div class="chat-messages" id="chat-messages">
                     <div class="chat-msg ai">
-                        <div class="v-label">Marc Andersen</div>
+                        <div class="v-label">Marc Andreessen</div>
                         Hey. Let's shape the vision. Tell me: what problem are you solving, and why are you the right team to solve it? Don't give me the polished version — give me the raw truth. We'll refine from there.
                     </div>
                 </div>
+                <input type="file" id="chat-file-input" accept="image/*,.pdf,.txt,.md" style="display:none" onchange="handleFileSelect(this,'chat')">
+                <div class="attachment-preview" id="chat-attachment-preview"></div>
                 <div class="chat-input-bar">
-                    <input class="chat-input" id="chat-input" placeholder="Discuss the vision with Marc..." autocomplete="off">
+                    <button class="attach-btn" onclick="document.getElementById('chat-file-input').click()" title="Attach file">📎</button>
+                    <textarea class="chat-input" id="chat-input" placeholder="Discuss the vision with Marc… (Ctrl+Enter to send)" rows="1" autocomplete="off"></textarea>
                     <button class="chat-send" id="chat-send-btn" onclick="sendChat()">➤</button>
                 </div>
             </div>
@@ -192,8 +218,118 @@ body{font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',sy
 let visionData = { mission:'', vision_statement:'', values:[], milestones:[], okrs:[] };
 let chatThreadId = null;
 
+/* ── ATTACHMENT STATE ── */
+let _msgAttachment = null;
+
+function handleFileSelect(input, prefix) {
+    const file = input.files[0];
+    if (!file) return;
+    input.value = '';
+    _loadAttachment(file, prefix);
+}
+
+function _loadAttachment(file, prefix) {
+    const reader = new FileReader();
+    reader.onload = e => {
+        const dataUrl = e.target.result;
+        _msgAttachment = { data: dataUrl.split(',')[1], mime: file.type, name: file.name, previewUrl: dataUrl };
+        _renderAttachmentPreview(prefix);
+    };
+    reader.readAsDataURL(file);
+}
+
+function _renderAttachmentPreview(prefix) {
+    const bar = document.getElementById(`${prefix}-attachment-preview`);
+    if (!bar || !_msgAttachment) return;
+    const isImg = _msgAttachment.mime.startsWith('image/');
+    bar.className = 'attachment-preview has-item';
+    bar.innerHTML = `<div class="att-pill">
+        ${isImg ? `<img src="${_msgAttachment.previewUrl}" alt="">` : '📄'}
+        <span class="att-name">${esc(_msgAttachment.name)}</span>
+        <span class="att-remove" onclick="_clearAttachment('${prefix}')">×</span>
+    </div>`;
+}
+
+function _clearAttachment(prefix) {
+    _msgAttachment = null;
+    const bar = document.getElementById(`${prefix}-attachment-preview`);
+    if (bar) { bar.className = 'attachment-preview'; bar.innerHTML = ''; }
+}
+
 function esc(s){const d=document.createElement('div');d.textContent=String(s||'');return d.innerHTML}
+
+function formatAI(raw) {
+    let text = String(raw || '').replace(/```[\w_]*\s*[\s\S]*?```/g, '').trim();
+    function inline(s) {
+        const d = document.createElement('div');
+        d.textContent = s;
+        let h = d.innerHTML;
+        h = h.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+        h = h.replace(/\*([^*\n]+?)\*/g, '<em>$1</em>');
+        return h;
+    }
+    const lines = text.split('\n');
+    let html = '', inList = false;
+    for (const line of lines) {
+        const bullet = line.match(/^[-*•]\s+(.*)/);
+        const h2    = line.match(/^##\s+(.*)/);
+        const h3    = line.match(/^###\s+(.*)/);
+        if (bullet) {
+            if (!inList) { html += '<ul>'; inList = true; }
+            html += `<li>${inline(bullet[1])}</li>`;
+        } else {
+            if (inList) { html += '</ul>'; inList = false; }
+            if (line.trim() === '') {
+                html += '<br>';
+            } else if (h3) {
+                html += `<span class="ai-h3">${inline(h3[1])}</span>`;
+            } else if (h2) {
+                html += `<span class="ai-h2">${inline(h2[1])}</span>`;
+            } else {
+                html += inline(line) + '<br>';
+            }
+        }
+    }
+    if (inList) html += '</ul>';
+    return html.replace(/(<br>)+$/, '');
+}
+
 function toast(msg,type='success'){const t=document.createElement('div');t.className='toast '+type;t.textContent=msg;document.getElementById('toasts').appendChild(t);setTimeout(()=>t.remove(),3000)}
+
+/* ── VISION PROPOSALS ── */
+const _visionProposals = {};   // id → proposal data
+
+async function applyVisionProposal(id, btn) {
+    const proposal = _visionProposals[id];
+    if (!proposal) return;
+    btn.disabled = true;
+    btn.textContent = 'Applying…';
+    try {
+        const r = await fetch('/api/vision/apply', {
+            method: 'POST',
+            headers: {'Content-Type':'application/json'},
+            body: JSON.stringify(proposal)
+        });
+        if (r.ok) {
+            btn.closest('.chat-msg').innerHTML =
+                '<div class="vision-card" style="border-color:var(--success);background:rgba(48,209,88,0.06)">' +
+                '<div class="vision-card-label" style="color:var(--success)">✓ Vision Applied</div>' +
+                (proposal.mission ? `<div style="font-size:12px;color:var(--text-2)">${esc(proposal.mission)}</div>` : '') +
+                '</div>';
+            delete _visionProposals[id];
+            loadVision();
+            toast('Vision updated!', 'success');
+        } else {
+            toast('Failed to apply vision', 'error');
+            btn.disabled = false;
+            btn.textContent = '✓ Apply Changes';
+        }
+    } catch(e) {
+        toast('Connection error', 'error');
+        btn.disabled = false;
+        btn.textContent = '✓ Apply Changes';
+    }
+}
 
 /* ── LOAD VISION ── */
 async function loadVision() {
@@ -292,7 +428,7 @@ function appendMsg(role, text) {
     const div = document.createElement('div');
     div.className = 'chat-msg ' + role;
     if (role === 'ai') {
-        div.innerHTML = '<div class="v-label">Marc Andersen</div>' + esc(text).replace(/\n/g,'<br>');
+        div.innerHTML = '<div class="v-label">Marc Andreessen</div>' + formatAI(text);
     } else {
         div.textContent = text;
     }
@@ -303,9 +439,29 @@ function appendMsg(role, text) {
 async function sendChat() {
     const input = document.getElementById('chat-input');
     const msg = input.value.trim();
-    if (!msg) return;
+    if (!msg && !_msgAttachment) return;
     input.value = '';
-    appendMsg('user', msg);
+    input.style.height = 'auto';
+    const _sentAttachment = _msgAttachment;
+    _clearAttachment('chat');
+    // Show user message with optional image preview
+    if (_sentAttachment) {
+        const msgs = document.getElementById('chat-messages');
+        const div = document.createElement('div');
+        div.className = 'chat-msg user';
+        let html = '';
+        if (_sentAttachment.mime.startsWith('image/')) {
+            html += `<img src="${_sentAttachment.previewUrl}" style="max-width:200px;max-height:160px;border-radius:8px;display:block;margin-bottom:${msg ? '6px' : '0'}">`;
+        } else {
+            html += `<div style="font-size:11px;opacity:0.8;margin-bottom:4px">📎 ${esc(_sentAttachment.name)}</div>`;
+        }
+        if (msg) html += esc(msg);
+        div.innerHTML = html;
+        msgs.appendChild(div);
+        msgs.scrollTop = msgs.scrollHeight;
+    } else {
+        appendMsg('user', msg);
+    }
 
     const msgs = document.getElementById('chat-messages');
     const typing = document.createElement('div');
@@ -323,7 +479,8 @@ async function sendChat() {
                 entity_type: 'team_member',
                 entity_key: 'cofounder',
                 thread_id: chatThreadId || '',
-                message: msg
+                message: msg,
+                attachment: _sentAttachment ? { data: _sentAttachment.data, mime: _sentAttachment.mime, name: _sentAttachment.name } : null
             })
         });
         typing.remove();
@@ -331,16 +488,31 @@ async function sendChat() {
         if (r.ok) {
             appendMsg('ai', data.reply);
             if (data.thread_id) chatThreadId = data.thread_id;
-            // If vision was updated by the cofounder
-            if (data.vision_updated) {
-                const vu = data.vision_updated;
+            // If Marc proposed a vision change — show preview, require approval
+            if (data.vision_proposed) {
+                const vp = data.vision_proposed;
+                const pid = 'vp' + Date.now();
+                _visionProposals[pid] = vp;   // store in global map
+
+                let diffHtml = '';
+                if (vp.mission) diffHtml += `<div class="vision-diff-row"><div class="vision-diff-key">Mission</div><div class="vision-diff-val">${esc(vp.mission)}</div></div>`;
+                if (vp.vision_statement) diffHtml += `<div class="vision-diff-row"><div class="vision-diff-key">Vision Statement</div><div class="vision-diff-val">${esc(vp.vision_statement)}</div></div>`;
+                if (vp.values && vp.values.length) diffHtml += `<div class="vision-diff-row"><div class="vision-diff-key">Values (${vp.values.length})</div><div class="vision-diff-val">${vp.values.map(v=>esc(v)).join(' · ')}</div></div>`;
+                if (vp.milestones && vp.milestones.length) diffHtml += `<div class="vision-diff-row"><div class="vision-diff-key">Milestones (${vp.milestones.length})</div><div class="vision-diff-val">${vp.milestones.map(m=>esc(m.title||m)).join('<br>')}</div></div>`;
+
                 const card = document.createElement('div');
                 card.className = 'chat-msg ai';
-                card.innerHTML = `<div class="vision-card"><div class="vision-card-label">Vision Updated</div>${vu.mission ? 'Mission: ' + esc(vu.mission) : 'Vision document updated'}</div>`;
+                card.id = pid;
+                card.innerHTML = `<div class="vision-card">
+                    <div class="vision-card-label">⚠️ Marc wants to update the Vision</div>
+                    ${diffHtml}
+                    <div class="vision-proposal-actions">
+                        <button class="btn-apply" onclick="applyVisionProposal('${pid}', this)">✓ Apply Changes</button>
+                        <button class="btn-discard" onclick="delete _visionProposals['${pid}'];this.closest('.chat-msg').remove()">Discard</button>
+                    </div>
+                </div>`;
                 msgs.appendChild(card);
                 msgs.scrollTop = msgs.scrollHeight;
-                loadVision(); // Refresh the left panel
-                toast('Vision updated by Marc!', 'success');
             }
         } else {
             appendMsg('ai', data.error || 'Something went wrong.');
@@ -355,14 +527,66 @@ async function sendChat() {
 }
 
 document.addEventListener('keydown', e => {
-    if (e.key === 'Enter' && !e.shiftKey && document.activeElement?.id === 'chat-input') {
-        e.preventDefault();
-        sendChat();
+    if (e.key === 'Enter' && document.activeElement?.id === 'chat-input') {
+        if (e.ctrlKey || e.metaKey) {
+            // Ctrl+Enter (or Cmd+Enter on Mac) → send
+            e.preventDefault();
+            sendChat();
+        }
+        // plain Enter → new line (default textarea behaviour)
     }
 });
 
+/* ── PASTE IMAGE ── */
+document.addEventListener('paste', e => {
+    if (document.activeElement?.id !== 'chat-input') return;
+    const items = Array.from(e.clipboardData?.items || []);
+    const imgItem = items.find(i => i.type.startsWith('image/'));
+    if (!imgItem) return;
+    e.preventDefault();
+    const file = imgItem.getAsFile();
+    if (file) _loadAttachment(file, 'chat');
+});
+
+/* ── AUTO-GROW TEXTAREA ── */
+document.addEventListener('input', e => {
+    if (e.target?.id === 'chat-input') {
+        const ta = e.target;
+        ta.style.height = 'auto';
+        ta.style.height = Math.min(ta.scrollHeight, 160) + 'px';
+    }
+});
+
+/* ── LOAD CONVERSATION HISTORY ── */
+async function loadChatHistory() {
+    try {
+        const r = await fetch('/api/inbox/thread_for_entity?entity_type=team_member&entity_key=cofounder');
+        if (!r.ok) return;
+        const data = await r.json();
+        if (!data.messages || data.messages.length === 0) return;
+        chatThreadId = data.thread_id;
+        const msgs = document.getElementById('chat-messages');
+        // Clear the default welcome message only if we have real history
+        msgs.innerHTML = '';
+        data.messages.forEach(m => {
+            const isUser = m.from_type === 'user';
+            const div = document.createElement('div');
+            div.className = 'chat-msg ' + (isUser ? 'user' : 'ai');
+            if (!isUser) {
+                div.innerHTML = '<div class="v-label">Marc Andreessen</div>' + formatAI(m.body);
+            } else {
+                div.textContent = m.body;
+            }
+            msgs.appendChild(div);
+        });
+        msgs.scrollTop = msgs.scrollHeight;
+    } catch(e) {}
+}
+
 /* ── INIT ── */
 loadVision();
+loadChatHistory();
 </script>
+<script src="/js/marc.js"></script>
 </body>
 </html>

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Marketing AI — Dashboard</title>
+    <title>Axel — Dashboard</title>
     <style>
         :root {
             --bg: #f5f5f7;
@@ -662,10 +662,10 @@
     <nav class="sidebar">
         <div class="sidebar-header">
             <div class="brand">
-                <div class="brand-icon">🤖</div>
+                <div class="brand-icon">⚡</div>
                 <div class="brand-text">
-                    <div class="brand-name">Marketing AI</div>
-                    <div class="brand-sub">Command Center</div>
+                    <div class="brand-name">Axel</div>
+                    <div class="brand-sub">Unicorn in Progress</div>
                 </div>
             </div>
         </div>
@@ -696,7 +696,7 @@
                 <span class="tl yellow"></span>
                 <span class="tl green"></span>
             </div>
-            <div class="topbar-center">Marketing AI</div>
+            <div class="topbar-center">Axel</div>
             <div class="topbar-right">
                 <div class="search-wrap">
                     <span class="search-icon">🔍</span>
@@ -1040,7 +1040,7 @@
                 <div class="sidebar-stat-row"><span class="ssl">Agents</span><span class="ssv">${data.total_agents}</span></div>
                 <div class="sidebar-stat-row"><span class="ssl">Posts</span><span class="ssv">${data.total_posts}</span></div>
                 <div class="sidebar-stat-row"><span class="ssl">Interactions</span><span class="ssv">${data.total_interactions}</span></div>
-                <div class="sidebar-ver">Marketing AI v1.0</div>
+                <div class="sidebar-ver">Axel v1.0</div>
             `;
 
             renderCards(allAgents);
@@ -1222,5 +1222,6 @@
     async function clickNotif(id,link){try{await fetch('/api/notifications/read',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ids:[id]})});}catch(e){}if(link)window.location=link;else{loadNotifications();document.getElementById('notif-panel').classList.remove('open');}}
     async function markAllRead(){try{await fetch('/api/notifications/read',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({})});}catch(e){}loadNotifications();}
 </script>
+<script src="/js/marc.js"></script>
 </body>
 </html>

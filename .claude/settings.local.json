@@ -9,7 +9,10 @@
       "Bash(python -m pip install -q schedule python-dotenv)",
       "Bash(python:*)",
       "Bash(curl -s http://localhost:5000/api/agents)",
-      "Bash(pkill -f \"python app.py\")"
+      "Bash(pkill -f \"python app.py\")",
+      "Bash(curl -sI http://localhost:5000/agent-detail.html)",
+      "mcp__Claude_Preview__preview_start",
+      "Bash(python -c \":*)"
     ]
   }
 }

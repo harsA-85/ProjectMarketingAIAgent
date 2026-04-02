@@ -37,12 +37,13 @@ def run_signal(db, workflow_run, topics: list = None) -> TrendReport:
         )
         db.add(report)
 
+        ap_count = len(result.get('anchor_points', []))
         step_log.status = 'completed'
         step_log.completed_at = datetime.utcnow()
-        step_log.output_summary = f"{len(report.anchor_points)} anchor points generated"
+        step_log.output_summary = f"{ap_count} anchor points generated"
         db.commit()
 
-        log.info(f"[Step1:Signal] ✅ {len(report.anchor_points)} anchor points")
+        log.info(f"[Step1:Signal] ✅ {ap_count} anchor points")
         return report
 
     except Exception as e:

@@ -41,20 +41,67 @@ class TeamRole:
         """Call LLM and parse the response as JSON."""
         import re
         raw = self.call_llm(prompt, max_tokens)
-        # Strip markdown code fences
-        cleaned = re.sub(r'```(?:json)?\s*', '', raw).strip().rstrip('`').strip()
+
+        # ── Strategy 1: extract content inside ```...``` fences ──────────
+        fence_match = re.search(r'```(?:json)?\s*\n?([\s\S]*?)```', raw)
+        if fence_match:
+            try:
+                return json.loads(fence_match.group(1).strip())
+            except json.JSONDecodeError:
+                pass
+
+        # ── Strategy 2: strip ALL fence markers and try full string ──────
+        cleaned = re.sub(r'```(?:json)?', '', raw).strip().strip('`').strip()
         try:
             return json.loads(cleaned)
         except json.JSONDecodeError:
-            # Try to find JSON object
-            match = re.search(r'\{.*\}', cleaned, re.DOTALL)
-            if match:
+            pass
+
+        # ── Strategy 3: bracket-matching for outermost { } ───────────────
+        def extract_by_bracket(s, open_c, close_c):
+            start = s.find(open_c)
+            if start == -1:
+                return None
+            depth = 0
+            in_string = False
+            escape = False
+            for i, ch in enumerate(s[start:], start):
+                if escape:
+                    escape = False
+                    continue
+                if ch == '\\' and in_string:
+                    escape = True
+                    continue
+                if ch == '"' and not escape:
+                    in_string = not in_string
+                if not in_string:
+                    if ch == open_c:
+                        depth += 1
+                    elif ch == close_c:
+                        depth -= 1
+                        if depth == 0:
+                            return s[start:i + 1]
+            return None
+
+        for opener, closer in [('{', '}'), ('[', ']')]:
+            chunk = extract_by_bracket(cleaned, opener, closer)
+            if chunk:
                 try:
-                    return json.loads(match.group())
+                    return json.loads(chunk)
                 except json.JSONDecodeError:
                     pass
-            log.warning(f"[{self.member.role_key}] Failed to parse JSON, returning raw text")
-            return {"raw_response": raw}
+
+        log.warning(f"[{self.member.role_key}] Failed to parse JSON, returning raw text")
+        return {"raw_response": raw}
+
+    def call_llm_with_search(self, prompt: str, max_tokens: int = 2000) -> str:
+        """Call LLM with live Google Search grounding (Gemini) for real-world intel."""
+        return self.llm.generate_with_search(
+            prompt=prompt,
+            system_prompt=self.member.system_prompt,
+            max_tokens=max_tokens,
+            temperature=self.member.temperature
+        )
 
     def execute(self, input_data: dict) -> dict:
         """Override in subclasses to perform role-specific work."""
@@ -70,12 +117,23 @@ class HeadOfIntelligence(TeamRole):
     def execute(self, input_data: dict) -> dict:
         topics = input_data.get('topics', [])
         topic_str = ', '.join(topics) if topics else 'real estate, PropTech, housing market, investment'
+
+        # Step 1: Search the web for live intelligence
+        search_prompt = (
+            f"Search for the latest breaking news, data, and trends about: {topic_str}.\n\n"
+            "Find: recent regulatory changes, new market data with specific numbers, "
+            "viral social media discussions, technology launches, and emerging consumer patterns. "
+            "Include publication names, dates, and specific statistics where available."
+        )
+        web_intel = self.call_llm_with_search(search_prompt, max_tokens=2000)
+
+        # Step 2: Synthesize into structured trend report
         prompt = (
-            f"Produce your daily Trend Report. Focus areas: {topic_str}.\n\n"
-            "Scan for: regulatory changes, market data shifts, viral social discussions, "
-            "technology disruptions, consumer behavior changes, and emerging patterns.\n\n"
-            "Deliver exactly 3 anchor points and a market context summary. "
-            "Each anchor point needs: topic, summary, data_points (specific numbers), "
+            f"You have just gathered this live intelligence from the web:\n\n{web_intel}\n\n"
+            f"Focus areas: {topic_str}.\n\n"
+            "Using ONLY verified, real data from the above intel, produce a Trend Report.\n"
+            "Deliver exactly 3 anchor points with real data. "
+            "Each anchor point: topic, summary, data_points (real specific numbers/stats), "
             "relevance_score (1-10), content_angle_suggestion.\n\n"
             "Respond in JSON: {anchor_points: [...], market_context: '...', raw_signals: [...]}"
         )

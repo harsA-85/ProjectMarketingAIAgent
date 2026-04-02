@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Inbox — Marketing AI</title>
+<title>Inbox — Axel</title>
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 :root {
@@ -27,7 +27,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe 
 .sidebar { width: 228px; background: var(--sidebar-bg); border-right: 1px solid var(--border); display: flex; flex-direction: column; flex-shrink: 0; }
 .sidebar-header { padding: 18px 16px 12px; }
 .brand { display: flex; align-items: center; gap: 10px; }
-.brand-icon { width: 36px; height: 36px; border-radius: 10px; background: linear-gradient(135deg, #007aff, #5856d6); display: flex; align-items: center; justify-content: center; font-size: 18px; }
+.brand-icon { width: 36px; height: 36px; border-radius: 10px; background: linear-gradient(135deg, #ff6b35, #ff3b30); display: flex; align-items: center; justify-content: center; font-size: 18px; }
 .brand-name { font-size: 15px; font-weight: 700; color: var(--text-1); letter-spacing: -0.3px; }
 .brand-sub { font-size: 10px; color: var(--text-3); font-weight: 500; }
 .sidebar-nav { flex: 1; padding: 4px 10px; }
@@ -87,20 +87,35 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe 
 .msg-header-name { font-size: 14px; font-weight: 700; color: var(--text-1); }
 .msg-header-role { font-size: 11px; color: var(--text-3); }
 .msg-messages { flex: 1; overflow-y: auto; padding: 20px 24px; display: flex; flex-direction: column; gap: 12px; min-height: 0; }
-.msg-bubble { max-width: 72%; padding: 12px 16px; border-radius: 18px; font-size: 13px; line-height: 1.6; word-wrap: break-word; white-space: pre-wrap; }
-.msg-bubble.user { align-self: flex-end; background: var(--accent); color: #fff; border-bottom-right-radius: 4px; box-shadow: 0 1px 4px rgba(0,122,255,0.18); }
+.msg-bubble { max-width: 72%; padding: 12px 16px; border-radius: 18px; font-size: 13px; line-height: 1.6; word-wrap: break-word; }
+.msg-bubble.user { align-self: flex-end; background: var(--accent); color: #fff; border-bottom-right-radius: 4px; box-shadow: 0 1px 4px rgba(0,122,255,0.18); white-space: pre-wrap; }
 .msg-bubble.ai { align-self: flex-start; background: var(--surface); color: var(--text-1); border: 1px solid var(--border); border-bottom-left-radius: 4px; box-shadow: var(--shadow-sm); max-width: 80%; }
+.msg-bubble.ai ul { margin: 6px 0 6px 18px; padding: 0; }
+.msg-bubble.ai li { margin-bottom: 3px; }
+.msg-bubble.ai strong { font-weight: 700; }
+.msg-bubble.ai em { font-style: italic; }
+.msg-bubble.ai .ai-h2 { font-weight: 700; font-size: 13px; margin: 10px 0 4px; display: block; }
+.msg-bubble.ai .ai-h3 { font-weight: 600; font-size: 12px; color: var(--text-2); margin: 8px 0 3px; display: block; }
 .msg-bubble .bubble-name { font-size: 10px; font-weight: 700; margin-bottom: 4px; display: flex; align-items: center; gap: 5px; }
 .msg-bubble.ai .bubble-name { color: #b36a00; }
 .msg-bubble .bubble-time { font-size: 9px; color: var(--text-3); margin-top: 6px; text-align: right; }
 .msg-bubble.user .bubble-time { color: rgba(255,255,255,0.5); }
 .msg-bubble.ai .bubble-text { color: var(--text-1); }
 .msg-input-bar { padding: 12px 20px; border-top: 1px solid var(--border); display: flex; gap: 8px; background: var(--surface); flex-shrink: 0; }
-.msg-input { flex: 1; border: 1px solid var(--border); border-radius: 12px; padding: 10px 14px; font-size: 13px; outline: none; background: var(--surface-2); color: var(--text-1); font-family: inherit; resize: none; }
+.msg-input { flex: 1; border: 1px solid var(--border); border-radius: 12px; padding: 10px 14px; font-size: 13px; outline: none; background: var(--surface-2); color: var(--text-1); font-family: inherit; resize: none; overflow-y: hidden; min-height: 40px; max-height: 180px; line-height: 1.5; display: block; }
 .msg-input:focus { border-color: var(--accent); }
-.msg-send { width: 40px; height: 40px; border-radius: 12px; background: var(--accent); color: #fff; border: none; cursor: pointer; font-size: 17px; display: flex; align-items: center; justify-content: center; transition: background 0.15s; flex-shrink: 0; }
+.msg-send { width: 40px; height: 40px; border-radius: 12px; background: var(--accent); color: #fff; border: none; cursor: pointer; font-size: 17px; display: flex; align-items: center; justify-content: center; transition: background 0.15s; flex-shrink: 0; align-self: flex-end; }
 .msg-send:hover { background: #0062d6; }
 .msg-send:disabled { opacity: 0.4; cursor: default; }
+.attach-btn { width: 36px; height: 36px; border-radius: 10px; border: none; background: none; color: var(--text-3); font-size: 18px; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; align-self: flex-end; transition: color .15s; }
+.attach-btn:hover { color: var(--accent); }
+.attachment-preview { display: none; padding: 6px 20px 0; gap: 6px; flex-wrap: wrap; }
+.attachment-preview.has-item { display: flex; }
+.att-pill { display: flex; align-items: center; gap: 5px; padding: 4px 10px; background: var(--accent-dim); border: 1px solid var(--accent); border-radius: 100px; font-size: 11px; color: var(--accent); font-weight: 600; max-width: 200px; }
+.att-pill img { width: 22px; height: 22px; object-fit: cover; border-radius: 4px; }
+.att-pill .att-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.att-remove { cursor: pointer; opacity: 0.6; font-size: 14px; line-height: 1; }
+.att-remove:hover { opacity: 1; }
 .msg-typing { align-self: flex-start; padding: 10px 14px; background: var(--surface); border: 1px solid var(--border); border-radius: 16px; border-bottom-left-radius: 4px; font-size: 13px; color: var(--text-3); }
 .msg-typing span { animation: blink 1.2s infinite; }
 .msg-typing span:nth-child(2) { animation-delay: 0.2s; }
@@ -182,7 +197,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe 
 .task-item .task-row { display: flex; align-items: center; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
 .task-status { font-size: 9px; font-weight: 700; padding: 2px 7px; border-radius: 100px; text-transform: uppercase; letter-spacing: 0.3px; }
 .task-status.todo { background: var(--surface-2); color: var(--text-2); }
-.task-status.in_progress { background: rgba(0,122,255,0.1); color: var(--accent); }
+.task-status.in_progress { background: rgba(0,122,255,0.1); color: var(--accent); animation: task-pulse 1.5s ease-in-out infinite; }
+@keyframes task-pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.5; } }
 .task-status.done { background: rgba(48,209,88,0.1); color: var(--success); }
 .task-status.blocked { background: rgba(255,69,58,0.1); color: var(--danger); }
 .task-assignee { font-size: 10px; color: var(--text-2); display: flex; align-items: center; gap: 3px; }
@@ -216,10 +232,10 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe 
     <nav class="sidebar">
         <div class="sidebar-header">
             <div class="brand">
-                <div class="brand-icon">🤖</div>
+                <div class="brand-icon">⚡</div>
                 <div>
-                    <div class="brand-name">Marketing AI</div>
-                    <div class="brand-sub">Command Center</div>
+                    <div class="brand-name">Axel</div>
+                    <div class="brand-sub">Unicorn in Progress</div>
                 </div>
             </div>
         </div>
@@ -275,8 +291,11 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe 
                 <div id="msg-view" style="display:none;flex:1;flex-direction:column;overflow:hidden;min-height:0">
                     <div class="msg-header" id="msg-header"></div>
                     <div class="msg-messages" id="msg-messages"></div>
+                    <input type="file" id="msg-file-input" accept="image/*,.pdf,.txt,.md,.csv" style="display:none" onchange="handleFileSelect(this,'msg')">
+                    <div class="attachment-preview" id="msg-attachment-preview"></div>
                     <div class="msg-input-bar">
-                        <input class="msg-input" id="msg-input" placeholder="Type a message..." autocomplete="off">
+                        <button class="attach-btn" onclick="document.getElementById('msg-file-input').click()" title="Attach file">📎</button>
+                        <textarea class="msg-input" id="msg-input" placeholder="Type a message… (Ctrl+Enter to send)" rows="1" autocomplete="off"></textarea>
                         <button class="msg-send" id="msg-send-btn" onclick="sendMessage()">➤</button>
                     </div>
                 </div>
@@ -292,6 +311,13 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe 
                         <option value="in_progress">In Progress</option>
                         <option value="done">Done</option>
                     </select>
+                </div>
+                <!-- Pending approval from Marc -->
+                <div id="pending-approval-section" style="display:none;border-bottom:1px solid var(--border)">
+                    <div style="padding:8px 14px 4px;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--warning);display:flex;align-items:center;gap:5px">
+                        🚀 Marc's Proposals — Awaiting Your Approval
+                    </div>
+                    <div id="pending-approval-list"></div>
                 </div>
                 <div class="tasks-list" id="tasks-list">
                     <div style="padding:20px;text-align:center;color:var(--text-3);font-size:12px">No tasks yet</div>
@@ -330,8 +356,88 @@ let currentFilter = 'all';
 let teamMembers = [];
 let agentsList = [];
 
+/* ── ATTACHMENT STATE ── */
+let _msgAttachment = null;  // {data: base64, mime: str, name: str, previewUrl: str}
+
+function handleFileSelect(input, prefix) {
+    const file = input.files[0];
+    if (!file) return;
+    input.value = '';
+    _loadAttachment(file, prefix);
+}
+
+function _loadAttachment(file, prefix) {
+    const reader = new FileReader();
+    reader.onload = e => {
+        const dataUrl = e.target.result;
+        const base64 = dataUrl.split(',')[1];
+        _msgAttachment = { data: base64, mime: file.type, name: file.name, previewUrl: dataUrl };
+        _renderAttachmentPreview(prefix);
+    };
+    reader.readAsDataURL(file);
+}
+
+function _renderAttachmentPreview(prefix) {
+    const bar = document.getElementById(`${prefix}-attachment-preview`);
+    if (!bar || !_msgAttachment) return;
+    const isImg = _msgAttachment.mime.startsWith('image/');
+    bar.className = 'attachment-preview has-item';
+    bar.innerHTML = `<div class="att-pill">
+        ${isImg ? `<img src="${_msgAttachment.previewUrl}" alt="">` : '📄'}
+        <span class="att-name">${esc(_msgAttachment.name)}</span>
+        <span class="att-remove" onclick="_clearAttachment('${prefix}')">×</span>
+    </div>`;
+}
+
+function _clearAttachment(prefix) {
+    _msgAttachment = null;
+    const bar = document.getElementById(`${prefix}-attachment-preview`);
+    if (bar) { bar.className = 'attachment-preview'; bar.innerHTML = ''; }
+}
+
 /* ── HELPERS ── */
 function esc(s) { const d = document.createElement('div'); d.textContent = String(s || ''); return d.innerHTML; }
+
+function formatAI(raw) {
+    // Strip command/data blocks the AI embeds (```vision, ```tasks, ```workflow, ```hire, etc.)
+    let text = String(raw || '').replace(/```[\w_]*\s*[\s\S]*?```/g, '').trim();
+    // Helper: escape + inline markdown
+    function inline(s) {
+        const d = document.createElement('div');
+        d.textContent = s;
+        let h = d.innerHTML;
+        h = h.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+        h = h.replace(/\*([^*\n]+?)\*/g, '<em>$1</em>');
+        return h;
+    }
+    const lines = text.split('\n');
+    let html = '';
+    let inList = false;
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        const bullet = line.match(/^[-*•]\s+(.*)/);
+        const h2    = line.match(/^##\s+(.*)/);
+        const h3    = line.match(/^###\s+(.*)/);
+        if (bullet) {
+            if (!inList) { html += '<ul>'; inList = true; }
+            html += `<li>${inline(bullet[1])}</li>`;
+        } else {
+            if (inList) { html += '</ul>'; inList = false; }
+            if (line.trim() === '') {
+                html += '<br>';
+            } else if (h3) {
+                html += `<span class="ai-h3">${inline(h3[1])}</span>`;
+            } else if (h2) {
+                html += `<span class="ai-h2">${inline(h2[1])}</span>`;
+            } else {
+                html += inline(line) + '<br>';
+            }
+        }
+    }
+    if (inList) html += '</ul>';
+    html = html.replace(/(<br>)+$/, '');
+    return html;
+}
 function ago(iso) {
     if (!iso) return '';
     const d = (Date.now() - new Date(iso).getTime()) / 1000;
@@ -456,7 +562,7 @@ async function openThread(threadId) {
             <div class="msg-bubble ${isUser ? 'user' : 'ai'}">
                 ${!isUser ? `<div class="bubble-name">${esc(m.from_name)}</div>` : ''}
                 ${m.subject ? `<div style="font-weight:700;margin-bottom:4px">${esc(m.subject)}</div>` : ''}
-                ${esc(m.body)}
+                ${isUser ? esc(m.body) : formatAI(m.body)}
                 <div class="bubble-time">${ago(m.created_at)}</div>
             </div>`;
         }).join('');
@@ -475,13 +581,26 @@ async function openThread(threadId) {
 async function sendMessage() {
     const input = document.getElementById('msg-input');
     const msg = input.value.trim();
-    if (!msg || !currentEntity) return;
+    if (!msg && !_msgAttachment) return;
+    if (!currentEntity) return;
 
     input.value = '';
+    input.style.height = 'auto';
+    const _sentAttachment = _msgAttachment;
+    _clearAttachment('msg');
     const msgsEl = document.getElementById('msg-messages');
 
-    // Append user bubble
-    msgsEl.innerHTML += `<div class="msg-bubble user">${esc(msg)}<div class="bubble-time">now</div></div>`;
+    // Build user bubble (text + optional attachment preview)
+    let userBubbleContent = '';
+    if (_sentAttachment) {
+        if (_sentAttachment.mime.startsWith('image/')) {
+            userBubbleContent += `<img src="${_sentAttachment.previewUrl}" style="max-width:200px;max-height:160px;border-radius:8px;display:block;margin-bottom:${msg ? '6px' : '0'}">`;
+        } else {
+            userBubbleContent += `<div style="font-size:11px;opacity:0.8;margin-bottom:4px">📎 ${esc(_sentAttachment.name)}</div>`;
+        }
+    }
+    if (msg) userBubbleContent += esc(msg);
+    msgsEl.innerHTML += `<div class="msg-bubble user">${userBubbleContent}<div class="bubble-time">now</div></div>`;
     msgsEl.scrollTop = msgsEl.scrollHeight;
 
     // Typing indicator
@@ -501,7 +620,8 @@ async function sendMessage() {
                 entity_type: currentEntity.type,
                 entity_key: currentEntity.key,
                 thread_id: currentThreadId,
-                message: msg
+                message: msg,
+                attachment: _sentAttachment ? { data: _sentAttachment.data, mime: _sentAttachment.mime, name: _sentAttachment.name } : null
             })
         });
         typing.remove();
@@ -560,7 +680,7 @@ async function sendMessage() {
             msgsEl.innerHTML += `
             <div class="msg-bubble ai">
                 <div class="bubble-name">${esc(data.from_name)}</div>
-                ${esc(data.reply)}
+                ${formatAI(data.reply)}
                 ${taskHtml}
                 ${wfHtml}
                 ${hireHtml}
@@ -666,11 +786,35 @@ function startNewChat(entityType, entityKey, name, emoji, role) {
     document.getElementById('msg-input').focus();
 }
 
+/* ── PASTE IMAGE ── */
+document.addEventListener('paste', e => {
+    if (document.activeElement?.id !== 'msg-input') return;
+    const items = Array.from(e.clipboardData?.items || []);
+    const imgItem = items.find(i => i.type.startsWith('image/'));
+    if (!imgItem) return;
+    e.preventDefault();
+    const file = imgItem.getAsFile();
+    if (file) _loadAttachment(file, 'msg');
+});
+
 /* ── KEYBOARD ── */
 document.addEventListener('keydown', e => {
-    if (e.key === 'Enter' && !e.shiftKey && document.activeElement?.id === 'msg-input') {
-        e.preventDefault();
-        sendMessage();
+    if (e.key === 'Enter' && document.activeElement?.id === 'msg-input') {
+        if (e.ctrlKey || e.metaKey) {
+            // Ctrl+Enter (Cmd+Enter on Mac) → send
+            e.preventDefault();
+            sendMessage();
+        }
+        // plain Enter → new line (default textarea behaviour)
+    }
+});
+
+/* ── AUTO-GROW TEXTAREA ── */
+document.addEventListener('input', e => {
+    if (e.target?.id === 'msg-input') {
+        const ta = e.target;
+        ta.style.height = 'auto';
+        ta.style.height = Math.min(ta.scrollHeight, 180) + 'px';
     }
 });
 
@@ -684,15 +828,84 @@ function toggleTasksPanel() {
     if (_tasksPanelOpen) loadTasks();
 }
 
+async function loadPendingApprovals() {
+    try {
+        const r = await fetch('/api/tasks/pending_approval');
+        if (!r.ok) return;
+        const data = await r.json();
+        const all = data.tasks || [];
+        const pending  = all.filter(t => t.status !== 'rejected');
+        const rejected = all.filter(t => t.status === 'rejected');
+        const section = document.getElementById('pending-approval-section');
+        const list    = document.getElementById('pending-approval-list');
+        if (!all.length) { section.style.display = 'none'; return; }
+        section.style.display = 'block';
+        const prioColor = {urgent:'#ff453a',high:'#ff9f0a',medium:'#007aff',low:'#aeaeb2'};
+
+        function taskRow(t) {
+            const isRejected = t.status === 'rejected';
+            return `
+            <div style="padding:10px 14px;border-bottom:1px solid var(--border);${isRejected ? 'opacity:0.55' : ''}">
+                <div style="display:flex;align-items:flex-start;gap:8px;margin-bottom:6px">
+                    <div style="width:3px;border-radius:2px;background:${isRejected ? 'var(--text-3)' : (prioColor[t.priority]||'#aeaeb2')};align-self:stretch;flex-shrink:0"></div>
+                    <div style="flex:1;min-width:0">
+                        <div style="font-size:12px;font-weight:600;color:var(--text-1);margin-bottom:2px;${isRejected ? 'text-decoration:line-through' : ''}">${esc(t.title)}</div>
+                        ${t.description ? `<div style="font-size:11px;color:var(--text-2);line-height:1.4;margin-bottom:4px">${esc(t.description)}</div>` : ''}
+                        <div style="font-size:10px;color:var(--text-3)">→ ${esc(t.assignee_name)} · ${t.priority}</div>
+                    </div>
+                </div>
+                <div style="display:flex;gap:6px;padding-left:11px">
+                    ${isRejected
+                        ? `<button onclick="approveProposedTask(${t.id},this)" style="flex:1;padding:5px;font-size:11px;font-weight:600;border:1px solid var(--border);border-radius:6px;background:none;color:var(--text-2);cursor:pointer">↩ Reopen</button>`
+                        : `<button onclick="approveProposedTask(${t.id},this)" style="flex:1;padding:5px;font-size:11px;font-weight:600;border:none;border-radius:6px;background:var(--success);color:#fff;cursor:pointer">✓ Approve</button>
+                           <button onclick="rejectProposedTask(${t.id},this)" style="flex:1;padding:5px;font-size:11px;font-weight:600;border:1px solid var(--border);border-radius:6px;background:none;color:var(--text-2);cursor:pointer">✕ Not now</button>`
+                    }
+                </div>
+            </div>`;
+        }
+
+        let html = pending.map(taskRow).join('');
+        if (rejected.length) {
+            html += `<div style="padding:6px 14px 2px;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:var(--text-3)">Not now — can reopen</div>`;
+            html += rejected.map(taskRow).join('');
+        }
+        list.innerHTML = html;
+    } catch(e) {}
+}
+
+async function approveProposedTask(id, btn) {
+    btn.disabled = true; btn.textContent = '⏳ Dispatching…';
+    try {
+        const r = await fetch(`/api/tasks/${id}/approve`, { method: 'POST' });
+        const data = await r.json();
+        btn.textContent = '✅ Working…';
+        btn.style.background = 'var(--success)'; btn.style.color = '#fff';
+        toast('Task approved — team member is working on it now!', 'success');
+        loadPendingApprovals(); loadTasks();
+        // Auto-refresh tasks after 10s, 30s, 60s to show completion
+        [10000, 30000, 60000].forEach(ms => setTimeout(() => loadTasks(), ms));
+    } catch(e) { toast('Failed to approve', 'error'); btn.textContent = '✓ Approve'; btn.disabled = false; }
+}
+
+async function rejectProposedTask(id, btn) {
+    btn.disabled = true; btn.textContent = '...';
+    try {
+        await fetch(`/api/tasks/${id}/reject`, { method: 'POST' });
+        toast('Saved for later', 'success');
+        loadPendingApprovals();
+    } catch(e) { toast('Failed', 'error'); }
+}
+
 async function loadTasks() {
     const list = document.getElementById('tasks-list');
     const status = document.getElementById('task-filter').value;
+    loadPendingApprovals();
     try {
         const url = `/api/tasks?${status ? 'status=' + status : ''}&_t=${Date.now()}`;
         const r = await fetch(url);
         if (!r.ok) return;
         const data = await r.json();
-        const tasks = data.tasks || [];
+        const tasks = (data.tasks || []).filter(t => !t.requires_approval || t.approved_at);
         if (!tasks.length) {
             list.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-3);font-size:12px">No tasks yet.<br>Chat with a team member to create tasks!</div>';
             return;
@@ -796,10 +1009,30 @@ function rejectHire(idx, btn) {
 }
 
 /* ── INIT ── */
-loadInbox();
-// Auto-refresh tasks every 15s when panel is open
-setInterval(() => { if (_tasksPanelOpen) loadTasks(); }, 15000);
+loadInbox().then(async () => {
+    // Auto-open chat if navigated from org chart with ?entity_type=...&entity_key=...
+    const params = new URLSearchParams(window.location.search);
+    const eType = params.get('entity_type');
+    const eKey  = params.get('entity_key');
+    if (eType && eKey) {
+        try {
+            let name = eKey, emoji = '👤';
+            if (eType === 'team_member') {
+                const r = await fetch('/api/team/members');
+                const d = await r.json();
+                const m = (d.members || []).find(x => x.role_key === eKey);
+                if (m) { name = m.display_name; emoji = m.emoji || '👤'; }
+            }
+            startNewChat(eType, eKey, name, emoji);
+            // Clear the URL params without reload
+            history.replaceState(null, '', '/inbox');
+        } catch(e) {}
+    }
+});
+// Auto-refresh tasks every 8s when panel is open (faster to see in_progress → done)
+setInterval(() => { if (_tasksPanelOpen) loadTasks(); }, 8000);
 document.getElementById('overlay-picker').addEventListener('click', e => { if (e.target === e.currentTarget) closePicker(); });
 </script>
+<script src="/js/marc.js"></script>
 </body>
 </html>

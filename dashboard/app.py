@@ -1,4 +1,4 @@
-from flask import Flask, jsonify, request, send_file
+from flask import Flask, jsonify, request, send_file, send_from_directory
 from flask_cors import CORS
 import os
 import sys
@@ -29,8 +29,19 @@ from src.orchestrator.orchestrator import Orchestrator
 from src.database.db import init_db
 from src.api.llm_provider import LLMProvider
 
-app = Flask(__name__, static_folder=os.path.dirname(__file__))
+_STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static')
+app = Flask(__name__, static_folder=_STATIC_DIR)
 CORS(app)
+
+@app.route('/js/<path:filename>')
+def serve_js_file(filename):
+    filepath = os.path.join(_STATIC_DIR, filename)
+    if not os.path.isfile(filepath):
+        return f"NOT FOUND: {filepath}", 404
+    with open(filepath, 'r', encoding='utf-8') as f:
+        content = f.read()
+    from flask import Response
+    return Response(content, mimetype='application/javascript')
 
 # Serve saved media files (used as public URLs for Instagram publishing)
 @app.route('/static/media/<path:filename>')
@@ -55,8 +66,9 @@ def _bootstrap():
     """Initialize orchestrator, autopilot, scheduler, workflow engine at startup."""
     global orchestrator, autopilot, ai_auto_sched, workflow_engine
     init_db()
-    from src.database.db import seed_editorial_team, get_db
+    from src.database.db import seed_editorial_team, seed_departments, get_db
     seed_editorial_team()
+    seed_departments()
 
     orchestrator = Orchestrator()
     from src.autopilot.engine import AutopilotEngine
@@ -1350,6 +1362,7 @@ def get_notifications():
             'body': n.body,
             'link': n.link,
             'agent_id': n.agent_id,
+            'workflow_run_id': n.workflow_run_id,
             'is_read': n.is_read,
             'created_at': n.created_at.isoformat() if n.created_at else None,
         } for n in notifs]
@@ -1483,6 +1496,7 @@ def get_workflow(run_id):
 def get_workflow_artifacts(run_id):
     """Get all artifacts for a workflow run."""
     from src.database.models import WorkflowRun, TrendReport, ContentBrief, MasterContent, AtomizedContent
+    from src.database.models import Agent as _Agent
     run = orchestrator.db.query(WorkflowRun).filter(WorkflowRun.id == run_id).first()
     if not run:
         return jsonify({'error': 'Not found'}), 404
@@ -1501,7 +1515,15 @@ def get_workflow_artifacts(run_id):
         try: return _json.loads(v)
         except Exception: return default
 
+    # Build agent lookup
+    _agent_rows = orchestrator.db.query(_Agent).all()
+    _agent_map = {ag.id: ag for ag in _agent_rows}
+    def _get_agent_name(aid): ag = _agent_map.get(aid); return ag.name if ag else f'Agent #{aid}'
+    def _get_agent_username(aid): ag = _agent_map.get(aid); return ag.brand if ag else ''
+
     return jsonify({
+        'workflow_run_id': run_id,
+        'topic': run.topic_seeds,
         'trend_report': {
             'anchor_points': _parse(tr.anchor_points) if tr else [],
             'market_context': tr.market_context if tr else '',
@@ -1525,11 +1547,14 @@ def get_workflow_artifacts(run_id):
         'atomized': [{
             'id': a.id,
             'agent_id': a.agent_id,
+            'agent_name': _get_agent_name(a.agent_id),
+            'agent_username': _get_agent_username(a.agent_id),
             'format_type': a.format_type,
             'platform': a.platform,
-            'body': a.body[:300] + '...' if a.body and len(a.body) > 300 else (a.body or ''),
+            'body': a.body,
             'hashtags': _parse(a.hashtags),
             'status': a.status,
+            'media_urls': _parse(a.media_urls) if hasattr(a, 'media_urls') else [],
         } for a in atoms],
     }), 200
 
@@ -1552,6 +1577,42 @@ def stop_workflow(run_id):
     if workflow_engine:
         workflow_engine._active_runs.pop(run_id, None)
     return jsonify({'message': f'Workflow #{run_id} stopped'}), 200
+
+
+@app.route('/api/team/workflow/<int:run_id>/restart', methods=['POST'])
+def restart_workflow(run_id):
+    """Restart a failed workflow — from the failed step or from scratch."""
+    from src.database.models import WorkflowRun, Notification
+    data = request.json or {}
+    mode = data.get('mode', 'beginning')  # 'current_step' or 'beginning'
+
+    run = orchestrator.db.query(WorkflowRun).filter(WorkflowRun.id == run_id).first()
+    if not run:
+        return jsonify({'error': 'Workflow not found'}), 404
+
+    if not workflow_engine:
+        return jsonify({'error': 'Workflow engine not running'}), 500
+
+    # For both modes, start a new pipeline run with same config
+    target_ids = run.target_agent_ids or []
+    topics = run.topic_seeds or []
+    new_run_id = workflow_engine.start_workflow(target_ids, topics)
+
+    # Mark original as cancelled
+    run.status = 'cancelled'
+    run.error_message = (run.error_message or '') + f' | Restarted as #{new_run_id}'
+
+    step_label = run.current_step or 'signal'
+    label = f'from "{step_label}"' if mode == 'current_step' else 'from scratch'
+    orchestrator.db.add(Notification(
+        type='workflow_started',
+        title=f'Pipeline #{new_run_id} restarted {label}',
+        body=f'Original run #{run_id} cancelled. New pipeline is running.',
+        link='/newsroom.html',
+        workflow_run_id=new_run_id,
+    ))
+    orchestrator.db.commit()
+    return jsonify({'ok': True, 'new_run_id': new_run_id, 'mode': mode}), 200
 
 
 @app.route('/api/team/workflow/<int:run_id>/approve', methods=['POST'])
@@ -1614,6 +1675,178 @@ def approve_atomized(run_id):
 
     orchestrator.db.commit()
     return jsonify({'pushed': len(created), 'posts': created}), 200
+
+
+@app.route('/api/team/workflow/<int:run_id>/schedule_all', methods=['POST'])
+def schedule_all_atomized(run_id):
+    """Schedule ALL draft atomized posts for a workflow run at peak times."""
+    from src.database.models import AtomizedContent, Content, Agent, Notification
+    from src.autopilot.engine import next_peak_time
+
+    atoms = orchestrator.db.query(AtomizedContent).filter(
+        AtomizedContent.workflow_run_id == run_id,
+        AtomizedContent.status == 'draft',
+    ).all()
+
+    if not atoms:
+        return jsonify({'error': 'No draft atomized posts for this workflow'}), 404
+
+    _agent_map2 = {a.id: a for a in orchestrator.db.query(Agent).all()}
+    created = []
+    for a in atoms:
+        sched_time = next_peak_time(a.platform, 2)
+        post = Content(
+            agent_id=a.agent_id,
+            title=(a.body or '')[:100],
+            body=a.body,
+            hashtags=a.hashtags,
+            media_urls=a.media_urls if hasattr(a, 'media_urls') else None,
+            platform=a.platform,
+            status='scheduled',
+            scheduled_at=sched_time,
+        )
+        orchestrator.db.add(post)
+        orchestrator.db.flush()
+        a.content_id = post.id
+        a.status = 'pushed_to_agent'
+        agent = _agent_map2.get(a.agent_id)
+        agent_name = agent.name if agent else f'Agent #{a.agent_id}'
+        notif = Notification(
+            type='post_scheduled',
+            title=f'New post scheduled for {agent_name}',
+            body=f'{a.format_type} on {a.platform} — scheduled {sched_time.strftime("%b %d at %H:%M")}',
+            link=f'/agent-detail.html?id={a.agent_id}',
+            agent_id=a.agent_id,
+            workflow_run_id=run_id,
+        )
+        orchestrator.db.add(notif)
+        created.append({
+            'content_id': post.id, 'agent_id': a.agent_id,
+            'agent_name': agent_name,
+            'platform': a.platform, 'scheduled_at': sched_time.isoformat(),
+        })
+
+    orchestrator.db.commit()
+    return jsonify({'scheduled': len(created), 'posts': created}), 200
+
+
+@app.route('/api/team/workflow/<int:run_id>/eic_schedule', methods=['POST'])
+def eic_prepare_schedule(run_id):
+    """Victoria Crane prepares a publishing schedule for a workflow's atomized content."""
+    from flask import g
+    from src.database.models import WorkflowRun, AtomizedContent, Agent, TeamMember, MasterContent, ContentBrief
+    import json as _json
+
+    db = orchestrator.db
+    run = db.query(WorkflowRun).filter(WorkflowRun.id == run_id).first()
+    if not run:
+        return jsonify({'error': 'Workflow not found'}), 404
+
+    atoms = db.query(AtomizedContent).filter(AtomizedContent.workflow_run_id == run_id).all()
+    if not atoms:
+        return jsonify({'error': 'No atomized content found for this workflow'}), 404
+
+    # Build agent map
+    agents = db.query(Agent).all()
+    agent_map = {a.id: a for a in agents}
+
+    # Get Victoria's profile
+    victoria = db.query(TeamMember).filter(TeamMember.role_key == 'eic').first()
+
+    # Build content summary for Victoria
+    brief = db.query(ContentBrief).filter(ContentBrief.workflow_run_id == run_id).first()
+    mc = db.query(MasterContent).filter(MasterContent.workflow_run_id == run_id).first()
+
+    topic = run.topic_seeds or 'General content'
+    headline = brief.headline if brief else (mc.headline if mc else topic)
+
+    posts_summary = []
+    for a in atoms:
+        ag = agent_map.get(a.agent_id)
+        posts_summary.append({
+            'id': a.id,
+            'agent_name': ag.name if ag else f'Agent #{a.agent_id}',
+            'agent_username': ag.username if ag else '',
+            'platform': a.platform,
+            'format_type': a.format_type,
+            'body_preview': (a.body or '')[:200],
+            'status': a.status,
+        })
+
+    system_prompt = """You are Victoria Crane, Editor-in-Chief. You are preparing a publishing schedule for the founder's approval.
+Your job: review the atomized posts, propose an optimal publishing schedule, and present it as a structured recommendation.
+
+Return a JSON object with this exact structure:
+{
+  "schedule_summary": "2-3 sentence overview of the publishing plan",
+  "total_posts": <number>,
+  "posts": [
+    {
+      "id": <atomized_content_id>,
+      "agent_name": "...",
+      "platform": "...",
+      "format_type": "...",
+      "recommended_time": "YYYY-MM-DDTHH:MM:SS",
+      "rationale": "Why this time/platform pairing works",
+      "priority": "high|medium|low",
+      "body_preview": "first 100 chars of content"
+    }
+  ],
+  "victoria_note": "Your editorial note to the founder — any concerns, highlights, or strategic recommendations"
+}
+
+Be concise. Think about peak engagement times per platform. Instagram: 11am-1pm or 7-9pm. Twitter/X: 8am, 12pm, 5pm. LinkedIn: 8am-10am weekday. TikTok: 7pm-9pm. Space posts 2-4 hours apart minimum."""
+
+    user_msg = f"""Workflow #{run_id} — Topic: {topic}
+Headline: {headline}
+Posts to schedule: {_json.dumps(posts_summary, indent=2)}
+
+Prepare the optimal publishing schedule for all {len(atoms)} posts."""
+
+    try:
+        from src.api.llm_provider import LLMProvider
+        victoria_model = victoria.llm_model if victoria else 'claude-haiku-4-5'
+        victoria_provider = victoria.llm_provider if victoria else 'claude'
+        llm = LLMProvider(provider=victoria_provider, model=victoria_model)
+        reply_text = llm.generate_content(
+            prompt=user_msg,
+            max_tokens=2000,
+            temperature=0.6,
+            system_prompt=system_prompt,
+        )
+
+        # Extract JSON from reply
+        import re
+        json_match = re.search(r'\{[\s\S]+\}', reply_text)
+        schedule_data = _json.loads(json_match.group()) if json_match else {'error': 'Could not parse schedule', 'raw': reply_text}
+
+    except Exception as e:
+        schedule_data = {'error': str(e)}
+
+    return jsonify({'workflow_id': run_id, 'schedule': schedule_data}), 200
+
+
+@app.route('/api/team/workflow/<int:run_id>/redispatch', methods=['POST'])
+def redispatch_atomized(run_id):
+    """Reassign an atomized post to a different agent."""
+    from src.database.models import AtomizedContent, Agent
+    data = request.json or {}
+    atom_id = data.get('atom_id')
+    new_agent_id = data.get('new_agent_id')
+    if not atom_id or not new_agent_id:
+        return jsonify({'error': 'atom_id and new_agent_id required'}), 400
+    atom = orchestrator.db.query(AtomizedContent).filter(
+        AtomizedContent.id == atom_id,
+        AtomizedContent.workflow_run_id == run_id,
+    ).first()
+    if not atom:
+        return jsonify({'error': 'Atomized post not found'}), 404
+    agent = orchestrator.db.query(Agent).filter(Agent.id == new_agent_id).first()
+    if not agent:
+        return jsonify({'error': 'Agent not found'}), 404
+    atom.agent_id = new_agent_id
+    orchestrator.db.commit()
+    return jsonify({'atom_id': atom_id, 'new_agent_id': new_agent_id, 'new_agent_name': agent.name}), 200
 
 
 # ==================== ERROR HANDLERS ====================
@@ -1790,9 +2023,9 @@ def update_vision():
 
 
 def _extract_vision_update(reply_text, db):
-    """Parse ```vision JSON from cofounder reply, update CompanyVision."""
+    """Parse ```vision JSON from cofounder reply — extract but DO NOT save yet.
+    Returns (clean_text, proposed_vision_dict). Saving requires explicit user approval."""
     import re, json as _json
-    from src.database.models import CompanyVision
     pattern = r'```vision\s*\n?(.*?)\n?```'
     match = re.search(pattern, reply_text, re.DOTALL)
     if not match:
@@ -1800,6 +2033,24 @@ def _extract_vision_update(reply_text, db):
     clean = re.sub(pattern, '', reply_text, flags=re.DOTALL).strip()
     try:
         vdata = _json.loads(match.group(1))
+        # Return proposal — frontend must call /api/vision/apply to actually save
+        return clean, vdata
+    except Exception as e:
+        logging.warning(f"Vision extraction error: {e}")
+    return clean, None
+
+
+@app.route('/api/vision/apply', methods=['POST'])
+def apply_vision_proposal():
+    """Apply a vision proposal that was reviewed and approved by the user."""
+    from flask import g
+    from src.database.models import CompanyVision
+    import json as _json
+    db = g.db
+    vdata = request.json or {}
+    if not vdata:
+        return jsonify({'error': 'No vision data provided'}), 400
+    try:
         v = db.query(CompanyVision).first()
         if not v:
             v = CompanyVision()
@@ -1816,10 +2067,10 @@ def _extract_vision_update(reply_text, db):
             v.okrs = _json.dumps(vdata['okrs'])
         v.updated_by = 'cofounder'
         db.commit()
-        return clean, vdata
+        return jsonify({'ok': True}), 200
     except Exception as e:
-        logging.warning(f"Vision extraction error: {e}")
-    return clean, None
+        db.rollback()
+        return jsonify({'error': str(e)}), 500
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -1941,18 +2192,41 @@ def _build_agent_system_prompt(db_or_none, agent):
 
 
 def _extract_and_create_tasks(db, reply_text, thread_id, entity_type, entity_key, entity_name):
-    """Parse ```tasks JSON from AI reply, create Task rows, return (clean_text, tasks_created)."""
+    """Parse tasks JSON from AI reply. Handles multiple code-block formats:
+    ```tasks [...] ```, ```json [...] ```, or a bare JSON array with 'title' keys.
+    Returns (clean_text, tasks_created) — clean_text has ALL task blocks removed."""
     import re, json
     from src.database.models import Task, TeamMember, Agent
-    pattern = r'```tasks\s*\n?(.*?)\n?```'
-    match = re.search(pattern, reply_text, re.DOTALL)
-    if not match:
+
+    # Try multiple patterns in priority order
+    # Pattern 1: explicit ```tasks block
+    pattern_tasks = r'```tasks\s*\n?(.*?)\n?\s*```'
+    # Pattern 2: ```json block containing an array
+    pattern_json  = r'```json\s*\n?(\[[\s\S]*?\])\s*\n?\s*```'
+    # Pattern 3: any ``` block containing a JSON array with "title" key
+    pattern_any   = r'```[\w_]*\s*\n?(\[[\s\S]*?"title"[\s\S]*?\])\s*\n?\s*```'
+
+    raw_json = None
+    used_pattern = None
+    for pat in [pattern_tasks, pattern_json, pattern_any]:
+        m = re.search(pat, reply_text, re.DOTALL)
+        if m:
+            raw_json = m.group(1).strip()
+            used_pattern = pat
+            break
+
+    if not raw_json:
         return reply_text, []
 
-    clean_text = re.sub(pattern, '', reply_text, flags=re.DOTALL).strip()
+    # Strip ALL task/json code blocks from the reply
+    clean_text = reply_text
+    for pat in [pattern_tasks, pattern_json, pattern_any]:
+        clean_text = re.sub(pat, '', clean_text, flags=re.DOTALL)
+    clean_text = clean_text.strip()
+
     created = []
     try:
-        task_list = json.loads(match.group(1))
+        task_list = json.loads(raw_json)
         if not isinstance(task_list, list):
             task_list = [task_list]
         for td in task_list:
@@ -1987,6 +2261,7 @@ def _extract_and_create_tasks(db, reply_text, thread_id, entity_type, entity_key
                 created_by_name=entity_name,
                 thread_id=thread_id,
                 due_date=due,
+                requires_approval=(entity_key == 'cofounder'),
             )
             db.add(task)
             db.commit()
@@ -2257,9 +2532,10 @@ def inbox_chat():
     entity_key = data.get('entity_key', '')       # role_key or agent id
     user_msg = data.get('message', '').strip()
     thread_id = data.get('thread_id', '')
+    attachment = data.get('attachment')  # {data: base64str, mime: str, name: str} or None
 
-    if not user_msg or not entity_type or not entity_key:
-        return jsonify({'error': 'message, entity_type, entity_key required'}), 400
+    if (not user_msg and not attachment) or not entity_type or not entity_key:
+        return jsonify({'error': 'message or attachment required, plus entity_type and entity_key'}), 400
 
     # Load entity
     if entity_type == 'team_member':
@@ -2285,41 +2561,73 @@ def inbox_chat():
     else:
         return jsonify({'error': 'entity_type must be team_member or agent'}), 400
 
-    # Generate thread_id if new
+    # Use deterministic (permanent) thread_id per entity so memory persists across sessions
+    canonical_thread = f"chat_{entity_type}_{entity_key}"
     if not thread_id:
-        thread_id = f"chat_{entity_type}_{entity_key}_{uuid.uuid4().hex[:8]}"
+        thread_id = canonical_thread
+    # If caller passed a legacy UUID thread, honour it but also alias canonical
 
-    # Save user message
+    # Save user message (include attachment name as note if present)
+    saved_body = user_msg
+    if attachment and attachment.get('name'):
+        saved_body = f"[📎 {attachment['name']}]\n{user_msg}".strip()
     user_row = InternalMessage(
         from_type='user', from_key='supervisor', from_name='You', from_emoji='',
-        body=user_msg, msg_type='chat', thread_id=thread_id, is_read=True
+        body=saved_body, msg_type='chat', thread_id=thread_id, is_read=True
     )
     db.add(user_row)
     db.commit()
 
-    # Build conversation history (last 20 msgs)
+    # Build conversation history — last 40 msgs from this thread (persistent memory)
     history = db.query(InternalMessage).filter(
         InternalMessage.thread_id == thread_id
-    ).order_by(InternalMessage.created_at.desc()).limit(20).all()
+    ).order_by(InternalMessage.created_at.desc()).limit(40).all()
     history.reverse()
 
+    # Count total messages ever exchanged
+    total_msgs = db.query(InternalMessage).filter(
+        InternalMessage.thread_id == thread_id
+    ).count()
+
     conv_lines = []
-    for h in history[:-1]:  # exclude the just-added user msg (we'll send it as prompt)
+    for h in history[:-1]:  # exclude the just-added user msg (sent as prompt below)
         role = 'User' if h.from_type == 'user' else name
-        conv_lines.append(f"{role}: {h.body}")
+        conv_lines.append(f"{role}: {h.body[:400]}")  # truncate very long msgs
     conv_context = '\n'.join(conv_lines)
 
-    prompt = f"{conv_context}\nUser: {user_msg}\n{name}:" if conv_context else user_msg
+    # Inject memory note into system prompt if prior conversation exists
+    if total_msgs > 1:
+        memory_note = (
+            f"\n\n=== MEMORY ===\n"
+            f"You have been in an ongoing conversation with the user. "
+            f"Total exchanges so far: {total_msgs}. "
+            f"The recent conversation history is included in this prompt — treat it as your memory. "
+            f"NEVER say you don't remember previous conversations. "
+            f"If something isn't in the provided history, acknowledge the gap naturally but stay in character."
+        )
+        sys_prompt = (sys_prompt or '') + memory_note
+
+    prompt = f"{conv_context}\nUser: {user_msg}\n{name}:" if conv_context else (user_msg or "")
 
     try:
         from src.api.llm_provider import LLMProvider
         llm = LLMProvider(provider=provider, model=model)
-        reply = llm.generate_content(
-            prompt=prompt,
-            max_tokens=600,
-            temperature=temp,
-            system_prompt=sys_prompt
-        )
+        if attachment and attachment.get('data'):
+            reply = llm.generate_content_with_image(
+                prompt=prompt,
+                image_b64=attachment['data'],
+                image_mime=attachment.get('mime', 'image/png'),
+                max_tokens=800,
+                temperature=temp,
+                system_prompt=sys_prompt
+            )
+        else:
+            reply = llm.generate_content(
+                prompt=prompt,
+                max_tokens=2000,
+                temperature=temp,
+                system_prompt=sys_prompt
+            )
 
         # Extract tasks from reply (if AI created any)
         clean_reply, tasks_created = _extract_and_create_tasks(
@@ -2353,10 +2661,39 @@ def inbox_chat():
             'tasks_created': tasks_created,
             'workflow_launched': workflow_launched,
             'hires_proposed': hires_proposed,
-            'vision_updated': vision_updated,
+            'vision_proposed': vision_updated,  # proposal only — user must approve
         }), 200
     except Exception as e:
         return jsonify({'error': f'{name} is unavailable: {str(e)}'}), 500
+
+
+@app.route('/api/inbox/thread_for_entity', methods=['GET'])
+def get_thread_for_entity():
+    """Return canonical thread_id and last N messages for a specific entity (for memory loading on page open)."""
+    from flask import g
+    from src.database.models import InternalMessage
+    db = g.db
+    entity_type = request.args.get('entity_type', '')
+    entity_key  = request.args.get('entity_key', '')
+    if not entity_type or not entity_key:
+        return jsonify({'error': 'entity_type and entity_key required'}), 400
+
+    canonical_thread = f"chat_{entity_type}_{entity_key}"
+    msgs = db.query(InternalMessage).filter(
+        InternalMessage.thread_id == canonical_thread
+    ).order_by(InternalMessage.created_at.asc()).limit(60).all()
+
+    return jsonify({
+        'thread_id': canonical_thread,
+        'messages': [{
+            'id': m.id,
+            'from_type': m.from_type,
+            'from_name': m.from_name,
+            'from_emoji': m.from_emoji or '',
+            'body': m.body,
+            'created_at': m.created_at.isoformat() if m.created_at else '',
+        } for m in msgs]
+    }), 200
 
 
 @app.route('/api/inbox/send', methods=['POST'])
@@ -2444,6 +2781,8 @@ def get_tasks():
         return {
             'id': t.id, 'title': t.title, 'description': t.description,
             'status': t.status, 'priority': t.priority,
+            'requires_approval': bool(getattr(t, 'requires_approval', False)),
+            'approved_at': t.approved_at.isoformat() if getattr(t, 'approved_at', None) else None,
             'created_by_type': t.created_by_type, 'created_by_key': t.created_by_key,
             'created_by_name': t.created_by_name,
             'assignee_type': t.assignee_type, 'assignee_key': t.assignee_key,
@@ -2457,6 +2796,712 @@ def get_tasks():
             'subtasks_done': sum(1 for s in subtasks if s.status == 'done'),
         }
     return jsonify({'tasks': [task_dict(t) for t in tasks]}), 200
+
+
+@app.route('/api/tasks/pending_approval', methods=['GET'])
+def get_pending_approval_tasks():
+    """Get tasks proposed by cofounder — pending and rejected (for later reconsideration)."""
+    from flask import g
+    from src.database.models import Task
+    db = g.db
+    tasks = db.query(Task).filter(
+        Task.requires_approval == True,
+        Task.approved_at == None,
+    ).order_by(Task.created_at.desc()).all()
+
+    def td(t):
+        return {
+            'id': t.id, 'title': t.title, 'description': t.description,
+            'priority': t.priority, 'assignee_name': t.assignee_name,
+            'assignee_key': t.assignee_key, 'status': t.status,
+            'due_date': t.due_date.isoformat() if t.due_date else None,
+            'created_at': t.created_at.isoformat() if t.created_at else None,
+        }
+    return jsonify({'tasks': [td(t) for t in tasks]}), 200
+
+
+@app.route('/api/tasks/<int:task_id>/approve', methods=['POST'])
+def approve_task(task_id):
+    """Approve a cofounder-proposed task — activates it and dispatches background execution."""
+    from flask import g
+    from src.database.models import Task
+    db = g.db
+    task = db.query(Task).filter(Task.id == task_id).first()
+    if not task:
+        return jsonify({'error': 'Task not found'}), 404
+    task.approved_at = datetime.utcnow()
+    task.status = 'in_progress'
+    db.commit()
+
+    # Dispatch background execution
+    _task_snapshot = {
+        'id': task.id,
+        'title': task.title,
+        'description': task.description,
+        'assignee_type': task.assignee_type,
+        'assignee_key': task.assignee_key,
+        'assignee_name': task.assignee_name,
+        'priority': task.priority,
+    }
+    thread = threading.Thread(
+        target=_execute_task_in_background,
+        args=(_task_snapshot,),
+        name=f'task-exec-{task.id}',
+        daemon=True,
+    )
+    thread.start()
+
+    return jsonify({'ok': True, 'id': task.id, 'status': 'in_progress'}), 200
+
+
+def _is_department_head(db, role_key):
+    """Check if a team member has direct reports (is a manager/department head)."""
+    from src.database.models import TeamMember
+    reports = db.query(TeamMember).filter(TeamMember.reports_to == role_key, TeamMember.is_active == True).all()
+    return reports  # returns list of direct reports (empty = not a head)
+
+
+def _execute_task_in_background(task_snapshot):
+    """
+    Background worker: routes task execution through the org hierarchy.
+    - If assignee is a department HEAD → cascade: head decomposes, sub-tasks dispatched to team, summary produced
+    - If assignee is an individual contributor → direct execution
+    """
+    import time
+    task_id = task_snapshot['id']
+    assignee_type = task_snapshot['assignee_type']
+    assignee_key = task_snapshot['assignee_key']
+    assignee_name = task_snapshot['assignee_name']
+    title = task_snapshot['title']
+    description = task_snapshot['description'] or title
+    priority = task_snapshot['priority'] or 'medium'
+
+    logging.info(f"[TaskExec] Starting task #{task_id} — '{title}' → {assignee_name}")
+
+    from src.database.db import get_db
+    db = get_db()
+
+    try:
+        from src.database.models import Task, TeamMember, Agent, InternalMessage, Notification
+        from src.api.llm_provider import LLMProvider
+
+        task = db.query(Task).filter(Task.id == task_id).first()
+        if not task:
+            logging.error(f"[TaskExec] Task #{task_id} not found in DB")
+            return
+
+        # Resolve entity
+        if assignee_type == 'team_member':
+            entity = db.query(TeamMember).filter(TeamMember.role_key == assignee_key).first()
+            if not entity:
+                task.status = 'blocked'
+                task.description = (task.description or '') + f'\n[ERROR: Team member "{assignee_key}" not found]'
+                db.commit()
+                return
+
+            # Check if this person is a department head (has direct reports)
+            direct_reports = _is_department_head(db, assignee_key)
+            if direct_reports:
+                logging.info(f"[TaskExec] {assignee_name} is a department head with {len(direct_reports)} reports — cascading")
+                _execute_cascade_task(db, task, entity, direct_reports)
+                return
+
+            # Individual contributor — direct execution
+            name = entity.display_name
+            emoji = entity.emoji or ''
+            provider = entity.llm_provider or 'claude'
+            model = entity.llm_model or 'claude-sonnet-4-6'
+            temp = entity.temperature or 0.7
+            sys_prompt = _build_team_system_prompt(db, entity)
+        elif assignee_type == 'agent':
+            entity = db.query(Agent).filter(Agent.id == int(assignee_key)).first()
+            if not entity:
+                task.status = 'blocked'
+                db.commit()
+                return
+            name = entity.name
+            emoji = ''
+            provider = getattr(entity, 'llm_provider', None) or 'claude'
+            model = getattr(entity, 'llm_model', None) or 'claude-sonnet-4-6'
+            temp = 0.7
+            sys_prompt = _build_agent_system_prompt(db, entity)
+        else:
+            task.status = 'blocked'
+            db.commit()
+            return
+
+        # ── Direct execution for individual contributors ──
+        _execute_individual_task(db, task, entity, assignee_type, assignee_key)
+
+    except Exception as e:
+        logging.error(f"[TaskExec] ❌ Task #{task_id} failed: {e}", exc_info=True)
+        try:
+            task = db.query(Task).filter(Task.id == task_id).first()
+            if task:
+                task.status = 'blocked'
+                task.description = (task.description or '') + f'\n[EXECUTION ERROR: {str(e)[:200]}]'
+                from src.database.models import Notification
+                db.add(Notification(
+                    type='task_failed',
+                    title=f'❌ Task failed: {title[:60]}',
+                    body=f'{assignee_name} could not complete: {str(e)[:200]}',
+                    link=f'/inbox?entity_type={assignee_type}&entity_key={assignee_key}',
+                ))
+                db.commit()
+        except Exception:
+            pass
+    finally:
+        db.close()
+
+
+def _execute_individual_task(db, task, entity, assignee_type, assignee_key):
+    """Execute a single task by an individual contributor (not a head). Produces deliverable in inbox."""
+    from src.database.models import InternalMessage, Notification
+    from src.api.llm_provider import LLMProvider
+
+    title = task.title
+    description = task.description or title
+    priority = task.priority or 'medium'
+
+    if assignee_type == 'team_member':
+        name = entity.display_name
+        emoji = entity.emoji or ''
+        provider = entity.llm_provider or 'claude'
+        model = entity.llm_model or 'claude-sonnet-4-6'
+        temp = entity.temperature or 0.7
+        sys_prompt = _build_team_system_prompt(db, entity)
+    else:
+        name = entity.name
+        emoji = ''
+        provider = getattr(entity, 'llm_provider', None) or 'claude'
+        model = getattr(entity, 'llm_model', None) or 'claude-sonnet-4-6'
+        temp = 0.7
+        sys_prompt = _build_agent_system_prompt(db, entity)
+
+    exec_prompt = (
+        f"=== TASK ASSIGNED TO YOU ===\n"
+        f"Title: {title}\n"
+        f"Priority: {priority.upper()}\n"
+        f"Description:\n{description}\n\n"
+        f"Execute this task now. Produce the deliverable in full — not a plan, not a summary, "
+        f"but the ACTUAL WORK PRODUCT. If it's research, deliver the research. "
+        f"If it's a brief, write the full brief. If it's an audit, do the audit. "
+        f"Be thorough, specific, and actionable. Use data where possible.\n"
+        f"After the deliverable, add a one-line STATUS: at the end indicating completion."
+    )
+
+    canonical_thread = f"chat_{assignee_type}_{assignee_key}"
+    dispatch_msg = InternalMessage(
+        from_type='user', from_key='supervisor', from_name='You', from_emoji='',
+        body=f"📋 **Task Dispatched**\n\n**{title}**\n{description}\n\n_Priority: {priority.upper()} — Execute now._",
+        msg_type='chat', thread_id=canonical_thread, is_read=True,
+    )
+    db.add(dispatch_msg)
+    db.commit()
+
+    # Get conversation history for context
+    history = db.query(InternalMessage).filter(
+        InternalMessage.thread_id == canonical_thread
+    ).order_by(InternalMessage.created_at.desc()).limit(20).all()
+    history.reverse()
+    conv_lines = [f"{'User' if h.from_type == 'user' else name}: {h.body[:400]}" for h in history[:-1]]
+    conv_context = '\n'.join(conv_lines[-10:])
+
+    prompt = f"{conv_context}\nUser: {exec_prompt}\n{name}:" if conv_context else exec_prompt
+
+    llm = LLMProvider(provider=provider, model=model)
+    reply = llm.generate_content(
+        prompt=prompt, max_tokens=4000, temperature=temp, system_prompt=sys_prompt,
+    )
+
+    # Save AI reply to inbox
+    ai_msg = InternalMessage(
+        from_type=assignee_type, from_key=assignee_key,
+        from_name=name, from_emoji=emoji,
+        body=reply, msg_type='chat',
+        thread_id=canonical_thread, is_read=False,
+    )
+    db.add(ai_msg)
+
+    # Mark task as done
+    task.status = 'done'
+    task.completed_at = datetime.utcnow()
+
+    db.add(Notification(
+        type='task_completed',
+        title=f'✅ {name} completed: {title[:60]}',
+        body=f'{reply[:150]}…' if len(reply) > 150 else reply,
+        link=f'/inbox?entity_type={assignee_type}&entity_key={assignee_key}',
+    ))
+    db.commit()
+    logging.info(f"[TaskExec] ✅ Task #{task.id} completed by {name} — {len(reply)} chars")
+    return reply
+
+
+def _execute_cascade_task(db, parent_task, head_entity, direct_reports):
+    """
+    CASCADE EXECUTION: A department head receives a task →
+    1. Head AI decomposes it into sub-tasks for their direct reports
+    2. Each sub-task is created in DB (parent_id linked) and executed
+    3. Head AI produces a final summary of all deliverables
+    4. Summary posted to inbox, parent task marked done
+    5. If head decides to launch a workflow pipeline, it gets triggered
+    """
+    import time, json, re
+    from src.database.models import Task, TeamMember, InternalMessage, Notification
+    from src.api.llm_provider import LLMProvider
+
+    task_id = parent_task.id
+    title = parent_task.title
+    description = parent_task.description or title
+    priority = parent_task.priority or 'medium'
+    head_key = head_entity.role_key
+    head_name = head_entity.display_name
+    head_emoji = head_entity.emoji or ''
+    provider = head_entity.llm_provider or 'claude'
+    model = head_entity.llm_model or 'claude-sonnet-4-6'
+    temp = head_entity.temperature or 0.7
+
+    logging.info(f"[Cascade] Head {head_name} decomposing task #{task_id}: '{title}'")
+
+    # Build team roster for the head
+    team_roster = '\n'.join(
+        f"- {r.role_key}: {r.display_name} ({r.role_title})"
+        for r in direct_reports
+    )
+
+    # ── STEP 1: Head decomposes the task ──
+    decompose_prompt = (
+        f"=== TASK FROM LEADERSHIP ===\n"
+        f"Title: {title}\n"
+        f"Priority: {priority.upper()}\n"
+        f"Description:\n{description}\n\n"
+        f"You are {head_name}, department head. Your DIRECT REPORTS:\n{team_roster}\n\n"
+        f"DECOMPOSE this task into specific sub-tasks for your team members. "
+        f"Each sub-task must be assigned to a specific direct report based on their expertise.\n\n"
+        f"Reply with:\n"
+        f"1. A brief strategy (2-3 sentences max) for how your team will tackle this\n"
+        f"2. A ```tasks block with sub-tasks:\n"
+        f"```tasks\n"
+        f"[{{\"title\": \"Specific sub-task\", \"assignee_key\": \"role_key\", \"assignee_type\": \"team_member\", "
+        f"\"assignee_name\": \"Full Name\", \"priority\": \"{priority}\", "
+        f"\"description\": \"Detailed instructions for this team member\"}}]\n"
+        f"```\n\n"
+        f"RULES:\n"
+        f"- Assign ONLY to your direct reports listed above\n"
+        f"- Each sub-task must be specific and actionable\n"
+        f"- Cover the full scope of the parent task\n"
+        f"- 2-4 sub-tasks is ideal\n"
+        f"- If this task needs a content pipeline (Signal > Angle > Co-Creation > Fact-Check > Atomization), "
+        f"also include a ```workflow block:\n"
+        f"```workflow\n"
+        f"{{\"topics\": [\"topic\"], \"target_agents\": [1, 2, 3]}}\n"
+        f"```"
+    )
+
+    sys_prompt = _build_team_system_prompt(db, head_entity)
+    llm = LLMProvider(provider=provider, model=model)
+    decompose_reply = llm.generate_content(
+        prompt=decompose_prompt, max_tokens=2000, temperature=temp, system_prompt=sys_prompt,
+    )
+
+    # Post head's decomposition plan to their inbox thread
+    head_thread = f"chat_team_member_{head_key}"
+    db.add(InternalMessage(
+        from_type='user', from_key='supervisor', from_name='You', from_emoji='',
+        body=f"📋 **Task from Marc → Your Department**\n\n**{title}**\n{description}\n\n_Priority: {priority.upper()} — Decompose and dispatch to your team._",
+        msg_type='chat', thread_id=head_thread, is_read=True,
+    ))
+    db.add(InternalMessage(
+        from_type='team_member', from_key=head_key,
+        from_name=head_name, from_emoji=head_emoji,
+        body=decompose_reply, msg_type='chat',
+        thread_id=head_thread, is_read=False,
+    ))
+    db.commit()
+
+    # ── STEP 1b: Launch workflow if head triggered one ──
+    clean_decompose, workflow_info = _extract_and_launch_workflow(decompose_reply)
+    if workflow_info:
+        logging.info(f"[Cascade] {head_name} launched workflow #{workflow_info.get('run_id')} from task #{task_id}")
+        db.add(Notification(
+            type='workflow_launched',
+            title=f'🚀 {head_name} launched pipeline #{workflow_info["run_id"]}',
+            body=f'Topics: {", ".join(workflow_info.get("topics", []))}',
+            link='/newsroom.html',
+            workflow_run_id=workflow_info.get('run_id'),
+        ))
+        db.commit()
+
+    # ── STEP 2: Parse and create sub-tasks ──
+    sub_tasks_data = []
+    pattern_tasks = r'```tasks\s*\n?(.*?)\n?\s*```'
+    pattern_json = r'```json\s*\n?(\[[\s\S]*?\])\s*\n?\s*```'
+    pattern_any = r'```[\w_]*\s*\n?(\[[\s\S]*?"title"[\s\S]*?\])\s*\n?\s*```'
+
+    raw_json = None
+    for pat in [pattern_tasks, pattern_json, pattern_any]:
+        m = re.search(pat, decompose_reply, re.DOTALL)
+        if m:
+            raw_json = m.group(1).strip()
+            break
+
+    if raw_json:
+        try:
+            sub_tasks_data = json.loads(raw_json)
+            if not isinstance(sub_tasks_data, list):
+                sub_tasks_data = [sub_tasks_data]
+        except Exception as e:
+            logging.warning(f"[Cascade] Failed to parse sub-tasks JSON: {e}")
+
+    # Validate assignees — only allow direct reports
+    valid_keys = {r.role_key for r in direct_reports}
+    sub_task_objects = []
+
+    for td in sub_tasks_data:
+        a_key = str(td.get('assignee_key', ''))
+        if a_key not in valid_keys:
+            # Fallback: assign to first available report
+            a_key = direct_reports[0].role_key if direct_reports else head_key
+
+        a_name = td.get('assignee_name', '')
+        if not a_name:
+            member = db.query(TeamMember).filter(TeamMember.role_key == a_key).first()
+            a_name = member.display_name if member else a_key
+
+        sub_task = Task(
+            title=td.get('title', 'Sub-task'),
+            description=td.get('description', ''),
+            priority=td.get('priority', priority),
+            assignee_type='team_member',
+            assignee_key=a_key,
+            assignee_name=a_name,
+            created_by_type='team_member',
+            created_by_key=head_key,
+            created_by_name=head_name,
+            parent_id=task_id,
+            thread_id=head_thread,
+            requires_approval=False,  # head already approved — sub-tasks auto-execute
+            status='in_progress',
+        )
+        db.add(sub_task)
+        db.commit()
+        sub_task_objects.append(sub_task)
+        logging.info(f"[Cascade] Sub-task #{sub_task.id} '{sub_task.title}' → {a_name}")
+
+    # If no sub-tasks were parsed, execute directly as the head
+    if not sub_task_objects:
+        logging.warning(f"[Cascade] No sub-tasks parsed — head {head_name} executes directly")
+        _execute_individual_task(db, parent_task, head_entity, 'team_member', head_key)
+        return
+
+    # Notification: cascade started
+    db.add(Notification(
+        type='task_cascade_started',
+        title=f'⚡ {head_name} dispatched {len(sub_task_objects)} sub-tasks',
+        body=f'Task: {title[:80]} → {", ".join(st.assignee_name for st in sub_task_objects)}',
+        link=f'/inbox?entity_type=team_member&entity_key={head_key}',
+    ))
+    db.commit()
+
+    # ── STEP 3: Execute each sub-task sequentially ──
+    sub_results = []
+    for i, st in enumerate(sub_task_objects):
+        if i > 0:
+            time.sleep(2)  # stagger to avoid rate limits
+        try:
+            member = db.query(TeamMember).filter(TeamMember.role_key == st.assignee_key).first()
+            if member:
+                result = _execute_individual_task(db, st, member, 'team_member', st.assignee_key)
+                sub_results.append({
+                    'task_id': st.id,
+                    'title': st.title,
+                    'assignee': st.assignee_name,
+                    'result': (result or '')[:500],
+                    'status': 'done',
+                })
+            else:
+                st.status = 'blocked'
+                db.commit()
+                sub_results.append({
+                    'task_id': st.id, 'title': st.title,
+                    'assignee': st.assignee_name, 'result': '[Member not found]', 'status': 'blocked',
+                })
+        except Exception as e:
+            logging.error(f"[Cascade] Sub-task #{st.id} failed: {e}")
+            st.status = 'blocked'
+            db.commit()
+            sub_results.append({
+                'task_id': st.id, 'title': st.title,
+                'assignee': st.assignee_name, 'result': f'[Error: {str(e)[:100]}]', 'status': 'failed',
+            })
+
+    # ── STEP 4: Head produces executive summary ──
+    completed = sum(1 for r in sub_results if r['status'] == 'done')
+    results_text = '\n\n'.join(
+        f"### {r['assignee']} — {r['title']}\n{r['result']}"
+        for r in sub_results
+    )
+
+    summary_prompt = (
+        f"=== DEPARTMENT EXECUTION COMPLETE ===\n"
+        f"Original task: {title}\n"
+        f"Sub-tasks completed: {completed}/{len(sub_results)}\n\n"
+        f"TEAM DELIVERABLES:\n{results_text}\n\n"
+        f"Write an EXECUTIVE SUMMARY for the founder. Include:\n"
+        f"1. What was accomplished (bullet points)\n"
+        f"2. Key outputs/deliverables produced\n"
+        f"3. Any issues or blockers encountered\n"
+        f"4. Recommended next steps\n"
+        f"Be concise but comprehensive. This goes directly to the founder's inbox."
+    )
+
+    summary_reply = llm.generate_content(
+        prompt=summary_prompt, max_tokens=2000, temperature=0.5, system_prompt=sys_prompt,
+    )
+
+    # ── STEP 5: Post summary to head's thread + Marc's thread ──
+    # In head's inbox
+    db.add(InternalMessage(
+        from_type='team_member', from_key=head_key,
+        from_name=head_name, from_emoji=head_emoji,
+        body=f"📊 **Executive Summary — Task Complete**\n\n{summary_reply}",
+        msg_type='chat', thread_id=head_thread, is_read=False,
+    ))
+
+    # In Marc's inbox (so the founder sees it in the cofounder thread too)
+    marc_thread = "chat_team_member_cofounder"
+    db.add(InternalMessage(
+        from_type='team_member', from_key=head_key,
+        from_name=head_name, from_emoji=head_emoji,
+        body=f"📊 **{head_name} — Task Complete: {title}**\n\n"
+             f"_Sub-tasks: {completed}/{len(sub_results)} completed_\n\n{summary_reply}",
+        msg_type='chat', thread_id=marc_thread, is_read=False,
+    ))
+
+    # Mark parent task done
+    parent_task.status = 'done'
+    parent_task.completed_at = datetime.utcnow()
+
+    # Success notification with summary
+    db.add(Notification(
+        type='task_completed',
+        title=f'✅ {head_name}\'s team completed: {title[:50]}',
+        body=f'{completed}/{len(sub_results)} sub-tasks done. {summary_reply[:150]}…',
+        link=f'/inbox?entity_type=team_member&entity_key={head_key}',
+    ))
+    db.commit()
+
+    logging.info(f"[Cascade] ✅ Task #{task_id} cascade complete — {completed}/{len(sub_results)} sub-tasks done")
+
+
+@app.route('/api/tasks/<int:task_id>/reject', methods=['POST'])
+def reject_task(task_id):
+    """Reject a cofounder-proposed task — keeps it for later reconsideration."""
+    from flask import g
+    from src.database.models import Task
+    db = g.db
+    task = db.query(Task).filter(Task.id == task_id).first()
+    if not task:
+        return jsonify({'error': 'Task not found'}), 404
+    task.status = 'rejected'
+    db.commit()
+    return jsonify({'ok': True}), 200
+
+
+@app.route('/api/tasks/approve_all', methods=['POST'])
+def approve_all_tasks():
+    """Approve all pending cofounder tasks at once and dispatch background execution."""
+    from flask import g
+    from src.database.models import Task
+    db = g.db
+    tasks = db.query(Task).filter(
+        Task.requires_approval == True,
+        Task.approved_at == None,
+        Task.status != 'rejected',
+    ).all()
+    snapshots = []
+    for t in tasks:
+        t.approved_at = datetime.utcnow()
+        t.status = 'in_progress'
+        snapshots.append({
+            'id': t.id, 'title': t.title, 'description': t.description,
+            'assignee_type': t.assignee_type, 'assignee_key': t.assignee_key,
+            'assignee_name': t.assignee_name, 'priority': t.priority,
+        })
+    db.commit()
+
+    # Dispatch all in background (staggered 2s apart to avoid rate limits)
+    import time as _time
+    def _run_all(snaps):
+        for i, snap in enumerate(snaps):
+            if i > 0:
+                _time.sleep(3)  # stagger to avoid LLM rate limits
+            _execute_task_in_background(snap)
+    thread = threading.Thread(target=_run_all, args=(snapshots,), name='task-exec-all', daemon=True)
+    thread.start()
+
+    return jsonify({'ok': True, 'approved': len(snapshots)}), 200
+
+
+@app.route('/api/cofounder/pulse', methods=['POST'])
+def cofounder_pulse():
+    """Marc's proactive pulse — checks state, auto-dispatches tasks if backlog < threshold.
+    Called automatically every ~60s by the frontend. Returns task counts + any new tasks created."""
+    from flask import g
+    from src.database.models import Task, TeamMember, WorkflowRun, Agent, Content, AtomizedContent
+    db = g.db
+
+    # Count active tasks by status
+    pending = db.query(Task).filter(Task.requires_approval == True, Task.approved_at == None, Task.status != 'rejected').count()
+    in_progress = db.query(Task).filter(Task.status == 'in_progress').count()
+    todo = db.query(Task).filter(Task.status == 'todo').count()
+    done_recent = db.query(Task).filter(Task.status == 'done').order_by(Task.completed_at.desc()).limit(5).all()
+    active_total = pending + in_progress + todo
+
+    # Gather context for response
+    stats = {
+        'pending_approval': pending,
+        'in_progress': in_progress,
+        'todo': todo,
+        'active_total': active_total,
+        'done_recent': [{'id': t.id, 'title': t.title, 'assignee_name': t.assignee_name,
+                         'completed_at': t.completed_at.isoformat() if t.completed_at else None} for t in done_recent],
+    }
+
+    # If we have enough active tasks, just return stats — no need to generate more
+    if active_total >= 5:
+        return jsonify({'stats': stats, 'action': 'idle', 'new_tasks': 0}), 200
+
+    # Marc needs to dispatch more tasks! Call his AI to assess and create.
+    deficit = 5 - active_total
+    try:
+        cofounder = db.query(TeamMember).filter(TeamMember.role_key == 'cofounder').first()
+        if not cofounder:
+            return jsonify({'stats': stats, 'action': 'no_cofounder', 'new_tasks': 0}), 200
+
+        # Build state snapshot for Marc
+        agents = db.query(Agent).filter(Agent.is_active == True).all()
+        agents_info = ', '.join(f"{a.name} (fields: {', '.join(a.fields or [])})" for a in agents[:11])
+
+        recent_wfs = db.query(WorkflowRun).order_by(WorkflowRun.id.desc()).limit(3).all()
+        wf_info = '; '.join(f"#{w.id}: {w.status} at {w.current_step}" for w in recent_wfs) or 'None'
+
+        total_drafts = db.query(Content).filter(Content.status == 'draft').count()
+        total_sched = db.query(Content).filter(Content.status == 'scheduled').count()
+        total_pub = db.query(Content).filter(Content.status == 'published').count()
+
+        try:
+            pending_atoms = db.query(AtomizedContent).filter(AtomizedContent.status == 'draft').count()
+        except Exception:
+            pending_atoms = 0
+
+        # What was recently completed?
+        done_info = '; '.join(f"'{t.title}' by {t.assignee_name}" for t in done_recent) if done_recent else 'Nothing completed yet'
+
+        # Current active tasks
+        active_tasks = db.query(Task).filter(Task.status.in_(['todo', 'in_progress'])).all()
+        active_info = '; '.join(f"'{t.title}' → {t.assignee_name} ({t.status})" for t in active_tasks) if active_tasks else 'No active tasks'
+
+        vision_block = _get_vision_block(db)
+
+        pulse_prompt = (
+            f"PROACTIVE PULSE — You are running a startup. There is ALWAYS work to do.\n\n"
+            f"{vision_block}\n"
+            f"CURRENT STATE:\n"
+            f"- Active tasks: {active_total} (need minimum 5, deficit: {deficit})\n"
+            f"- In progress: {in_progress} | Pending approval: {pending} | Todo: {todo}\n"
+            f"- Recently completed: {done_info}\n"
+            f"- Active tasks: {active_info}\n"
+            f"- Workflows: {wf_info}\n"
+            f"- Content: {total_drafts} drafts, {total_sched} scheduled, {total_pub} published, {pending_atoms} atomized pending\n"
+            f"- Agents: {agents_info}\n\n"
+            f"You MUST dispatch exactly {deficit} NEW tasks right now. Do NOT repeat tasks that are already active or recently completed.\n"
+            f"IMPORTANT: Assign tasks to DEPARTMENT HEADS only (eic, cto, vp_sales, general_manager). "
+            f"They will cascade to their teams automatically.\n"
+            f"Think about what's missing: content gaps, pipeline health, growth experiments, distribution optimization, "
+            f"competitive intelligence, product improvements, analytics, sales outreach.\n"
+            f"Every task must be SPECIFIC and ACTIONABLE — not vague."
+        )
+
+        from src.api.llm_provider import LLMProvider
+        sys_prompt = cofounder.system_prompt or ''
+        provider = cofounder.llm_provider or 'claude'
+        model = cofounder.llm_model or 'claude-sonnet-4-6'
+        llm = LLMProvider(provider=provider, model=model)
+        reply = llm.generate_content(
+            prompt=pulse_prompt,
+            max_tokens=2000,
+            temperature=0.8,
+            system_prompt=sys_prompt,
+        )
+
+        # Extract and create tasks from Marc's reply
+        canonical_thread = "chat_team_member_cofounder"
+        clean_reply, tasks_created = _extract_and_create_tasks(
+            db, reply, canonical_thread, 'team_member', 'cofounder', 'Marc Andreessen'
+        )
+
+        # Save Marc's pulse message to inbox thread
+        from src.database.models import InternalMessage
+        ai_msg = InternalMessage(
+            from_type='team_member', from_key='cofounder',
+            from_name='Marc Andreessen', from_emoji='🚀',
+            body=clean_reply, msg_type='chat',
+            thread_id=canonical_thread, is_read=False,
+        )
+        db.add(ai_msg)
+        db.commit()
+
+        # Update stats
+        stats['pending_approval'] += tasks_created
+        stats['active_total'] += tasks_created
+
+        return jsonify({
+            'stats': stats,
+            'action': 'dispatched',
+            'new_tasks': tasks_created,
+            'marc_message': clean_reply[:300],
+        }), 200
+
+    except Exception as e:
+        logging.error(f"[CofounderPulse] Error: {e}", exc_info=True)
+        return jsonify({'stats': stats, 'action': 'error', 'error': str(e), 'new_tasks': 0}), 200
+
+
+@app.route('/api/cofounder/approval_email_body', methods=['GET'])
+def cofounder_approval_email_body():
+    """Return a formatted email body with all pending Marc tasks for the founder to review."""
+    from flask import g
+    from src.database.models import Task
+    db = g.db
+    tasks = db.query(Task).filter(
+        Task.requires_approval == True,
+        Task.approved_at == None,
+        Task.status != 'rejected',
+    ).order_by(Task.priority.desc(), Task.created_at.desc()).all()
+
+    if not tasks:
+        return jsonify({'subject': 'No pending proposals', 'body': 'No tasks awaiting approval.', 'count': 0}), 200
+
+    lines = [f"Marc Andreessen has dispatched {len(tasks)} task(s) for your approval:\n"]
+    for i, t in enumerate(tasks, 1):
+        pri = (t.priority or 'medium').upper()
+        lines.append(f"{i}. [{pri}] {t.title}")
+        lines.append(f"   → Assigned to: {t.assignee_name or t.assignee_key}")
+        if t.description:
+            lines.append(f"   → {t.description[:200]}")
+        if t.due_date:
+            lines.append(f"   → Due: {t.due_date.strftime('%b %d, %Y')}")
+        lines.append("")
+
+    lines.append(f"Review and approve at: http://localhost:5000/inbox\n")
+    body = '\n'.join(lines)
+    subject = f"[Axel] Marc needs your approval on {len(tasks)} strategic task(s)"
+    return jsonify({'subject': subject, 'body': body, 'count': len(tasks), 'tasks': [
+        {'id': t.id, 'title': t.title, 'priority': t.priority, 'assignee_name': t.assignee_name}
+        for t in tasks
+    ]}), 200
 
 
 @app.route('/api/tasks', methods=['POST'])
@@ -2510,6 +3555,18 @@ def create_task():
     )
     db.add(task)
     db.commit()
+
+    # Create notification for founder if task requires approval
+    if task.requires_approval:
+        from src.database.models import Notification
+        db.add(Notification(
+            type='task_approval_needed',
+            title=f'Approval needed: {task.title[:80]}',
+            body=f'Proposed by {task.created_by_name or task.created_by_key} → Assigned to {task.assignee_name or task.assignee_key}',
+            link='/inbox',
+        ))
+        db.commit()
+
     return jsonify({'ok': True, 'id': task.id, 'title': task.title}), 200
 
 
