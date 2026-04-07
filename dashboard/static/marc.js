@@ -227,7 +227,7 @@
             <div id="marc-pending-list"></div>
             <div class="marc-pending-footer">
                 <button class="marc-pending-footer-btn marc-footer-approve" onclick="marcApproveAll()">✓ Approve All</button>
-                <button class="marc-pending-footer-btn marc-footer-inbox" onclick="window.location='/inbox'">📥 Review in Inbox</button>
+                <button class="marc-pending-footer-btn marc-footer-inbox" onclick="window.location='/inbox?tasks=1'">📥 Review in Inbox</button>
             </div>
         </div>
         <div class="marc-panel-messages" id="marc-messages"></div>
@@ -242,9 +242,9 @@
         <div class="marc-prompt-actions" id="marc-actions-bar">
             <button class="marc-action-btn" onclick="marcProposePlan()">📋 Dispatch Plan</button>
             <span style="color:rgba(255,255,255,0.15)">·</span>
-            <button class="marc-action-btn" onclick="marcToggle()">⇄ Panel</button>
+            <button class="marc-action-btn" onclick="marcToggle()">⇄ History</button>
             <span style="color:rgba(255,255,255,0.15)">·</span>
-            <button class="marc-action-btn" onclick="window.location='/inbox'">📥 Inbox</button>
+            <button class="marc-action-btn" onclick="window.location='/inbox?tasks=1'">📥 Tasks & Inbox</button>
             <span style="color:rgba(255,255,255,0.15)">·</span>
             <button class="marc-action-btn" onclick="marcMinimize()">▼ Hide</button>
         </div>
@@ -315,7 +315,7 @@
         return '<p>' + s + '</p>';
     }
 
-    function marcAppend(role, text, tasksCreated) {
+    function marcAppend(role, text, tasksCreated, uiActions) {
         const msgs = document.getElementById('marc-messages');
         const div = document.createElement('div');
         div.className = 'marc-msg ' + role;
@@ -340,8 +340,27 @@
                 html += `<div style="margin-top:8px;display:flex;gap:6px">
                     <button onclick="marcApproveAll()" style="font-size:10px;font-weight:700;padding:4px 10px;border-radius:7px;border:none;cursor:pointer;background:rgba(52,199,89,0.12);color:#34c759;transition:background 0.15s">✓ Approve All</button>
                     <button onclick="marcSendApprovalEmail()" style="font-size:10px;font-weight:700;padding:4px 10px;border-radius:7px;border:none;cursor:pointer;background:rgba(255,149,0,0.12);color:#ff9500;transition:background 0.15s">📬 Send to Email</button>
-                    <a href="/inbox" style="font-size:10px;font-weight:700;padding:4px 10px;border-radius:7px;background:rgba(0,122,255,0.07);color:#007aff;text-decoration:none">📥 Review</a>
+                    <a href="/inbox?tasks=1" style="font-size:10px;font-weight:700;padding:4px 10px;border-radius:7px;background:rgba(0,122,255,0.07);color:#007aff;text-decoration:none">📥 Review</a>
                 </div>`;
+            }
+            // Render UI action buttons if present
+            if (uiActions && uiActions.length > 0) {
+                html += `<div style="margin-top:10px;display:flex;flex-wrap:wrap;gap:6px">`;
+                uiActions.forEach(a => {
+                    const label = a.label || a.type;
+                    let onclick = '';
+                    if (a.type === 'open_connect' && a.agent_id) {
+                        onclick = `window.location='/agent-detail.html?id=${a.agent_id}&openConnect=1'`;
+                    } else if (a.type === 'create_agent') {
+                        onclick = `window.location='/?openCreate=1'`;
+                    } else if (a.type === 'go_to_agent' && a.agent_id) {
+                        onclick = `window.location='/agent-detail.html?id=${a.agent_id}'`;
+                    } else if (a.type === 'go_to_room' && a.room) {
+                        onclick = `window.location='/newsroom.html?room=${a.room}'`;
+                    }
+                    html += `<button onclick="${onclick}" style="font-size:11px;font-weight:600;padding:5px 12px;border-radius:8px;border:1px solid rgba(255,149,0,0.3);background:rgba(255,149,0,0.08);color:#ff9500;cursor:pointer;transition:all 0.15s;white-space:nowrap">${label}</button>`;
+                });
+                html += `</div>`;
             }
             div.innerHTML = html;
         } else {
@@ -387,8 +406,9 @@
             });
             const data = await r.json();
             typing.remove();
-            const tasks = data.tasks_created || [];
-            marcAppend('ai', data.reply || data.error || 'Error.', tasks);
+            const tasks   = data.tasks_created || [];
+            const actions = data.ui_actions    || [];
+            marcAppend('ai', data.reply || data.error || 'Error.', tasks, actions);
 
             // If tasks were created, show dispatch badge in prompt bar + refresh pending strip
             if (tasks.length > 0) {
@@ -417,7 +437,7 @@
             <span style="opacity:0.6">— awaiting your approval</span>
             <button class="marc-dispatch-approve-all" onclick="marcApproveAll()">✓ Approve All</button>
             <button class="marc-dispatch-email" onclick="marcSendApprovalEmail()">📬 Email</button>
-            <a href="/inbox" style="font-size:10px;font-weight:700;color:#007aff;text-decoration:none;margin-left:2px">→ Inbox</a>`;
+            <a href="/inbox?tasks=1" style="font-size:10px;font-weight:700;color:#007aff;text-decoration:none;margin-left:2px">→ Inbox</a>`;
         bar.appendChild(badge);
 
         // Auto-hide after 12 seconds
@@ -491,7 +511,7 @@
                         <button class="marc-approve-btn" onclick="marcApproveOne(${t.id}, this)">✓</button>
                     </div>`;
                 });
-                if (pending.length > 5) html += `<div style="font-size:10px;color:#8e8e93;padding:2px 0;text-align:center">+${pending.length-5} more → <a href="/inbox" style="color:#ff9500">Inbox</a></div>`;
+                if (pending.length > 5) html += `<div style="font-size:10px;color:#8e8e93;padding:2px 0;text-align:center">+${pending.length-5} more → <a href="/inbox?tasks=1" style="color:#ff9500">Inbox</a></div>`;
             }
 
             // Recently completed tasks (history)
@@ -537,7 +557,7 @@
             const d = await r.json();
             await marcLoadPending();
             if (d.approved > 0) {
-                marcAppend('ai', `🚀 All ${d.approved} task${d.approved>1?'s':''} approved and dispatched. Every team member is executing RIGHT NOW. Track progress in your [📥 Inbox](/inbox).`);
+                marcAppend('ai', `🚀 All ${d.approved} task${d.approved>1?'s':''} approved and dispatched. Every team member is executing RIGHT NOW. Track progress in your [📥 Inbox](/inbox?tasks=1).`);
             }
         } catch(e) {}
     }
@@ -552,7 +572,7 @@
             window.open(mailto, '_blank');
             marcAppend('ai', `📬 Email prepared with ${d.count} tasks for review.`);
         } catch(e) {
-            marcAppend('ai', 'Email failed — review tasks in [📥 Inbox](/inbox).');
+            marcAppend('ai', 'Email failed — review tasks in [📥 Inbox](/inbox?tasks=1).');
         }
     }
     window.marcSendApprovalEmail = marcSendApprovalEmail;
@@ -580,7 +600,7 @@
                 newBadge.innerHTML = `<strong>🚀 Marc auto-dispatched ${d.new_tasks} new task${d.new_tasks>1?'s':''}</strong>
                     <span style="opacity:0.6">— approve to execute</span>
                     <button class="marc-dispatch-approve-all" onclick="marcApproveAll()">✓ Approve All</button>
-                    <a href="/inbox" style="font-size:10px;font-weight:700;color:#007aff;text-decoration:none;margin-left:4px">→ Inbox</a>`;
+                    <a href="/inbox?tasks=1" style="font-size:10px;font-weight:700;color:#007aff;text-decoration:none;margin-left:4px">→ Inbox</a>`;
                 bar.appendChild(newBadge);
                 setTimeout(() => { if (newBadge.parentNode) newBadge.remove(); }, 15000);
 

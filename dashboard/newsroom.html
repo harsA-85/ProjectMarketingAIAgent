@@ -94,6 +94,16 @@
         .nav-item:hover { background: rgba(0,0,0,0.05); color: var(--text-1); }
         .nav-item.active { background: var(--accent-dim); color: var(--accent); font-weight: 600; }
 
+        .nav-sub {
+            display: flex; align-items: center; gap: 8px;
+            padding: 5px 10px 5px 32px; border-radius: 7px;
+            font-size: 12px; font-weight: 500; color: var(--text-2);
+            cursor: pointer; transition: all 0.15s; user-select: none;
+            text-decoration: none;
+        }
+        .nav-sub:hover { background: rgba(0,0,0,0.05); color: var(--text-1); }
+        .nav-sub.active { background: var(--accent-dim); color: var(--accent); font-weight: 600; }
+
         .sidebar-footer {
             padding: 12px 16px 18px;
             border-top: 1px solid var(--border);
@@ -143,30 +153,24 @@
         }
         .notif-badge.hidden { display: none; }
 
-        /* Notifications drawer */
-        .notif-backdrop {
-            display: none; position: fixed; inset: 0;
-            background: rgba(0,0,0,0.3); backdrop-filter: blur(2px);
-            z-index: 9998;
-        }
-        .notif-backdrop.open { display: block; }
+        /* Notifications right panel — no overlay, no backdrop */
         .notif-panel {
             position: fixed; top: 0; right: 0; height: 100vh;
-            width: 400px; max-width: 95vw;
+            width: 380px; max-width: 90vw;
             background: var(--surface); border-left: 1px solid var(--border);
-            box-shadow: var(--shadow-xl);
+            box-shadow: -4px 0 24px rgba(0,0,0,0.10);
             z-index: 9999;
             display: flex; flex-direction: column;
             transform: translateX(100%);
-            transition: transform 0.25s cubic-bezier(0.4,0,0.2,1);
+            transition: transform 0.28s cubic-bezier(0.4,0,0.2,1);
         }
         .notif-panel.open { transform: translateX(0); }
         .notif-panel-header {
             display: flex; align-items: center; justify-content: space-between;
-            padding: 16px 18px; border-bottom: 1px solid var(--border);
-            flex-shrink: 0;
+            padding: 14px 16px; border-bottom: 1px solid var(--border);
+            flex-shrink: 0; background: var(--surface);
         }
-        .notif-panel-title { font-size: 15px; font-weight: 700; color: var(--text-1); }
+        .notif-panel-title { font-size: 14px; font-weight: 700; color: var(--text-1); }
         .notif-panel-body { flex: 1; overflow-y: auto; }
         .notif-section-label {
             font-size: 10px; font-weight: 700; text-transform: uppercase;
@@ -244,6 +248,64 @@
         .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
         .tab-pane { display: none; }
         .tab-pane.active { display: block; }
+
+        /* ── ROOM VIEWS ── */
+        .room-view { display: none; }
+        .room-view.active { display: block; }
+
+        .room-header {
+            display: flex; align-items: center; gap: 16px;
+            margin-bottom: 24px; padding-bottom: 18px;
+            border-bottom: 1px solid var(--border);
+        }
+        .room-hero-emoji {
+            width: 56px; height: 56px; border-radius: 14px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 26px; flex-shrink: 0;
+        }
+        .room-hero-info { flex: 1; }
+        .room-hero-title { font-size: 22px; font-weight: 700; color: var(--text-1); letter-spacing: -0.5px; }
+        .room-hero-sub { font-size: 13px; color: var(--text-2); margin-top: 2px; }
+        .room-hero-actions { display: flex; gap: 8px; }
+
+        .room-body { display: grid; grid-template-columns: 1fr 340px; gap: 20px; align-items: start; }
+        @media (max-width: 1100px) { .room-body { grid-template-columns: 1fr; } }
+
+        .room-panel {
+            background: var(--surface); border: 1px solid var(--border);
+            border-radius: var(--r-lg); padding: 20px 22px;
+            box-shadow: var(--shadow-sm);
+        }
+        .room-panel-title {
+            font-size: 10px; font-weight: 700; text-transform: uppercase;
+            letter-spacing: 0.8px; color: var(--text-3); margin-bottom: 14px;
+        }
+
+        .room-stat-row { display: flex; gap: 12px; margin-bottom: 20px; }
+        .room-stat {
+            flex: 1; background: var(--surface-2); border-radius: var(--r);
+            padding: 12px 14px; text-align: center;
+        }
+        .room-stat-num { font-size: 22px; font-weight: 700; color: var(--text-1); letter-spacing: -0.5px; }
+        .room-stat-lbl { font-size: 11px; color: var(--text-2); margin-top: 2px; }
+
+        .dept-status-row { display: grid; grid-template-columns: repeat(3,1fr); gap: 12px; margin-bottom: 20px; }
+        .dept-status-card {
+            background: var(--surface); border: 1px solid var(--border);
+            border-radius: var(--r); padding: 14px 16px;
+            box-shadow: var(--shadow-sm); cursor: pointer; transition: all 0.15s;
+            text-decoration: none;
+        }
+        .dept-status-card:hover { box-shadow: var(--shadow); transform: translateY(-1px); }
+        .dept-status-icon { font-size: 20px; margin-bottom: 6px; }
+        .dept-status-name { font-size: 12px; font-weight: 600; color: var(--text-1); }
+        .dept-status-sub  { font-size: 11px; color: var(--text-2); margin-top: 2px; }
+        .dept-status-chip {
+            display: inline-flex; align-items: center; gap: 4px;
+            font-size: 10px; font-weight: 600; padding: 2px 7px;
+            border-radius: 100px; margin-top: 6px;
+            background: rgba(48,209,88,0.12); color: #1a9e42;
+        }
 
         /* ── TEAM PANEL ── */
         .team-panel {
@@ -1014,12 +1076,16 @@
         <div class="sidebar-nav">
             <div class="nav-section">Workspace</div>
             <a class="nav-item" href="/"><span class="ni">⬡</span> All Agents</a>
-            <a class="nav-item" href="/inbox"><span class="ni">📥</span> Inbox</a>
+            <a class="nav-item" href="/inbox?tasks=1"><span class="ni">📥</span> Inbox & Tasks</a>
             <a class="nav-item" href="/vision"><span class="ni">🚀</span> Vision</a>
-            <a class="nav-item active" href="/newsroom"><span class="ni">📰</span> Newsroom</a>
+            <div class="nav-section">Rooms</div>
+            <a class="nav-sub" id="nav-newsroom" href="#" onclick="switchRoom('newsroom',this);return false">📰 Newsroom</a>
+            <a class="nav-sub" id="nav-room-gm"    href="#" onclick="switchRoom('gm',this);return false">👑 GM Room</a>
+            <a class="nav-sub" id="nav-room-tech"  href="#" onclick="switchRoom('tech',this);return false">💻 Tech Room</a>
+            <a class="nav-sub" id="nav-room-sales" href="#" onclick="switchRoom('sales',this);return false">🤝 Sales Room</a>
+            <div class="nav-section">System</div>
             <a class="nav-item" href="#"><span class="ni">📊</span> Analytics</a>
             <a class="nav-item" href="#"><span class="ni">📅</span> Schedule</a>
-            <div class="nav-section">System</div>
             <a class="nav-item" href="#"><span class="ni">⚙️</span> Settings</a>
         </div>
 
@@ -1039,28 +1105,18 @@
             </div>
             <div class="topbar-center">Newsroom</div>
             <div class="topbar-right">
-                <div style="position:relative">
-                    <button class="notif-bell" id="notif-bell" onclick="toggleNotifPanel()">
-                        🔔<span class="notif-badge hidden" id="notif-badge">0</span>
-                    </button>
-                    <div class="notif-backdrop" id="notif-backdrop" onclick="toggleNotifPanel()"></div>
-                    <div class="notif-panel" id="notif-panel">
-                        <div class="notif-panel-header">
-                            <div class="notif-panel-title">🔔 Notifications</div>
-                            <div style="display:flex;gap:8px;align-items:center">
-                                <button class="btn btn-ghost" style="font-size:11px;padding:3px 9px" onclick="markAllRead()">Mark all read</button>
-                                <button onclick="toggleNotifPanel()" style="background:none;border:none;cursor:pointer;font-size:18px;color:var(--text-3);padding:2px 6px">×</button>
-                            </div>
-                        </div>
-                        <div class="notif-panel-body" id="notif-list"></div>
-                    </div>
-                </div>
+                <button class="notif-bell" id="notif-bell" onclick="toggleNotifPanel()">
+                    🔔<span class="notif-badge hidden" id="notif-badge">0</span>
+                </button>
                 <button class="btn btn-primary" onclick="openNewWorkflowModal()">💡 New Idea</button>
             </div>
         </header>
 
         <!-- CONTENT -->
         <div class="content">
+
+        <!-- ═══ NEWSROOM ROOM (default) ═══ -->
+        <div id="room-newsroom" class="room-view active">
 
             <!-- TEAM STRIP (always visible) -->
             <div class="team-panel fade-up">
@@ -1125,6 +1181,140 @@
                     </table>
                 </div>
             </div>
+
+        </div><!-- /room-newsroom -->
+
+        <!-- ═══ GM ROOM ═══ -->
+        <div id="room-gm" class="room-view">
+            <div class="room-header">
+                <div class="room-hero-emoji" style="background:linear-gradient(135deg,rgba(255,214,10,0.15),rgba(255,159,10,0.15));border:1px solid rgba(255,159,10,0.2)">🏛️</div>
+                <div class="room-hero-info">
+                    <div class="room-hero-title" id="gm-title">GM Room</div>
+                    <div class="room-hero-sub" id="gm-sub">General Manager · Company Operations Overview</div>
+                </div>
+                <div class="room-hero-actions">
+                    <button class="btn btn-ghost" onclick="chatWithHead('general_manager')">💬 Chat with GM</button>
+                    <button class="btn btn-primary" onclick="openNewWorkflowModal()">💡 New Idea</button>
+                </div>
+            </div>
+
+            <!-- Dept status cards -->
+            <div class="dept-status-row" id="gm-dept-status">
+                <a class="dept-status-card" href="#" onclick="switchRoom('newsroom',null);return false">
+                    <div class="dept-status-icon">📰</div>
+                    <div class="dept-status-name">Editorial</div>
+                    <div class="dept-status-sub">Pipeline & Content</div>
+                    <div class="dept-status-chip">● Active</div>
+                </a>
+                <a class="dept-status-card" href="#" onclick="switchRoom('tech',null);return false">
+                    <div class="dept-status-icon">💻</div>
+                    <div class="dept-status-name">Tech</div>
+                    <div class="dept-status-sub">Engineering & Product</div>
+                    <div class="dept-status-chip">● Active</div>
+                </a>
+                <a class="dept-status-card" href="#" onclick="switchRoom('sales',null);return false">
+                    <div class="dept-status-icon">🤝</div>
+                    <div class="dept-status-name">Sales</div>
+                    <div class="dept-status-sub">Partnerships & Revenue</div>
+                    <div class="dept-status-chip">● Active</div>
+                </a>
+            </div>
+
+            <div class="room-body">
+                <!-- Left: Org chart for GM -->
+                <div>
+                    <div class="room-panel">
+                        <div class="room-panel-title">Leadership Team</div>
+                        <div id="gm-org-chart"><!-- rendered dynamically --></div>
+                    </div>
+                </div>
+                <!-- Right: Tasks + Quick stats -->
+                <div style="display:flex;flex-direction:column;gap:16px">
+                    <div class="room-panel">
+                        <div class="room-panel-title">Pending Approvals</div>
+                        <div id="gm-tasks-list" style="font-size:12px;color:var(--text-3)">Loading...</div>
+                    </div>
+                    <div class="room-panel">
+                        <div class="room-panel-title">Recent Dispatches</div>
+                        <div id="gm-dispatch-list" style="font-size:12px;color:var(--text-3)">Loading...</div>
+                    </div>
+                </div>
+            </div>
+        </div><!-- /room-gm -->
+
+        <!-- ═══ TECH ROOM ═══ -->
+        <div id="room-tech" class="room-view">
+            <div class="room-header">
+                <div class="room-hero-emoji" style="background:linear-gradient(135deg,rgba(90,200,250,0.15),rgba(0,122,255,0.1));border:1px solid rgba(90,200,250,0.3)">💻</div>
+                <div class="room-hero-info">
+                    <div class="room-hero-title" id="tech-title">Tech Room</div>
+                    <div class="room-hero-sub" id="tech-sub">Engineering & Product · Chief Technology Officer</div>
+                </div>
+                <div class="room-hero-actions">
+                    <button class="btn btn-ghost" onclick="chatWithHead('cto')">💬 Chat with Lior</button>
+                    <button class="btn btn-primary" onclick="openNewWorkflowModal()">💡 New Idea</button>
+                </div>
+            </div>
+            <div class="room-body">
+                <div>
+                    <div class="room-panel" style="margin-bottom:16px">
+                        <div class="room-panel-title">Tech Team</div>
+                        <div id="tech-org-chart"><!-- rendered dynamically --></div>
+                    </div>
+                    <div class="room-panel">
+                        <div class="room-panel-title">Engineering Workflow</div>
+                        <div id="tech-wf-bar"><!-- rendered dynamically --></div>
+                    </div>
+                </div>
+                <div style="display:flex;flex-direction:column;gap:16px">
+                    <div class="room-panel">
+                        <div class="room-panel-title">Tech Tasks</div>
+                        <div id="tech-tasks-list" style="font-size:12px;color:var(--text-3)">Loading...</div>
+                    </div>
+                    <div class="room-panel">
+                        <div class="room-panel-title">Activity</div>
+                        <div id="tech-activity" style="font-size:12px;color:var(--text-3)">No recent activity.</div>
+                    </div>
+                </div>
+            </div>
+        </div><!-- /room-tech -->
+
+        <!-- ═══ SALES ROOM ═══ -->
+        <div id="room-sales" class="room-view">
+            <div class="room-header">
+                <div class="room-hero-emoji" style="background:linear-gradient(135deg,rgba(52,199,89,0.12),rgba(48,209,88,0.08));border:1px solid rgba(52,199,89,0.25)">🤝</div>
+                <div class="room-hero-info">
+                    <div class="room-hero-title" id="sales-title">Sales Room</div>
+                    <div class="room-hero-sub" id="sales-sub">Sales & Partnerships · VP of Sales</div>
+                </div>
+                <div class="room-hero-actions">
+                    <button class="btn btn-ghost" onclick="chatWithHead('vp_sales')">💬 Chat with Jordan</button>
+                    <button class="btn btn-primary" onclick="openNewWorkflowModal()">💡 New Idea</button>
+                </div>
+            </div>
+            <div class="room-body">
+                <div>
+                    <div class="room-panel" style="margin-bottom:16px">
+                        <div class="room-panel-title">Sales Team</div>
+                        <div id="sales-org-chart"><!-- rendered dynamically --></div>
+                    </div>
+                    <div class="room-panel">
+                        <div class="room-panel-title">Sales Pipeline</div>
+                        <div id="sales-wf-bar"><!-- rendered dynamically --></div>
+                    </div>
+                </div>
+                <div style="display:flex;flex-direction:column;gap:16px">
+                    <div class="room-panel">
+                        <div class="room-panel-title">Sales Tasks</div>
+                        <div id="sales-tasks-list" style="font-size:12px;color:var(--text-3)">Loading...</div>
+                    </div>
+                    <div class="room-panel">
+                        <div class="room-panel-title">Pipeline Activity</div>
+                        <div id="sales-activity" style="font-size:12px;color:var(--text-3)">No recent activity.</div>
+                    </div>
+                </div>
+            </div>
+        </div><!-- /room-sales -->
 
         </div><!-- /content -->
 
@@ -1257,9 +1447,7 @@ const NOTIF_ICONS = {
 
 function toggleNotifPanel() {
     const panel = document.getElementById('notif-panel');
-    const backdrop = document.getElementById('notif-backdrop');
     const isOpen = panel.classList.toggle('open');
-    backdrop.classList.toggle('open', isOpen);
     if (isOpen) loadNotifications();
 }
 
@@ -1333,31 +1521,12 @@ async function loadNotifications() {
             const visibleTasks = pendingApprovalTasks.slice(0, 8);
             const hiddenTasks = pendingApprovalTasks.slice(8);
 
-            visibleTasks.forEach(t => {
-                const priColor = t.priority === 'urgent' ? 'var(--danger)' : t.priority === 'high' ? 'var(--warning)' : 'var(--text-3)';
-                html += `
-                <div style="display:flex;align-items:center;gap:8px;padding:7px 16px;border-bottom:1px solid var(--border);font-size:11px" id="notif-task-${t.id}">
-                    <span style="width:4px;height:4px;border-radius:50%;background:${priColor};flex-shrink:0"></span>
-                    <div style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text-1);font-weight:500">${esc(t.title)}</div>
-                    <span style="color:var(--text-3);font-size:10px;flex-shrink:0;max-width:70px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(t.assignee_name || '')}</span>
-                    <button onclick="_approveTaskFromNotif(${t.id},this)" style="padding:2px 7px;background:var(--success);color:#fff;border:none;border-radius:4px;font-size:9px;font-weight:700;cursor:pointer;flex-shrink:0" title="Approve">✓</button>
-                    <button onclick="_rejectTaskFromNotif(${t.id},this)" style="padding:2px 7px;background:rgba(255,69,58,0.12);color:var(--danger);border:none;border-radius:4px;font-size:9px;font-weight:700;cursor:pointer;flex-shrink:0" title="Reject">✕</button>
-                </div>`;
-            });
+            visibleTasks.forEach(t => { html += _renderNotifTask(t); });
 
             if (hiddenTasks.length > 0) {
                 html += `
                 <div id="notif-more-tasks" style="display:none">
-                    ${hiddenTasks.map(t => {
-                        const priColor = t.priority === 'urgent' ? 'var(--danger)' : t.priority === 'high' ? 'var(--warning)' : 'var(--text-3)';
-                        return `<div style="display:flex;align-items:center;gap:8px;padding:7px 16px;border-bottom:1px solid var(--border);font-size:11px" id="notif-task-${t.id}">
-                            <span style="width:4px;height:4px;border-radius:50%;background:${priColor};flex-shrink:0"></span>
-                            <div style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text-1);font-weight:500">${esc(t.title)}</div>
-                            <span style="color:var(--text-3);font-size:10px;flex-shrink:0;max-width:70px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(t.assignee_name || '')}</span>
-                            <button onclick="_approveTaskFromNotif(${t.id},this)" style="padding:2px 7px;background:var(--success);color:#fff;border:none;border-radius:4px;font-size:9px;font-weight:700;cursor:pointer;flex-shrink:0">✓</button>
-                            <button onclick="_rejectTaskFromNotif(${t.id},this)" style="padding:2px 7px;background:rgba(255,69,58,0.12);color:var(--danger);border:none;border-radius:4px;font-size:9px;font-weight:700;cursor:pointer;flex-shrink:0">✕</button>
-                        </div>`;
-                    }).join('')}
+                    ${hiddenTasks.map(t => _renderNotifTask(t)).join('')}
                 </div>
                 <button onclick="document.getElementById('notif-more-tasks').style.display='block';this.remove()" style="display:block;width:100%;padding:8px;background:none;border:none;border-bottom:1px solid var(--border);color:var(--accent);font-size:11px;font-weight:600;cursor:pointer;text-align:center">
                     Show ${hiddenTasks.length} more tasks…
@@ -1408,6 +1577,31 @@ async function clickNotif(id, link) {
         if (link.startsWith('/') || link.startsWith('http')) window.location = link;
     }
     loadNotifications();
+}
+
+function _renderNotifTask(t) {
+    const priBadge = t.priority === 'urgent' ? '<span style="font-size:9px;font-weight:700;color:var(--danger);background:rgba(255,69,58,0.1);padding:1px 5px;border-radius:3px">URGENT</span>'
+                   : t.priority === 'high' ? '<span style="font-size:9px;font-weight:700;color:var(--warning);background:rgba(255,159,10,0.1);padding:1px 5px;border-radius:3px">HIGH</span>'
+                   : '';
+    const desc = esc((t.description || '').substring(0, 200));
+    const due = t.due_date ? `<span style="font-size:9px;color:var(--text-3)">📅 ${t.due_date}</span>` : '';
+    return `
+    <div class="notif-task-row" id="notif-task-${t.id}" style="border-bottom:1px solid var(--border);font-size:11px">
+        <div onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'block':'none'" style="display:flex;align-items:center;gap:8px;padding:8px 16px;cursor:pointer;transition:background 0.15s" onmouseenter="this.style.background='var(--surface-2)'" onmouseleave="this.style.background='transparent'">
+            <div style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text-1);font-weight:500">${esc(t.title)}</div>
+            <span style="color:var(--text-3);font-size:10px;flex-shrink:0;max-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(t.assignee_name || '')}</span>
+            <button onclick="event.stopPropagation();_approveTaskFromNotif(${t.id},this)" style="padding:2px 7px;background:var(--success);color:#fff;border:none;border-radius:4px;font-size:9px;font-weight:700;cursor:pointer;flex-shrink:0" title="Approve">✓</button>
+            <button onclick="event.stopPropagation();_rejectTaskFromNotif(${t.id},this)" style="padding:2px 7px;background:rgba(255,69,58,0.12);color:var(--danger);border:none;border-radius:4px;font-size:9px;font-weight:700;cursor:pointer;flex-shrink:0" title="Reject">✕</button>
+        </div>
+        <div style="display:none;padding:6px 16px 10px;background:var(--surface-2);border-top:1px solid var(--border)">
+            ${desc ? `<div style="font-size:11px;color:var(--text-2);line-height:1.5;margin-bottom:6px">${desc}</div>` : ''}
+            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+                <span style="font-size:9px;color:var(--text-3)">👤 ${esc(t.assignee_name || 'Unassigned')}</span>
+                ${priBadge} ${due}
+                <a href="/inbox?tasks=1" style="font-size:9px;color:var(--accent);text-decoration:none;font-weight:600;margin-left:auto">Open in Inbox →</a>
+            </div>
+        </div>
+    </div>`;
 }
 
 async function markAllRead() {
@@ -1495,7 +1689,195 @@ document.addEventListener('DOMContentLoaded', () => {
     loadWorkflows();
     loadNotifications();
     setInterval(loadNotifications, 10000);  // poll every 10s
+
+    // Check for room param
+    const roomParam = new URLSearchParams(window.location.search).get('room');
+    if (roomParam && ['gm','tech','sales'].includes(roomParam)) {
+        switchRoom(roomParam, null);
+    } else {
+        switchRoom('newsroom', null);
+    }
 });
+
+/* ── ROOMS ── */
+let _currentRoom = 'newsroom';
+
+function switchRoom(room, sidebarEl) {
+    _currentRoom = room;
+    // Update room views
+    document.querySelectorAll('.room-view').forEach(v => v.classList.remove('active'));
+    const view = document.getElementById('room-' + room);
+    if (view) view.classList.add('active');
+
+    // Update topbar title
+    const titles = { newsroom: 'Newsroom', gm: 'GM Room', tech: 'Tech Room', sales: 'Sales Room' };
+    const center = document.querySelector('.topbar-center');
+    if (center) center.textContent = titles[room] || 'Newsroom';
+
+    // Update sidebar active states
+    document.querySelectorAll('.nav-item, .nav-sub').forEach(el => el.classList.remove('active'));
+    const navId = room === 'newsroom' ? 'nav-newsroom' : 'nav-room-' + room;
+    document.getElementById(navId)?.classList.add('active');
+
+    // Update URL without reload
+    const url = room === 'newsroom' ? '/newsroom.html' : '/newsroom.html?room=' + room;
+    window.history.replaceState({}, '', url);
+
+    // Render room-specific content
+    if (room === 'gm')    renderGMRoom();
+    if (room === 'tech')  renderTechRoom();
+    if (room === 'sales') renderSalesRoom();
+}
+
+function renderGMRoom() {
+    if (!window._teamByKey) return;
+    const byKey = window._teamByKey;
+
+    const gmNode = byKey['general_manager'];
+    const cofNode = byKey['cofounder'];
+    const eicNode = byKey['eic'];
+    const ctoNode = byKey['cto'];
+    const vpNode  = byKey['vp_sales'];
+
+    function miniNode(m) {
+        if (!m) return '';
+        const shortModel = (m.llm_model || 'sonnet-4-6').replace('claude-','').replace('gemini-flash-','G ').replace('gemini-','G ');
+        return `<div style="background:var(--surface-2);border:1px solid var(--border);border-radius:10px;padding:12px 16px;text-align:center;min-width:110px;cursor:pointer" onclick="chatWithHead('${m.role_key}')">
+            <div style="font-size:22px;margin-bottom:4px">${m.emoji||'👤'}</div>
+            <div style="font-size:12px;font-weight:600;color:var(--text-1)">${m.display_name}</div>
+            <div style="font-size:10px;color:var(--text-2);margin-top:2px">${m.role_title}</div>
+            <div style="font-size:9px;background:rgba(204,120,50,0.1);color:#b36a00;border-radius:100px;padding:2px 6px;margin-top:5px;display:inline-block">${shortModel}</div>
+        </div>`;
+    }
+
+    const chart = document.getElementById('gm-org-chart');
+    if (chart) chart.innerHTML = `
+        <div style="display:flex;flex-direction:column;align-items:center;gap:12px">
+            <div style="display:flex;gap:12px;justify-content:center">
+                ${cofNode ? miniNode(cofNode) : ''}
+                ${gmNode  ? miniNode(gmNode)  : ''}
+            </div>
+            <div style="width:1px;height:20px;background:var(--border-strong)"></div>
+            <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap">
+                ${eicNode ? miniNode(eicNode) : ''}
+                ${ctoNode ? miniNode(ctoNode) : ''}
+                ${vpNode  ? miniNode(vpNode)  : ''}
+            </div>
+        </div>
+    `;
+
+    loadRoomTasks('gm-tasks-list', null);
+    loadRoomDispatches('gm-dispatch-list');
+}
+
+function renderTechRoom() {
+    if (!window._teamByKey) return;
+    const byKey = window._teamByKey;
+    const cto = byKey['cto'];
+    const le  = byKey['lead_engineer'];
+    const de  = byKey['data_engineer'];
+
+    function techNode(m) {
+        if (!m) return '';
+        return `<div style="background:var(--surface-2);border:1px solid rgba(90,200,250,0.2);border-radius:10px;padding:12px 16px;text-align:center;min-width:120px;cursor:pointer" onclick="chatWithHead('${m.role_key}')">
+            <div style="font-size:22px;margin-bottom:4px">${m.emoji||'👤'}</div>
+            <div style="font-size:12px;font-weight:600;color:var(--text-1)">${m.display_name}</div>
+            <div style="font-size:10px;color:var(--text-2);margin-top:2px">${m.role_title}</div>
+        </div>`;
+    }
+
+    const chart = document.getElementById('tech-org-chart');
+    if (chart) chart.innerHTML = `
+        <div style="display:flex;flex-direction:column;align-items:center;gap:12px">
+            ${cto ? `<div style="display:flex;justify-content:center">${techNode(cto)}</div>
+            <div style="width:1px;height:16px;background:var(--border-strong)"></div>
+            <div style="display:flex;gap:12px;justify-content:center">
+                ${le ? techNode(le) : ''}
+                ${de ? techNode(de) : ''}
+            </div>` : '<div style="color:var(--text-3);font-size:12px">No tech team loaded</div>'}
+        </div>
+    `;
+
+    const wfEl = document.getElementById('tech-wf-bar');
+    if (wfEl) wfEl.innerHTML = renderMiniWfBar(['📐 Architecture','🗓 Sprint Plan','⚡ Development','🔍 Code Review','🧪 Testing','🚢 Deploy','📊 Monitor']);
+
+    loadRoomTasks('tech-tasks-list', 'tech');
+}
+
+function renderSalesRoom() {
+    if (!window._teamByKey) return;
+    const byKey = window._teamByKey;
+    const vp  = byKey['vp_sales'];
+    const bd  = byKey['biz_dev'];
+    const ae  = byKey['account_exec'];
+
+    function salesNode(m) {
+        if (!m) return '';
+        return `<div style="background:var(--surface-2);border:1px solid rgba(52,199,89,0.2);border-radius:10px;padding:12px 16px;text-align:center;min-width:120px;cursor:pointer" onclick="chatWithHead('${m.role_key}')">
+            <div style="font-size:22px;margin-bottom:4px">${m.emoji||'👤'}</div>
+            <div style="font-size:12px;font-weight:600;color:var(--text-1)">${m.display_name}</div>
+            <div style="font-size:10px;color:var(--text-2);margin-top:2px">${m.role_title}</div>
+        </div>`;
+    }
+
+    const chart = document.getElementById('sales-org-chart');
+    if (chart) chart.innerHTML = `
+        <div style="display:flex;flex-direction:column;align-items:center;gap:12px">
+            ${vp ? `<div style="display:flex;justify-content:center">${salesNode(vp)}</div>
+            <div style="width:1px;height:16px;background:var(--border-strong)"></div>
+            <div style="display:flex;gap:12px;justify-content:center">
+                ${bd ? salesNode(bd) : ''}
+                ${ae ? salesNode(ae) : ''}
+            </div>` : '<div style="color:var(--text-3);font-size:12px">No sales team loaded</div>'}
+        </div>
+    `;
+
+    const wfEl = document.getElementById('sales-wf-bar');
+    if (wfEl) wfEl.innerHTML = renderMiniWfBar(['🎯 Lead Gen','🔎 Qualify','📧 Outreach','🎤 Demo','📄 Proposal','🤝 Negotiate','✅ Close','🚀 Onboard']);
+
+    loadRoomTasks('sales-tasks-list', 'sales');
+}
+
+function renderMiniWfBar(steps) {
+    return `<div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap">
+        ${steps.map((s,i) => `<span style="font-size:10px;padding:4px 9px;border-radius:100px;background:var(--surface-2);border:1px solid var(--border);color:var(--text-2);white-space:nowrap">${s}</span>${i < steps.length-1 ? '<span style="color:var(--text-3);font-size:11px">→</span>' : ''}`).join('')}
+    </div>`;
+}
+
+async function loadRoomTasks(containerId, dept) {
+    const el = document.getElementById(containerId);
+    if (!el) return;
+    try {
+        const r = await fetch('/api/tasks/pending_approval');
+        const data = await r.json();
+        const tasks = (data.tasks || []).slice(0, 5);
+        if (!tasks.length) { el.innerHTML = '<div style="color:var(--text-3);font-size:12px;padding:8px 0">No pending tasks.</div>'; return; }
+        el.innerHTML = tasks.map(t => `
+            <div style="padding:9px 0;border-bottom:1px solid var(--border);display:flex;align-items:flex-start;gap:8px;cursor:pointer" onclick="window.location='/inbox?tasks=1'">
+                <div style="flex:1;min-width:0">
+                    <div style="font-size:12px;font-weight:600;color:var(--text-1);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${t.title||'Untitled'}</div>
+                    <div style="font-size:11px;color:var(--text-2);margin-top:2px">${t.assigned_to||'Unassigned'}</div>
+                </div>
+                <span style="font-size:9px;padding:2px 6px;border-radius:100px;white-space:nowrap;background:rgba(255,159,10,0.12);color:#b36e00">${t.priority||'normal'}</span>
+            </div>`).join('');
+    } catch(e) { el.innerHTML = '<div style="color:var(--text-3);font-size:12px">Unable to load tasks.</div>'; }
+}
+
+async function loadRoomDispatches(containerId) {
+    const el = document.getElementById(containerId);
+    if (!el) return;
+    try {
+        const r = await fetch('/api/messages/recent?limit=5');
+        const data = await r.json();
+        const msgs = data.messages || [];
+        if (!msgs.length) { el.innerHTML = '<div style="color:var(--text-3);font-size:12px;padding:8px 0">No recent dispatches.</div>'; return; }
+        el.innerHTML = msgs.map(m => `
+            <div style="padding:8px 0;border-bottom:1px solid var(--border);cursor:pointer" onclick="window.location='/inbox'">
+                <div style="font-size:12px;font-weight:500;color:var(--text-1);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${m.content||m.subject||'Message'}</div>
+                <div style="font-size:10px;color:var(--text-3);margin-top:2px">${m.sender||''} · ${m.created_at ? new Date(m.created_at).toLocaleDateString() : ''}</div>
+            </div>`).join('');
+    } catch(e) { el.innerHTML = '<div style="color:var(--text-3);font-size:12px">No dispatches yet.</div>'; }
+}
 
 /* ── TABS ── */
 function switchTab(name, btn) {
@@ -1526,10 +1908,8 @@ function chatWithHead(roleKey) {
 document.addEventListener('keydown', e => {
     if (e.key === 'Escape') {
         const panel = document.getElementById('notif-panel');
-        const backdrop = document.getElementById('notif-backdrop');
         if (panel && panel.classList.contains('open')) {
             panel.classList.remove('open');
-            if (backdrop) backdrop.classList.remove('open');
         }
     }
 });
@@ -1574,21 +1954,44 @@ async function loadTeam() {
             grid.innerHTML = '<div style="padding:20px;color:var(--text-3);font-size:13px">No team members configured</div>';
             return;
         }
-        teamMembers.forEach(m => {
+        // Show department heads only — full team is in Org Chart tab
+        const headKeys = new Set(['cofounder', 'general_manager', 'eic', 'cto', 'vp_sales']);
+        const heads = teamMembers.filter(m => headKeys.has(m.role_key));
+        const others = teamMembers.filter(m => !headKeys.has(m.role_key));
+        const headCount = { eic: 0, cto: 0, vp_sales: 0, general_manager: 0 };
+        teamMembers.forEach(m => { if (m.reports_to && headCount[m.reports_to] !== undefined) headCount[m.reports_to]++; });
+
+        heads.forEach(m => {
             const card = document.createElement('div');
             card.className = 'team-card';
             card.onclick = () => openEditMember(m.role_key);
             const llmCls = (m.llm_model || '').includes('image') ? 'gemini-img'
                          : (m.llm_provider || '').includes('gemini') ? 'gemini' : 'claude';
             const llmLabel = (m.llm_model || 'claude-sonnet-4-6').replace('claude-', '').replace('gemini-', 'G ');
+            const count = headCount[m.role_key];
+            const teamBadge = count > 0 ? `<div style="font-size:9px;color:var(--text-3);margin-top:3px">${count} report${count>1?'s':''}</div>` : '';
             card.innerHTML = `
                 <div class="team-emoji">${m.emoji || '👤'}</div>
                 <div class="team-name">${esc(m.display_name)}</div>
                 <div class="team-role">${esc(m.role_title)}</div>
                 <div class="team-llm ${llmCls}">${llmLabel}</div>
+                ${teamBadge}
             `;
             grid.appendChild(card);
         });
+
+        // Compact count of total team
+        const countCard = document.createElement('div');
+        countCard.className = 'team-card';
+        countCard.style.cssText = 'display:flex;flex-direction:column;align-items:center;justify-content:center;background:var(--surface-2);border-style:dashed;cursor:pointer';
+        countCard.onclick = () => { const btn = document.querySelector('.tab-btn:nth-child(2)'); if(btn) btn.click(); };
+        countCard.innerHTML = `
+            <div style="font-size:22px;font-weight:700;color:var(--text-1)">${others.length}</div>
+            <div style="font-size:10px;color:var(--text-3);margin-top:2px">more in team</div>
+            <div style="font-size:9px;color:var(--accent);margin-top:4px;font-weight:600">View Org Chart →</div>
+        `;
+        grid.appendChild(countCard);
+
         renderOrgChart();
     } catch (e) {
         grid.innerHTML = '<div style="padding:20px;color:var(--text-3);font-size:13px">Could not load team members</div>';
@@ -1616,6 +2019,12 @@ async function renderOrgChart() {
     // Build lookup
     const byKey = {};
     teamMembers.forEach(m => byKey[m.role_key] = m);
+    window._teamByKey = byKey;
+
+    // Re-render current room if it's already active
+    if (_currentRoom === 'gm')    renderGMRoom();
+    if (_currentRoom === 'tech')  renderTechRoom();
+    if (_currentRoom === 'sales') renderSalesRoom();
 
     function node(key) {
         const m = byKey[key];
@@ -2759,6 +3168,18 @@ async function _atomEicSchedule(runId, btn) {
 }
 
 </script>
+
+<!-- Notification / Task panel — fixed right, outside all wrappers -->
+<div class="notif-panel" id="notif-panel">
+    <div class="notif-panel-header">
+        <div class="notif-panel-title">Notifications</div>
+        <div style="display:flex;gap:8px;align-items:center">
+            <button class="btn btn-ghost" style="font-size:11px;padding:3px 9px" onclick="markAllRead()">Mark all read</button>
+            <button onclick="toggleNotifPanel()" style="background:none;border:none;cursor:pointer;font-size:18px;color:var(--text-3);padding:2px 6px" title="Close">×</button>
+        </div>
+    </div>
+    <div class="notif-panel-body" id="notif-list"></div>
+</div>
 
 <script src="/js/marc.js"></script>
 </body>

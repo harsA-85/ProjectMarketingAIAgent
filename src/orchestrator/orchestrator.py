@@ -280,7 +280,21 @@ class Orchestrator:
             'autopilot_enabled': bool(agent.autopilot_enabled),
             'ai_auto_enabled':   bool(agent.ai_auto_enabled),
             'ai_auto_status':    agent.ai_auto_status or 'idle',
+            'connected_platforms': self._get_connected_platforms(agent.id),
         }
+
+    def _get_connected_platforms(self, agent_id: int):
+        """Return list of platform names that have a saved access token."""
+        try:
+            from src.database.models import SocialMediaAccount
+            rows = self.db.query(SocialMediaAccount).filter(
+                SocialMediaAccount.agent_id == agent_id,
+                SocialMediaAccount.access_token != None,
+                SocialMediaAccount.access_token != '',
+            ).all()
+            return [r.platform for r in rows]
+        except Exception:
+            return []
 
     def get_agent_dashboard(self, agent_id: int) -> Dict[str, Any]:
         """Get dashboard data for an agent"""
@@ -311,11 +325,22 @@ class Orchestrator:
                     'analytics': {},
                 })
 
+        # Connection breakdown across all influencer/agent accounts
+        acct_counts = {a['agent_id']: len(a.get('connected_platforms', [])) for a in agents_data}
+        agents_zero    = sum(1 for c in acct_counts.values() if c == 0)
+        agents_partial = sum(1 for c in acct_counts.values() if 0 < c < 3)
+        agents_full    = sum(1 for c in acct_counts.values() if c >= 3)
+
         return {
             'total_agents': total_agents,
             'total_posts': total_posts,
             'total_interactions': total_interactions,
             'agents': agents_data,
+            'connection_stats': {
+                'zero':    agents_zero,
+                'partial': agents_partial,
+                'full':    agents_full,
+            },
             'timestamp': datetime.utcnow().isoformat()
         }
 

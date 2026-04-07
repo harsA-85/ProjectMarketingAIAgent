@@ -165,17 +165,23 @@
         .notif-bell:hover { background:rgba(0,0,0,0.05); }
         .notif-badge { position:absolute;top:2px;right:2px;min-width:16px;height:16px;border-radius:100px;background:var(--danger);color:#fff;font-size:9px;font-weight:700;display:flex;align-items:center;justify-content:center;padding:0 4px; }
         .notif-badge.hidden { display:none; }
-        .notif-panel { display:none;position:absolute;top:44px;right:0;width:360px;max-height:480px;overflow-y:auto;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);box-shadow:var(--shadow-lg);z-index:999; }
-        .notif-panel.open { display:block; }
-        .notif-panel-header { display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border-bottom:1px solid var(--border);font-size:13px;font-weight:600; }
+        .notif-panel { position:fixed;top:0;right:0;height:100vh;width:380px;max-width:90vw;background:var(--surface);border-left:1px solid var(--border);box-shadow:-4px 0 24px rgba(0,0,0,0.10);z-index:9999;display:flex;flex-direction:column;transform:translateX(100%);transition:transform 0.28s cubic-bezier(0.4,0,0.2,1); }
+        .notif-panel.open { transform:translateX(0); }
+        .notif-panel-header { display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid var(--border);font-size:14px;font-weight:700;flex-shrink:0; }
+        .notif-section-label { font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:var(--text-3);padding:12px 16px 6px; }
         .notif-item { display:flex;gap:10px;padding:10px 14px;border-bottom:1px solid var(--border);cursor:pointer;transition:background 0.1s; }
         .notif-item:hover { background:var(--surface-2); }
-        .notif-item.unread { background:rgba(0,122,255,0.04); }
-        .notif-icon { font-size:20px;flex-shrink:0;margin-top:2px; }
+        .notif-item.unread { background:rgba(0,122,255,0.03);border-left:3px solid var(--accent); }
+        .notif-item.action-required { background:rgba(255,149,0,0.04);border-left:3px solid var(--warning);cursor:default; }
+        .notif-icon { font-size:18px;flex-shrink:0;margin-top:2px; }
         .notif-content { flex:1;min-width:0; }
         .notif-title { font-size:12px;font-weight:600;color:var(--text-1); }
-        .notif-body { font-size:11px;color:var(--text-2);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
-        .notif-time { font-size:10px;color:var(--text-3);margin-top:3px; }
+        .notif-body { font-size:11px;color:var(--text-2);margin-top:2px;line-height:1.4; }
+        .notif-time { font-size:10px;color:var(--text-3);margin-top:4px; }
+        .notif-btn { padding:4px 10px;border-radius:5px;font-size:10px;font-weight:600;cursor:pointer;border:none;transition:all 0.15s; }
+        .notif-btn-primary { background:var(--accent);color:#fff; }
+        .notif-btn-danger { background:rgba(255,69,58,0.12);color:var(--danger); }
+        .notif-btn-ghost { background:var(--surface-2);color:var(--text-2);border:1px solid var(--border); }
 
         .search-wrap { position: relative; display: flex; align-items: center; }
         .search-icon { position: absolute; left: 9px; color: var(--text-3); font-size: 12px; pointer-events: none; }
@@ -271,6 +277,20 @@
         .stat-num  { font-size: 30px; font-weight: 700; color: var(--text-1); line-height: 1; letter-spacing: -1px; }
         .stat-lbl  { font-size: 13px; color: var(--text-2); margin-top: 3px; }
 
+        /* Connection breakdown pills inside stat card */
+        .conn-breakdown {
+            display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px;
+        }
+        .conn-pill {
+            display: flex; align-items: center; gap: 4px;
+            font-size: 11px; font-weight: 600; padding: 3px 7px;
+            border-radius: 20px; white-space: nowrap;
+        }
+        .conn-pill.full    { background: rgba(48,209,88,0.12);  color: #1a9e42; }
+        .conn-pill.partial { background: rgba(255,159,10,0.12); color: #b36e00; }
+        .conn-pill.zero    { background: rgba(255,69,58,0.1);   color: #c0392b; }
+        .conn-pill .cpn    { font-size: 14px; font-weight: 700; }
+
         /* ── SECTION HEADER ── */
         .section-header {
             display: flex;
@@ -329,6 +349,18 @@
 
         .agent-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--success); flex-shrink: 0; }
 
+        /* Platform connection indicators */
+        .plat-indicators { display: flex; flex-direction: column; gap: 3px; align-items: center; flex-shrink: 0; }
+        .plat-pip {
+            width: 16px; height: 16px; border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 9px; line-height: 1;
+            transition: opacity 0.15s;
+        }
+        .plat-pip.connected { background: rgba(48,209,88,0.15); }
+        .plat-pip.disconnected { background: rgba(0,0,0,0.05); opacity: 0.35; filter: grayscale(1); }
+        .plat-pip[title]:hover { opacity: 1 !important; filter: none !important; }
+
         .agent-badges { display: flex; gap: 5px; align-items: center; flex-wrap: wrap; min-height: 0; }
         .badge-pill {
             display: inline-flex;
@@ -375,37 +407,14 @@
             50%      { opacity: 0.55; }
         }
 
-        /* ── Team member mini-cards ── */
-        .team-mini-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-            gap: 10px;
+        /* ── Department sections ── */
+        .dept-group { margin-bottom: 20px; }
+        .dept-label {
+            font-size: 11px; font-weight: 700; text-transform: uppercase;
+            letter-spacing: 0.8px; color: var(--text-3);
+            padding: 0 2px 8px; border-bottom: 1px solid var(--border);
+            margin-bottom: 12px;
         }
-        .team-mini-card {
-            background: var(--surface);
-            border: 1px solid var(--border);
-            border-radius: var(--r);
-            padding: 12px 14px;
-            display: flex; align-items: center; gap: 10px;
-            cursor: pointer;
-            transition: all 0.18s;
-        }
-        .team-mini-card:hover {
-            box-shadow: var(--shadow-lg);
-            transform: translateY(-1px);
-        }
-        .team-mini-emoji { font-size: 22px; flex-shrink: 0; }
-        .team-mini-info { flex: 1; min-width: 0; }
-        .team-mini-name { font-size: 13px; font-weight: 700; color: var(--text-1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .team-mini-role { font-size: 10px; color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .team-mini-llm {
-            display: inline-flex; align-items: center;
-            font-size: 9px; font-weight: 600; margin-top: 3px;
-            padding: 1px 6px; border-radius: 100px;
-        }
-        .team-mini-llm.claude { background: rgba(204,120,50,0.10); color: #b36a00; }
-        .team-mini-llm.gemini { background: rgba(66,133,244,0.10); color: #4285f4; }
-        .team-mini-llm.gemini-img { background: rgba(234,67,53,0.10); color: #ea4335; }
 
         .agent-tags { display: flex; flex-wrap: wrap; gap: 5px; }
 
@@ -672,19 +681,20 @@
 
         <div class="sidebar-nav">
             <div class="nav-section">Workspace</div>
-            <div class="nav-item active"><span class="ni">⬡</span> All Agents</div>
-            <a class="nav-item" href="/inbox"><span class="ni">📥</span> Inbox</a>
+            <a class="nav-item active" href="/"><span class="ni">⬡</span> All Agents</a>
+            <a class="nav-item" href="/inbox?tasks=1"><span class="ni">📥</span> Inbox & Tasks</a>
             <a class="nav-item" href="/vision"><span class="ni">🚀</span> Vision</a>
-            <div class="nav-item" onclick="window.location='newsroom.html'"><span class="ni">📰</span> Newsroom</div>
-            <div class="nav-item"><span class="ni">📊</span> Analytics</div>
-            <div class="nav-item"><span class="ni">📅</span> Schedule</div>
+            <div class="nav-section">Rooms</div>
+            <a class="nav-item" href="/newsroom.html"            style="padding-left:28px;font-size:12px">📰 Newsroom</a>
+            <a class="nav-item" href="/newsroom.html?room=gm"    style="padding-left:28px;font-size:12px">👑 GM Room</a>
+            <a class="nav-item" href="/newsroom.html?room=tech"  style="padding-left:28px;font-size:12px">💻 Tech Room</a>
+            <a class="nav-item" href="/newsroom.html?room=sales" style="padding-left:28px;font-size:12px">🤝 Sales Room</a>
+            <a class="nav-item" href="#"><span class="ni">📊</span> Analytics</a>
+            <a class="nav-item" href="#"><span class="ni">📅</span> Schedule</a>
             <div class="nav-section">System</div>
-            <div class="nav-item"><span class="ni">⚙️</span> Settings</div>
+            <a class="nav-item" href="#"><span class="ni">⚙️</span> Settings</a>
         </div>
-
-        <div class="sidebar-footer" id="sidebar-footer">
-            <!-- populated by JS -->
-        </div>
+        <div class="sidebar-footer" id="sidebar-footer"></div>
     </nav>
 
     <!-- MAIN -->
@@ -702,13 +712,7 @@
                     <span class="search-icon">🔍</span>
                     <input class="search-input" type="text" placeholder="Search agents…" id="searchInput" oninput="filterAgents(this.value)">
                 </div>
-                <div style="position:relative">
-                    <button class="notif-bell" id="notif-bell" onclick="toggleNotifPanel()">🔔<span class="notif-badge hidden" id="notif-badge">0</span></button>
-                    <div class="notif-panel" id="notif-panel">
-                        <div class="notif-panel-header"><span>Notifications</span><button class="btn btn-ghost" style="font-size:11px;padding:2px 8px" onclick="markAllRead()">Mark all read</button></div>
-                        <div id="notif-list"></div>
-                    </div>
-                </div>
+                <button class="notif-bell" id="notif-bell" onclick="toggleNotifPanel()">🔔<span class="notif-badge hidden" id="notif-badge">0</span></button>
                 <button class="btn btn-ghost" onclick="loadDashboard()" title="Refresh">↺</button>
                 <button class="btn btn-primary" onclick="openCreateModal()">+ New Agent</button>
             </div>
@@ -742,21 +746,21 @@
                 </div>
             </div>
 
-            <!-- Editorial Team -->
+            <!-- Team -->
             <div class="section-header">
-                <div class="section-title">Editorial Team</div>
+                <div class="section-title">Team</div>
             </div>
             <div id="team-section">
                 <div class="agents-grid">
-                    <div class="skel-card" style="height:120px"></div>
-                    <div class="skel-card" style="height:120px"></div>
-                    <div class="skel-card" style="height:120px"></div>
+                    <div class="skel-card" style="height:140px"></div>
+                    <div class="skel-card" style="height:140px"></div>
+                    <div class="skel-card" style="height:140px"></div>
                 </div>
             </div>
 
             <!-- Agents -->
             <div class="section-header" style="margin-top:12px">
-                <div class="section-title">Publishing Agents</div>
+                <div class="section-title">Influencers</div>
             </div>
 
             <div id="agents">
@@ -961,7 +965,19 @@
                                 <div class="agent-name">${a.agent_name}</div>
                                 <div class="agent-brand">${a.brand}</div>
                             </div>
-                            <div class="agent-dot"></div>
+                            ${(() => {
+                                const connected = a.connected_platforms || [];
+                                const plats = [
+                                    { key: 'instagram', icon: '📷' },
+                                    { key: 'twitter',   icon: '𝕏'  },
+                                    { key: 'tiktok',    icon: '🎵' },
+                                ];
+                                const pips = plats.map(p => {
+                                    const on = connected.includes(p.key);
+                                    return `<div class="plat-pip ${on ? 'connected' : 'disconnected'}" title="${on ? p.key + ' connected' : p.key + ' not connected'}">${p.icon}</div>`;
+                                }).join('');
+                                return `<div class="plat-indicators">${pips}</div>`;
+                            })()}
                         </div>
                         ${tags.length > 0 ? `<div class="agent-tags">${tags.map(t => `<span class="tag">${t}</span>`).join('')}</div>` : ''}
                         <div class="agent-badges" id="abadges-${a.agent_id}">${llmBadge}${genBadge}${apBadge}${aaBadge}</div>
@@ -987,26 +1003,60 @@
             const members = await r.json();
             if (!members || members.length === 0) { el.innerHTML = ''; return; }
 
-            el.innerHTML = `<div class="team-mini-grid">
-                ${members.map((m, i) => {
-                    const model = m.llm_model || 'claude-sonnet-4-6';
-                    const llmCls = model.includes('image') ? 'gemini-img'
-                                 : (m.llm_provider || '').includes('gemini') ? 'gemini' : 'claude';
-                    const llmLabel = model.replace('claude-', '').replace('gemini-', 'G ');
-                    return `
-                    <div class="team-mini-card fade-up" style="animation-delay:${i * 0.03}s" onclick="window.location='/newsroom.html'">
-                        <div class="team-mini-emoji">${m.emoji || '👤'}</div>
-                        <div class="team-mini-info">
-                            <div class="team-mini-name">${m.display_name}</div>
-                            <div class="team-mini-role">${m.role_title}</div>
-                            <div class="team-mini-llm ${llmCls}">${llmLabel}</div>
-                        </div>
-                    </div>`;
-                }).join('')}
-            </div>`;
+            // Group by department
+            const deptOrder = ['leadership', 'editorial', 'creative', 'intelligence', 'production', 'distribution', 'tech', 'sales'];
+            const deptLabels = {
+                leadership: '👑 Leadership', editorial: '📰 Editorial', creative: '🎨 Creative',
+                intelligence: '🔍 Intelligence', production: '⚙️ Production', distribution: '🚀 Distribution',
+                tech: '💻 Technology', sales: '🤝 Sales & Partnerships'
+            };
+            const grouped = {};
+            members.forEach(m => {
+                const dept = m.team || 'editorial';
+                if (!grouped[dept]) grouped[dept] = [];
+                grouped[dept].push(m);
+            });
+
+            let html = '';
+            deptOrder.forEach(dept => {
+                if (!grouped[dept] || grouped[dept].length === 0) return;
+                html += `<div class="dept-group">
+                    <div class="dept-label">${deptLabels[dept] || dept}</div>
+                    <div class="agents-grid">
+                    ${grouped[dept].map((m, i) => {
+                        const model = m.llm_model || 'claude-sonnet-4-6';
+                        const llmCls = model.includes('image') ? 'gemini-img'
+                                     : (m.llm_provider || '').includes('gemini') ? 'gemini' : 'claude';
+                        const llmLabel = model.replace('claude-', '').replace('gemini-', 'G ');
+                        const llmBadge = `<span class="badge-pill llm-badge ${llmCls}">${llmLabel}</span>`;
+                        const teamTag = m.reports_to ? `<span class="tag" style="background:rgba(48,209,88,0.1);color:#1a9e42">→ ${m.reports_to.replace(/_/g,' ')}</span>` : '';
+                        return `
+                        <div class="agent-card fade-up" style="animation-delay:${i * 0.04}s" onclick="window.location='/inbox.html?thread=${m.role_key}'">
+                            <div class="agent-stripe st-${deptStripe(dept)}"></div>
+                            <div class="agent-body">
+                                <div class="agent-top">
+                                    <div style="width:42px;height:42px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;background:var(--surface-2)">${m.emoji || '👤'}</div>
+                                    <div class="agent-meta">
+                                        <div class="agent-name">${m.display_name}</div>
+                                        <div class="agent-brand">${m.role_title}</div>
+                                    </div>
+                                </div>
+                                <div class="agent-badges">${llmBadge} ${teamTag}</div>
+                            </div>
+                        </div>`;
+                    }).join('')}
+                    </div>
+                </div>`;
+            });
+            el.innerHTML = html;
         } catch (e) {
             el.innerHTML = '';
         }
+    }
+
+    function deptStripe(dept) {
+        const map = { leadership: 0, editorial: 4, creative: 2, intelligence: 7, production: 5, distribution: 6, tech: 1, sales: 3 };
+        return map[dept] ?? 0;
     }
 
     async function loadDashboard() {
@@ -1016,10 +1066,19 @@
             allAgents = data.agents || [];
 
             // Stats
+            const cs = data.connection_stats || {};
             document.getElementById('stats').innerHTML = `
                 <div class="stat-card fade-up">
                     <div class="stat-icon si-blue">🤖</div>
-                    <div class="stat-info"><div class="stat-num" id="sn0">0</div><div class="stat-lbl">Active Agents</div></div>
+                    <div class="stat-info">
+                        <div class="stat-num" id="sn0">0</div>
+                        <div class="stat-lbl">Active Agents</div>
+                        <div class="conn-breakdown">
+                            <div class="conn-pill full"  title="Linked to all 3 platforms"><span class="cpn">${cs.full    ?? 0}</span> fully linked</div>
+                            <div class="conn-pill partial" title="Linked to 1–2 platforms"><span class="cpn">${cs.partial ?? 0}</span> partial</div>
+                            <div class="conn-pill zero"  title="No accounts connected"><span class="cpn">${cs.zero    ?? 0}</span> unlinked</div>
+                        </div>
+                    </div>
                 </div>
                 <div class="stat-card fade-up" style="animation-delay:.05s">
                     <div class="stat-icon si-green">📝</div>
@@ -1197,31 +1256,161 @@
         loadDashboard();
         loadNotifications();
         setInterval(loadNotifications, 10000);
+        // Marc-triggered action: open New Agent modal
+        if (new URLSearchParams(window.location.search).get('openCreate') === '1') {
+            window.history.replaceState({}, '', '/');
+            setTimeout(() => openCreateModal(), 900);
+        }
     });
 
-    // ── Notifications ──
-    const _NI = {post_scheduled:'📅',workflow_completed:'✅',workflow_failed:'❌',content_ready:'📝'};
-    function toggleNotifPanel() { document.getElementById('notif-panel').classList.toggle('open'); }
-    document.addEventListener('click', e => {
-        const p = document.getElementById('notif-panel'), b = document.getElementById('notif-bell');
-        if (p && b && !p.contains(e.target) && !b.contains(e.target)) p.classList.remove('open');
+    // ── Notifications (unified panel — same as newsroom) ──
+    const NOTIF_ICONS = {
+        workflow_completed:'✅', workflow_failed:'❌', workflow_started:'▶️', workflow_launched:'🚀',
+        post_scheduled:'📅', post_published:'🚀', content_ready:'📝',
+        task_approval_needed:'⚡', task_completed:'✅', task_failed:'❌', task_cascade_started:'⚡',
+        approval_needed:'⚡', new_agent:'🤖', default:'🔔',
+    };
+
+    function toggleNotifPanel() {
+        const p = document.getElementById('notif-panel');
+        const isOpen = p.classList.toggle('open');
+        if (isOpen) loadNotifications();
+    }
+    document.addEventListener('keydown', e => {
+        if (e.key === 'Escape') { const p = document.getElementById('notif-panel'); if (p) p.classList.remove('open'); }
     });
+
     function _esc(s) { const d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
     function _ago(iso) { if(!iso)return''; const d=(Date.now()-new Date(iso).getTime())/1000; if(d<60)return'just now'; if(d<3600)return Math.floor(d/60)+'m ago'; if(d<86400)return Math.floor(d/3600)+'h ago'; return Math.floor(d/86400)+'d ago'; }
+
     async function loadNotifications() {
         try {
-            const r=await fetch('/api/notifications?limit=20&_t='+Date.now()); if(!r.ok)return;
-            const data=await r.json();
-            const badge=document.getElementById('notif-badge');
-            if(data.unread>0){badge.textContent=data.unread>99?'99+':data.unread;badge.classList.remove('hidden');}else{badge.classList.add('hidden');}
-            const list=document.getElementById('notif-list');
-            if(!data.notifications||!data.notifications.length){list.innerHTML='<div style="padding:24px;text-align:center;color:var(--text-3);font-size:12px">No notifications</div>';return;}
-            list.innerHTML=data.notifications.map(n=>`<div class="notif-item ${n.is_read?'':'unread'}" onclick="clickNotif(${n.id},'${_esc(n.link||'')}')"><div class="notif-icon">${_NI[n.type]||'🔔'}</div><div class="notif-content"><div class="notif-title">${_esc(n.title)}</div><div class="notif-body">${_esc(n.body||'')}</div><div class="notif-time">${_ago(n.created_at)}</div></div></div>`).join('');
-        }catch(e){}
+            const [notifRes, taskRes] = await Promise.all([
+                fetch('/api/notifications?limit=50&_t=' + Date.now()),
+                fetch('/api/tasks/pending_approval'),
+            ]);
+            const notifData = notifRes.ok ? await notifRes.json() : { notifications: [], unread: 0 };
+            const taskData  = taskRes.ok  ? await taskRes.json()  : { tasks: [] };
+
+            const pendingTasks = (taskData.tasks || []).filter(t => t.status !== 'rejected');
+            const totalUnread = (notifData.unread || 0) + pendingTasks.length;
+            const badge = document.getElementById('notif-badge');
+            if (totalUnread > 0) {
+                badge.textContent = totalUnread > 99 ? '99+' : totalUnread;
+                badge.classList.remove('hidden');
+            } else {
+                badge.classList.add('hidden');
+            }
+
+            const list = document.getElementById('notif-list');
+            if (!list) return;
+            let html = '';
+
+            // Section 1: Pipeline failures
+            const failedWfs = (notifData.notifications || []).filter(n => n.type === 'workflow_failed' && !n.is_read);
+            if (failedWfs.length > 0) {
+                html += `<div class="notif-section-label">Pipeline Failures (${failedWfs.length})</div>`;
+                failedWfs.forEach(n => {
+                    const wfId = n.workflow_run_id || '';
+                    html += `
+                    <div class="notif-item action-required" style="flex-direction:column;padding:12px 16px">
+                        <div style="display:flex;gap:10px;align-items:flex-start">
+                            <div style="font-size:18px">❌</div>
+                            <div style="flex:1;min-width:0">
+                                <div class="notif-title">${_esc(n.title)}</div>
+                                <div class="notif-body">${_esc((n.body || '').substring(0, 120))}</div>
+                                <div class="notif-time">${_ago(n.created_at)}</div>
+                            </div>
+                        </div>
+                        <div style="display:flex;gap:6px;margin-top:8px;padding-left:28px">
+                            <button class="notif-btn notif-btn-primary" onclick="window.location='/newsroom.html'">View in Newsroom</button>
+                        </div>
+                    </div>`;
+                });
+            }
+
+            // Section 2: Pending approvals
+            if (pendingTasks.length > 0) {
+                const urgentCount = pendingTasks.filter(t => t.priority === 'urgent' || t.priority === 'high').length;
+                html += `<div class="notif-section-label">Pending Approvals (${pendingTasks.length})</div>`;
+                html += `<div style="padding:8px 16px 6px;display:flex;gap:6px;border-bottom:1px solid var(--border)">
+                    <a href="/inbox?tasks=1" class="notif-btn notif-btn-primary" style="text-decoration:none;padding:5px 14px;font-size:11px">Review & Approve in Inbox</a>
+                    ${urgentCount > 0 ? `<span style="font-size:10px;color:var(--danger);align-self:center;font-weight:600">${urgentCount} urgent</span>` : ''}
+                </div>`;
+                pendingTasks.slice(0, 8).forEach(t => {
+                    const priBadge = t.priority === 'urgent' ? '<span style="font-size:9px;font-weight:700;color:var(--danger);background:rgba(255,69,58,0.1);padding:1px 5px;border-radius:3px">URGENT</span>'
+                                   : t.priority === 'high' ? '<span style="font-size:9px;font-weight:700;color:var(--warning);background:rgba(255,159,10,0.1);padding:1px 5px;border-radius:3px">HIGH</span>'
+                                   : '';
+                    const desc = _esc((t.description || '').substring(0, 200));
+                    const due = t.due_date ? `<span style="font-size:9px;color:var(--text-3)">📅 ${t.due_date}</span>` : '';
+                    html += `<div style="border-bottom:1px solid var(--border);font-size:11px">
+                        <div onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'block':'none'" style="display:flex;align-items:center;gap:8px;padding:8px 16px;cursor:pointer;transition:background 0.15s" onmouseenter="this.style.background='var(--surface-2)'" onmouseleave="this.style.background='transparent'">
+                            <div style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text-1);font-weight:500">${_esc(t.title)}</div>
+                            <span style="color:var(--text-3);font-size:10px;flex-shrink:0;max-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${_esc(t.assignee_name || '')}</span>
+                        </div>
+                        <div style="display:none;padding:6px 16px 10px;background:var(--surface-2);border-top:1px solid var(--border)">
+                            ${desc ? `<div style="font-size:11px;color:var(--text-2);line-height:1.5;margin-bottom:6px">${desc}</div>` : ''}
+                            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+                                <span style="font-size:9px;color:var(--text-3)">👤 ${_esc(t.assignee_name || 'Unassigned')}</span>
+                                ${priBadge} ${due}
+                                <a href="/inbox?tasks=1" style="font-size:9px;color:var(--accent);text-decoration:none;font-weight:600;margin-left:auto">Open in Inbox →</a>
+                            </div>
+                        </div>
+                    </div>`;
+                });
+                if (pendingTasks.length > 8) {
+                    html += `<div style="padding:6px 16px;font-size:11px;color:var(--accent);font-weight:600;border-bottom:1px solid var(--border)"><a href="/inbox?tasks=1" style="color:var(--accent);text-decoration:none">+${pendingTasks.length - 8} more tasks...</a></div>`;
+                }
+            }
+
+            // Section 3: Recent activity
+            const regularNotifs = (notifData.notifications || []).filter(n => n.type !== 'workflow_failed' && n.type !== 'task_approval_needed');
+            if (regularNotifs.length > 0) {
+                html += `<div class="notif-section-label">Recent Activity</div>`;
+                regularNotifs.forEach(n => {
+                    const icon = NOTIF_ICONS[n.type] || NOTIF_ICONS.default;
+                    html += `<div class="notif-item ${n.is_read ? '' : 'unread'}" onclick="clickNotif(${n.id}, '${_esc(n.link || '')}')">
+                        <div class="notif-icon">${icon}</div>
+                        <div class="notif-content">
+                            <div class="notif-title">${_esc(n.title)}</div>
+                            <div class="notif-body">${_esc(n.body || '')}</div>
+                            <div class="notif-time">${_ago(n.created_at)}</div>
+                        </div>
+                        ${!n.is_read ? '<div style="width:7px;height:7px;border-radius:50%;background:var(--accent);margin-top:6px;flex-shrink:0"></div>' : ''}
+                    </div>`;
+                });
+            }
+
+            if (!html) {
+                html = '<div style="padding:40px 24px;text-align:center;color:var(--text-3)"><div style="font-size:32px;margin-bottom:12px">🔔</div><div style="font-size:13px;font-weight:500">All caught up!</div></div>';
+            }
+
+            list.innerHTML = html;
+        } catch(e) { console.error('loadNotifications:', e); }
     }
-    async function clickNotif(id,link){try{await fetch('/api/notifications/read',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ids:[id]})});}catch(e){}if(link)window.location=link;else{loadNotifications();document.getElementById('notif-panel').classList.remove('open');}}
-    async function markAllRead(){try{await fetch('/api/notifications/read',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({})});}catch(e){}loadNotifications();}
+
+    async function clickNotif(id, link) {
+        try { await fetch('/api/notifications/read', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ids:[id]}) }); } catch(e) {}
+        if (link && link !== 'null' && link !== '') window.location = link;
+        else loadNotifications();
+    }
+    async function markAllRead() {
+        try { await fetch('/api/notifications/read', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({}) }); } catch(e) {}
+        loadNotifications();
+    }
 </script>
+<!-- Notification panel — fixed right side -->
+<div class="notif-panel" id="notif-panel">
+    <div class="notif-panel-header">
+        <span>Notifications</span>
+        <div style="display:flex;gap:8px;align-items:center">
+            <button class="btn btn-ghost" style="font-size:11px;padding:2px 8px" onclick="markAllRead()">Mark all read</button>
+            <button onclick="toggleNotifPanel()" style="background:none;border:none;cursor:pointer;font-size:18px;color:var(--text-3);padding:2px 6px" title="Close">×</button>
+        </div>
+    </div>
+    <div id="notif-list" style="flex:1;overflow-y:auto"></div>
+</div>
+
 <script src="/js/marc.js"></script>
 </body>
 </html>

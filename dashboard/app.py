@@ -1,6 +1,11 @@
 from flask import Flask, jsonify, request, send_file, send_from_directory
 from flask_cors import CORS
 import os
+try:
+    from dotenv import load_dotenv
+    load_dotenv(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), '.env'))
+except ImportError:
+    pass
 import sys
 import logging
 import threading
@@ -2139,7 +2144,7 @@ def _get_vision_block(db):
 
 def _build_team_system_prompt(db, member):
     """Build a rich system prompt for a team member chat."""
-    from src.database.models import TeamMember, WorkflowRun, Agent, Content, Task
+    from src.database.models import TeamMember, WorkflowRun, Agent, Content, Task, SocialMediaAccount
     vision_block = _get_vision_block(db)
     members = db.query(TeamMember).all()
     team_info = '\n'.join(f"- {m.role_key}: {m.display_name} ({m.role_title}), reports to: {m.reports_to or 'supervisor'}" for m in members)
@@ -2153,6 +2158,61 @@ def _build_team_system_prompt(db, member):
     total_pub = db.query(Content).filter(Content.status == 'published').count()
     my_tasks = db.query(Task).filter(Task.assignee_key == member.role_key, Task.status != 'done').all()
     tasks_info = '\n'.join(f"- [{t.priority}] {t.title} (status: {t.status})" for t in my_tasks) if my_tasks else 'No pending tasks.'
+
+    # For Marc (cofounder): inject full influencer account status + action commands
+    extra_context = ''
+    if member.role_key == 'cofounder':
+        accounts = db.query(SocialMediaAccount).filter(
+            SocialMediaAccount.access_token != None,
+            SocialMediaAccount.access_token != '',
+        ).all()
+        acct_map = {}
+        for a in accounts:
+            acct_map.setdefault(a.agent_id, []).append(a.platform)
+
+        agent_acct_lines = []
+        for a in agents:
+            platforms = acct_map.get(a.id, [])
+            missing = [p for p in ['instagram', 'twitter', 'tiktok'] if p not in platforms]
+            if not platforms:
+                status = '❌ No accounts linked'
+            elif missing:
+                status = f'⚠️ Linked: {", ".join(platforms)} | Missing: {", ".join(missing)}'
+            else:
+                status = '✅ Fully linked (Instagram + X + TikTok)'
+            agent_acct_lines.append(f'  - ID {a.id}: {a.name} ({a.brand}) — {status}')
+
+        unlinked = sum(1 for a in agents if not acct_map.get(a.id))
+        partial  = sum(1 for a in agents if 0 < len(acct_map.get(a.id, [])) < 3)
+        full     = sum(1 for a in agents if len(acct_map.get(a.id, [])) >= 3)
+
+        extra_context = f"""
+=== INFLUENCER ACCOUNT STATUS ({len(agents)} agents) ===
+Summary: {full} fully linked · {partial} partial · {unlinked} with NO accounts
+{chr(10).join(agent_acct_lines)}
+
+=== UI ACTIONS YOU CAN TRIGGER FOR THE FOUNDER ===
+When the founder asks you to connect accounts, create a role, or navigate somewhere,
+include an ```actions block at the end of your reply. The UI will render clickable buttons.
+
+Format:
+```actions
+[{{"type": "open_connect", "agent_id": 5, "agent_name": "Name", "label": "🔗 Connect Name on social"}},
+ {{"type": "create_agent", "label": "➕ Create New Influencer"}},
+ {{"type": "go_to_agent", "agent_id": 5, "label": "👤 Open Name's Profile"}},
+ {{"type": "go_to_room", "room": "tech", "label": "💻 Go to Tech Room"}},
+ {{"type": "go_to_room", "room": "sales", "label": "🤝 Go to Sales Room"}}]
+```
+
+Action types:
+- "open_connect": opens Connect Account modal for that agent (use when founder wants to link a platform)
+- "create_agent": opens New Agent/Role creation modal
+- "go_to_agent": navigates to agent detail page
+- "go_to_room": switches to newsroom room (newsroom/tech/sales/gm)
+
+PROACTIVELY use actions: if the founder asks about unlinked agents, give them action buttons to connect each one.
+If they ask to create a new role, give them a "create_agent" action button immediately.
+"""
 
     return f"""{member.system_prompt}
 {vision_block}
@@ -2170,8 +2230,26 @@ CONTENT: {total_drafts} drafts, {total_pub} published
 
 YOUR CURRENT TASKS:
 {tasks_info}
-
+{extra_context}
 {TASK_INSTRUCTION}"""
+
+
+def _extract_ui_actions(reply_text):
+    """Parse ```actions [...] ``` blocks from AI reply. Returns (clean_text, actions_list)."""
+    import re, json
+    pattern = r'```actions\s*\n?([\s\S]*?)\n?\s*```'
+    m = re.search(pattern, reply_text)
+    if not m:
+        return reply_text, []
+    raw = m.group(1).strip()
+    clean = re.sub(pattern, '', reply_text, flags=re.DOTALL).strip()
+    try:
+        actions = json.loads(raw)
+        if not isinstance(actions, list):
+            actions = []
+    except Exception:
+        actions = []
+    return clean, actions
 
 
 def _build_agent_system_prompt(db_or_none, agent):
@@ -2634,6 +2712,9 @@ def inbox_chat():
             db, reply, thread_id, entity_type, entity_key, name
         )
 
+        # Extract UI action buttons (if Marc proposed them)
+        clean_reply, ui_actions = _extract_ui_actions(clean_reply)
+
         # Extract workflow launch (if AI triggered one)
         clean_reply, workflow_launched = _extract_and_launch_workflow(clean_reply)
 
@@ -2661,7 +2742,8 @@ def inbox_chat():
             'tasks_created': tasks_created,
             'workflow_launched': workflow_launched,
             'hires_proposed': hires_proposed,
-            'vision_proposed': vision_updated,  # proposal only — user must approve
+            'vision_proposed': vision_updated,
+            'ui_actions': ui_actions,
         }), 200
     except Exception as e:
         return jsonify({'error': f'{name} is unavailable: {str(e)}'}), 500
@@ -3604,6 +3686,467 @@ from datetime import datetime
 @app.errorhandler(500)
 def internal_error(error):
     return jsonify({'error': 'Internal server error'}), 500
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  TWITTER / X  OAuth 2.0 (PKCE)
+# ─────────────────────────────────────────────────────────────────────────────
+import secrets
+import hashlib
+import base64
+import requests as _requests
+
+_TWITTER_CLIENT_ID     = os.environ.get('TWITTER_CLIENT_ID', '')
+_TWITTER_CLIENT_SECRET = os.environ.get('TWITTER_CLIENT_SECRET', '')
+_TWITTER_REDIRECT_URI  = os.environ.get('TWITTER_REDIRECT_URI', 'http://localhost:5000/auth/twitter/callback')
+_TWITTER_SCOPES        = 'tweet.read tweet.write users.read offline.access'
+
+# In-memory store for PKCE verifiers keyed by state (single-server, dev only)
+_oauth_states: dict = {}
+
+
+@app.route('/auth/twitter/start')
+def twitter_oauth_start():
+    """Redirect user to X authorization page. Pass ?agent_id=<id> to link the token to an agent."""
+    agent_id = request.args.get('agent_id', '')
+    if not _TWITTER_CLIENT_ID:
+        return "TWITTER_CLIENT_ID not set in .env", 500
+
+    # PKCE
+    verifier  = secrets.token_urlsafe(64)
+    challenge = base64.urlsafe_b64encode(
+        hashlib.sha256(verifier.encode()).digest()
+    ).rstrip(b'=').decode()
+
+    state = secrets.token_urlsafe(16)
+    _oauth_states[state] = {'verifier': verifier, 'agent_id': agent_id}
+
+    params = {
+        'response_type':         'code',
+        'client_id':             _TWITTER_CLIENT_ID,
+        'redirect_uri':          _TWITTER_REDIRECT_URI,
+        'scope':                 _TWITTER_SCOPES,
+        'state':                 state,
+        'code_challenge':        challenge,
+        'code_challenge_method': 'S256',
+    }
+    from urllib.parse import urlencode
+    url = 'https://twitter.com/i/oauth2/authorize?' + urlencode(params)
+    from flask import redirect
+    return redirect(url)
+
+
+@app.route('/auth/twitter/callback')
+def twitter_oauth_callback():
+    """X redirects here after user authorizes. Exchanges code for tokens and saves them."""
+    from flask import redirect
+    from src.database.models import SocialMediaAccount
+
+    code  = request.args.get('code')
+    state = request.args.get('state')
+    error = request.args.get('error')
+
+    if error:
+        return redirect(f'/?twitter_error={error}')
+
+    stored = _oauth_states.pop(state, None)
+    if not stored:
+        return "Invalid or expired OAuth state", 400
+
+    verifier = stored['verifier']
+    agent_id = stored.get('agent_id')
+
+    # Exchange code for tokens
+    resp = _requests.post(
+        'https://api.twitter.com/2/oauth2/token',
+        data={
+            'grant_type':    'authorization_code',
+            'code':          code,
+            'redirect_uri':  _TWITTER_REDIRECT_URI,
+            'code_verifier': verifier,
+        },
+        auth=(_TWITTER_CLIENT_ID, _TWITTER_CLIENT_SECRET),
+        headers={'Content-Type': 'application/x-www-form-urlencoded'},
+    )
+    if not resp.ok:
+        return f"Token exchange failed: {resp.text}", 400
+
+    tokens = resp.json()
+    access_token  = tokens.get('access_token')
+    refresh_token = tokens.get('refresh_token', '')
+
+    # Fetch user info
+    me = _requests.get(
+        'https://api.twitter.com/2/users/me',
+        headers={'Authorization': f'Bearer {access_token}'},
+        params={'user.fields': 'id,name,username,public_metrics'},
+    ).json().get('data', {})
+
+    username   = me.get('username', 'unknown')
+    twitter_id = me.get('id', '')
+    followers  = me.get('public_metrics', {}).get('followers_count', 0)
+
+    # Save to DB — update existing or create new
+    db = orchestrator.db
+    existing = None
+    if agent_id:
+        existing = db.query(SocialMediaAccount).filter(
+            SocialMediaAccount.agent_id == int(agent_id),
+            SocialMediaAccount.platform == 'twitter',
+        ).first()
+
+    if existing:
+        existing.username      = username
+        existing.account_id    = twitter_id
+        existing.access_token  = access_token
+        existing.refresh_token = refresh_token
+        existing.followers     = followers
+    else:
+        acct = SocialMediaAccount(
+            agent_id      = int(agent_id) if agent_id else None,
+            platform      = 'twitter',
+            username      = username,
+            account_id    = twitter_id,
+            access_token  = access_token,
+            refresh_token = refresh_token,
+            followers     = followers,
+        )
+        db.add(acct)
+    db.commit()
+
+    # Redirect back to agent detail or dashboard
+    from urllib.parse import quote
+    if agent_id:
+        dest = f'/agent-detail.html?id={agent_id}&twitter_connected=1&username={quote(username)}'
+    else:
+        dest = f'/?twitter_connected=1&username={quote(username)}'
+    return redirect(dest)
+
+
+@app.route('/auth/twitter/disconnect/<int:account_id>', methods=['POST'])
+def twitter_disconnect(account_id):
+    """Revoke token and remove account from DB."""
+    from src.database.models import SocialMediaAccount
+    db = orchestrator.db
+    acct = db.query(SocialMediaAccount).filter(SocialMediaAccount.id == account_id).first()
+    if not acct:
+        return jsonify({'error': 'Not found'}), 404
+
+    # Attempt revocation (best-effort)
+    if acct.access_token:
+        try:
+            _requests.post(
+                'https://api.twitter.com/2/oauth2/revoke',
+                data={'token': acct.access_token, 'token_type_hint': 'access_token'},
+                auth=(_TWITTER_CLIENT_ID, _TWITTER_CLIENT_SECRET),
+                headers={'Content-Type': 'application/x-www-form-urlencoded'},
+            )
+        except Exception:
+            pass
+
+    db.delete(acct)
+    db.commit()
+    return jsonify({'message': 'Twitter account disconnected'}), 200
+
+
+# ═══════════════════════════════════════════
+# TIKTOK OAUTH 2.0
+# ═══════════════════════════════════════════
+
+_TIKTOK_CLIENT_KEY    = os.environ.get('TIKTOK_CLIENT_KEY', '')
+_TIKTOK_CLIENT_SECRET = os.environ.get('TIKTOK_CLIENT_SECRET', '')
+_TIKTOK_REDIRECT_URI  = os.environ.get('TIKTOK_REDIRECT_URI', 'http://localhost:5000/auth/tiktok/callback')
+_TIKTOK_SCOPES        = 'user.info.basic,video.upload,video.publish'
+
+# Reuse _oauth_states dict from Twitter section (keyed by state, value has platform flag)
+
+@app.route('/auth/tiktok/start')
+def tiktok_oauth_start():
+    """Redirect user to TikTok authorization page."""
+    if not _TIKTOK_CLIENT_KEY:
+        return 'TIKTOK_CLIENT_KEY not set in .env', 500
+
+    agent_id = request.args.get('agent_id', '')
+    import secrets as _sec
+    state = _sec.token_urlsafe(24)
+    _oauth_states[state] = {'agent_id': agent_id, 'platform': 'tiktok'}
+
+    from urllib.parse import urlencode
+    params = urlencode({
+        'client_key':     _TIKTOK_CLIENT_KEY,
+        'scope':          _TIKTOK_SCOPES,
+        'response_type':  'code',
+        'redirect_uri':   _TIKTOK_REDIRECT_URI,
+        'state':          state,
+    })
+    return redirect(f'https://www.tiktok.com/v2/auth/authorize/?{params}')
+
+
+@app.route('/auth/tiktok/callback')
+def tiktok_oauth_callback():
+    """TikTok redirects here after user authorizes."""
+    from urllib.parse import quote
+
+    error = request.args.get('error')
+    if error:
+        return redirect(f'/?tiktok_error={quote(error)}')
+
+    code  = request.args.get('code', '')
+    state = request.args.get('state', '')
+
+    state_data = _oauth_states.pop(state, None)
+    if not state_data or state_data.get('platform') != 'tiktok':
+        return redirect('/?tiktok_error=invalid_state')
+
+    agent_id = state_data.get('agent_id', '')
+
+    # Exchange code for tokens
+    token_resp = _requests.post(
+        'https://open.tiktokapis.com/v2/oauth/token/',
+        headers={'Content-Type': 'application/x-www-form-urlencoded'},
+        data={
+            'client_key':    _TIKTOK_CLIENT_KEY,
+            'client_secret': _TIKTOK_CLIENT_SECRET,
+            'code':          code,
+            'grant_type':    'authorization_code',
+            'redirect_uri':  _TIKTOK_REDIRECT_URI,
+        },
+        timeout=15,
+    )
+    token_json = token_resp.json()
+    if 'error' in token_json or not token_json.get('access_token'):
+        err = token_json.get('error_description') or token_json.get('error') or 'token_exchange_failed'
+        return redirect(f'/?tiktok_error={quote(err)}')
+
+    access_token  = token_json['access_token']
+    refresh_token = token_json.get('refresh_token', '')
+    open_id       = token_json.get('open_id', '')
+
+    # Fetch user info
+    display_name = open_id
+    followers    = 0
+    try:
+        me_resp = _requests.get(
+            'https://open.tiktokapis.com/v2/user/info/',
+            params={'fields': 'open_id,display_name,follower_count'},
+            headers={'Authorization': f'Bearer {access_token}'},
+            timeout=10,
+        )
+        me_data = me_resp.json().get('data', {}).get('user', {})
+        display_name = me_data.get('display_name') or open_id
+        followers    = me_data.get('follower_count', 0)
+    except Exception:
+        pass
+
+    # Save to DB
+    from src.database.models import SocialMediaAccount
+    db = orchestrator.db
+    existing = None
+    if agent_id:
+        existing = db.query(SocialMediaAccount).filter(
+            SocialMediaAccount.agent_id == int(agent_id),
+            SocialMediaAccount.platform == 'tiktok',
+        ).first()
+
+    if existing:
+        existing.username      = display_name
+        existing.account_id    = open_id
+        existing.access_token  = access_token
+        existing.refresh_token = refresh_token
+        existing.followers     = followers
+    else:
+        acct = SocialMediaAccount(
+            agent_id      = int(agent_id) if agent_id else None,
+            platform      = 'tiktok',
+            username      = display_name,
+            account_id    = open_id,
+            access_token  = access_token,
+            refresh_token = refresh_token,
+            followers     = followers,
+        )
+        db.add(acct)
+    db.commit()
+
+    if agent_id:
+        dest = f'/agent-detail.html?id={agent_id}&tiktok_connected=1&username={quote(display_name)}'
+    else:
+        dest = f'/?tiktok_connected=1&username={quote(display_name)}'
+    return redirect(dest)
+
+
+@app.route('/auth/tiktok/disconnect/<int:account_id>', methods=['POST'])
+def tiktok_disconnect(account_id):
+    """Revoke TikTok token and remove account from DB."""
+    from src.database.models import SocialMediaAccount
+    db = orchestrator.db
+    acct = db.query(SocialMediaAccount).filter(SocialMediaAccount.id == account_id).first()
+    if not acct:
+        return jsonify({'error': 'Not found'}), 404
+
+    if acct.access_token:
+        try:
+            _requests.post(
+                'https://open.tiktokapis.com/v2/oauth/revoke/',
+                headers={'Content-Type': 'application/x-www-form-urlencoded'},
+                data={
+                    'client_key':    _TIKTOK_CLIENT_KEY,
+                    'client_secret': _TIKTOK_CLIENT_SECRET,
+                    'token':         acct.access_token,
+                },
+                timeout=10,
+            )
+        except Exception:
+            pass
+
+    db.delete(acct)
+    db.commit()
+    return jsonify({'message': 'TikTok account disconnected'}), 200
+
+
+# ═══════════════════════════════════════════
+# TIKTOK CONTENT POSTING API
+# ═══════════════════════════════════════════
+
+@app.route('/api/publish/tiktok', methods=['POST'])
+def publish_tiktok():
+    """Post content to TikTok via the official Content Posting API.
+
+    Body: {
+        agent_id: int,          # which influencer agent to post as
+        video_url: str,         # publicly accessible URL to video file
+        caption: str,           # post caption / title (max 2200 chars)
+        privacy_level: str,     # 'PUBLIC_TO_EVERYONE' | 'MUTUAL_FOLLOW_FRIENDS' | 'SELF_ONLY'
+        disable_comment: bool,  # optional
+        content_id: int         # optional — link to Content row for status update
+    }"""
+    from src.database.models import SocialMediaAccount, Content
+    data = request.json or {}
+    agent_id     = data.get('agent_id')
+    video_url    = data.get('video_url', '').strip()
+    caption      = data.get('caption', '').strip()[:2200]
+    privacy      = data.get('privacy_level', 'PUBLIC_TO_EVERYONE')
+    no_comment   = bool(data.get('disable_comment', False))
+    content_id   = data.get('content_id')
+
+    if not agent_id or not video_url:
+        return jsonify({'error': 'agent_id and video_url are required'}), 400
+
+    # Get stored TikTok token for this agent
+    db = orchestrator.db
+    acct = db.query(SocialMediaAccount).filter(
+        SocialMediaAccount.agent_id == int(agent_id),
+        SocialMediaAccount.platform == 'tiktok',
+        SocialMediaAccount.access_token != None,
+        SocialMediaAccount.access_token != '',
+    ).first()
+    if not acct:
+        return jsonify({'error': 'No TikTok account connected for this agent. Connect via agent detail page.'}), 400
+
+    # Step 1: Initialize the post
+    init_resp = _requests.post(
+        'https://open.tiktokapis.com/v2/post/publish/video/init/',
+        headers={
+            'Authorization': f'Bearer {acct.access_token}',
+            'Content-Type': 'application/json; charset=UTF-8',
+        },
+        json={
+            'post_info': {
+                'title':           caption,
+                'privacy_level':   privacy,
+                'disable_comment': no_comment,
+                'auto_add_music':  True,
+            },
+            'source_info': {
+                'source':    'PULL_FROM_URL',
+                'video_url': video_url,
+            },
+        },
+        timeout=20,
+    )
+    init_data = init_resp.json()
+
+    if init_resp.status_code != 200 or init_data.get('error', {}).get('code', 'ok') != 'ok':
+        err = init_data.get('error', {})
+        # Handle token expiry — refresh if possible
+        if err.get('code') in ('access_token_invalid', 'access_token_expired') and acct.refresh_token:
+            refreshed = _tiktok_refresh_token(acct)
+            if refreshed:
+                return publish_tiktok()  # retry once
+        return jsonify({'error': err.get('message', 'TikTok publish failed'), 'raw': init_data}), 400
+
+    publish_id = init_data.get('data', {}).get('publish_id', '')
+
+    # Mark content as published if content_id provided
+    if content_id:
+        try:
+            post = db.query(Content).filter(Content.id == int(content_id)).first()
+            if post:
+                post.status = 'published'
+                post.published_at = __import__('datetime').datetime.utcnow()
+                db.commit()
+        except Exception:
+            pass
+
+    return jsonify({
+        'success': True,
+        'publish_id': publish_id,
+        'platform': 'tiktok',
+        'account': acct.username,
+        'message': f'Video submitted to TikTok (@{acct.username}). TikTok will process and publish it shortly.',
+    }), 200
+
+
+def _tiktok_refresh_token(acct):
+    """Refresh a TikTok access token. Returns True on success."""
+    try:
+        db = orchestrator.db
+        r = _requests.post(
+            'https://open.tiktokapis.com/v2/oauth/token/',
+            headers={'Content-Type': 'application/x-www-form-urlencoded'},
+            data={
+                'client_key':    _TIKTOK_CLIENT_KEY,
+                'client_secret': _TIKTOK_CLIENT_SECRET,
+                'grant_type':    'refresh_token',
+                'refresh_token': acct.refresh_token,
+            },
+            timeout=10,
+        )
+        d = r.json()
+        if d.get('access_token'):
+            acct.access_token  = d['access_token']
+            acct.refresh_token = d.get('refresh_token', acct.refresh_token)
+            db.commit()
+            return True
+    except Exception:
+        pass
+    return False
+
+
+@app.route('/api/publish/tiktok/status/<publish_id>', methods=['GET'])
+def tiktok_publish_status(publish_id):
+    """Check the status of a TikTok publish job."""
+    agent_id = request.args.get('agent_id')
+    if not agent_id:
+        return jsonify({'error': 'agent_id required'}), 400
+
+    from src.database.models import SocialMediaAccount
+    acct = orchestrator.db.query(SocialMediaAccount).filter(
+        SocialMediaAccount.agent_id == int(agent_id),
+        SocialMediaAccount.platform == 'tiktok',
+    ).first()
+    if not acct:
+        return jsonify({'error': 'No TikTok account'}), 400
+
+    r = _requests.post(
+        'https://open.tiktokapis.com/v2/post/publish/status/fetch/',
+        headers={
+            'Authorization': f'Bearer {acct.access_token}',
+            'Content-Type': 'application/json; charset=UTF-8',
+        },
+        json={'publish_id': publish_id},
+        timeout=10,
+    )
+    return jsonify(r.json()), r.status_code
 
 
 if __name__ == '__main__':
