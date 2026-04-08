@@ -442,8 +442,11 @@ function _clearAttachment(prefix) {
 function esc(s) { const d = document.createElement('div'); d.textContent = String(s || ''); return d.innerHTML; }
 
 function formatAI(raw) {
+    // Extract image URLs before stripping code blocks
+    let text = String(raw || '');
+    const imgMatches = text.match(/\/static\/media\/[^\s\n"']+\.(?:jpg|png|jpeg|webp)/g) || [];
     // Strip command/data blocks the AI embeds (```vision, ```tasks, ```workflow, ```hire, etc.)
-    let text = String(raw || '').replace(/```[\w_]*\s*[\s\S]*?```/g, '').trim();
+    text = text.replace(/```[\w_]*\s*[\s\S]*?```/g, '').trim();
     // Helper: escape + inline markdown
     function inline(s) {
         const d = document.createElement('div');
@@ -479,6 +482,14 @@ function formatAI(raw) {
     }
     if (inList) html += '</ul>';
     html = html.replace(/(<br>)+$/, '');
+    // Render images inline
+    if (imgMatches.length > 0) {
+        html += '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">';
+        for (const url of imgMatches) {
+            html += `<img src="${url}" style="max-width:280px;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,0.1);cursor:pointer" onclick="window.open('${url}','_blank')">`;
+        }
+        html += '</div>';
+    }
     return html;
 }
 function ago(iso) {

@@ -3087,6 +3087,30 @@ def get_task_result(task_id):
             'deliverable_subject': st_msg.subject if st_msg else None,
         })
 
+    # Extract image URLs from deliverable body (pattern: /static/media/...)
+    images = []
+    if deliverable and deliverable.body:
+        import re
+        img_urls = re.findall(r'(/static/media/[^\s\n"\']+\.(?:jpg|png|jpeg|webp))', deliverable.body)
+        for url in img_urls:
+            images.append({'url': url, 'prompt': ''})
+
+    # Also check for images in static/media linked to this task
+    if not images:
+        media_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'media')
+        if os.path.isdir(media_dir):
+            import glob
+            task_imgs = glob.glob(os.path.join(media_dir, f'task_*.jpg'))
+            # Recent images (last 5 minutes around task completion)
+            if task.completed_at:
+                import time
+                for fp in sorted(task_imgs, key=os.path.getmtime, reverse=True)[:5]:
+                    mtime = os.path.getmtime(fp)
+                    task_ts = task.completed_at.timestamp()
+                    if abs(mtime - task_ts) < 300:  # within 5 min
+                        fname = os.path.basename(fp)
+                        images.append({'url': f'/static/media/{fname}', 'prompt': ''})
+
     return jsonify({
         'task': {
             'id': task.id, 'title': task.title, 'description': task.description,
@@ -3098,6 +3122,7 @@ def get_task_result(task_id):
         },
         'deliverable': deliverable.body[:3000] if deliverable else None,
         'deliverable_subject': deliverable.subject if deliverable else None,
+        'images': images,
         'subtasks': sub_results,
         'inbox_link': f'/inbox?entity_type={task.assignee_type}&entity_key={task.assignee_key}',
     }), 200
@@ -3264,6 +3289,79 @@ def _execute_task_in_background(task_snapshot):
         db.close()
 
 
+_IMAGE_ROLES = {'prompt_engineer_1', 'prompt_engineer_2', 'creative_director'}
+_IMAGE_KEYWORDS = ['profile picture', 'profile pic', 'portrait', 'headshot', 'generate image',
+                   'ai image', 'visual', 'photo', 'photograph', 'design asset', 'carousel',
+                   'generate.*picture', 'create.*image', 'produce.*visual']
+
+def _is_image_task(assignee_key, title, description):
+    """Detect if a task should trigger actual image generation."""
+    import re
+    if assignee_key in _IMAGE_ROLES:
+        text = (title + ' ' + (description or '')).lower()
+        for kw in _IMAGE_KEYWORDS:
+            if re.search(kw, text):
+                return True
+    return False
+
+def _generate_task_images(title, description, reply_text):
+    """Generate actual images for a task. Returns list of {url, prompt} dicts."""
+    import re, uuid, base64
+    results = []
+    try:
+        from src.api.image_generator import GeminiImageGenerator
+        gen = GeminiImageGenerator()
+
+        # Extract image prompts from the LLM reply (prompt engineers write prompts)
+        prompts = []
+        # Look for explicit prompt blocks
+        prompt_patterns = [
+            r'```(?:prompt|image)[^\n]*\n(.*?)```',
+            r'(?:PROMPT|Prompt|Image prompt|Generation prompt)[:\s]*["\']?([^"\'\n]{30,})["\']?',
+            r'(?:--ar|style:|Generate:)[^\n]*([^\n]{30,})',
+        ]
+        for pat in prompt_patterns:
+            matches = re.findall(pat, reply_text, re.DOTALL | re.IGNORECASE)
+            for m in matches:
+                cleaned = m.strip()[:500]
+                if len(cleaned) > 20:
+                    prompts.append(cleaned)
+
+        # If no explicit prompts found, build one from the task context
+        if not prompts:
+            desc_text = (description or title)[:300]
+            prompts = [
+                f"Professional portrait photograph, ultra realistic, studio lighting, "
+                f"high quality headshot for social media profile. Context: {desc_text}. "
+                f"Photorealistic, no text, no watermarks, no logos, square format, "
+                f"warm natural lighting, shallow depth of field, magazine quality."
+            ]
+
+        # Generate images (max 2 to avoid rate limits)
+        media_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'media')
+        os.makedirs(media_dir, exist_ok=True)
+
+        for prompt in prompts[:2]:
+            logging.info(f"[ImageGen] Generating image for task: {title[:50]}")
+            b64_img = gen.generate_image(prompt)
+            if b64_img:
+                # Save to disk
+                fname = f"task_{uuid.uuid4().hex[:12]}.jpg"
+                fpath = os.path.join(media_dir, fname)
+                with open(fpath, 'wb') as f:
+                    f.write(base64.b64decode(b64_img))
+                local_url = f"/static/media/{fname}"
+                results.append({'url': local_url, 'prompt': prompt[:100], 'base64': b64_img[:100] + '...'})
+                logging.info(f"[ImageGen] ✅ Saved: {fpath} ({os.path.getsize(fpath)//1024}KB)")
+            else:
+                logging.warning(f"[ImageGen] ❌ Failed to generate image for: {prompt[:60]}")
+
+    except Exception as e:
+        logging.error(f"[ImageGen] Image generation failed: {e}", exc_info=True)
+
+    return results
+
+
 def _execute_individual_task(db, task, entity, assignee_type, assignee_key):
     """Execute a single task by an individual contributor (not a head). Produces deliverable in inbox."""
     from src.database.models import InternalMessage, Notification
@@ -3288,33 +3386,67 @@ def _execute_individual_task(db, task, entity, assignee_type, assignee_key):
         temp = 0.7
         sys_prompt = _build_agent_system_prompt(db, entity)
 
-    exec_prompt = (
-        f"=== TASK ASSIGNED TO YOU ===\n"
-        f"Title: {title}\n"
-        f"Priority: {priority.upper()}\n"
-        f"Description:\n{description}\n\n"
-        f"Execute this task now. Produce the deliverable in full — not a plan, not a summary, "
-        f"but the ACTUAL WORK PRODUCT. If it's research, deliver the research. "
-        f"If it's a brief, write the full brief. If it's an audit, do the audit. "
-        f"Be thorough, specific, and actionable. Use data where possible.\n"
-        f"After the deliverable, add a one-line STATUS: at the end indicating completion."
-    )
+    # Check if this is an image generation task
+    is_image = _is_image_task(assignee_key, title, description)
+
+    if is_image:
+        exec_prompt = (
+            f"=== IMAGE GENERATION TASK ===\n"
+            f"Title: {title}\n"
+            f"Priority: {priority.upper()}\n"
+            f"Description:\n{description}\n\n"
+            f"You are generating an AI image for this task. Write:\n"
+            f"1. A detailed IMAGE GENERATION PROMPT (start with 'PROMPT:') — ultra specific, "
+            f"describing the exact scene, lighting, style, composition, colors, mood. "
+            f"This prompt will be fed directly to an AI image generator.\n"
+            f"2. A brief creative rationale (2-3 sentences) explaining your artistic choices.\n"
+            f"3. Technical specs: aspect ratio, resolution recommendation, format.\n\n"
+            f"IMPORTANT: The PROMPT line must be a single detailed paragraph that an AI image "
+            f"model can use directly. Be specific about: subject, pose, expression, background, "
+            f"lighting, color palette, camera angle, style (photorealistic/illustration/etc)."
+        )
+    else:
+        exec_prompt = (
+            f"=== TASK ASSIGNED TO YOU ===\n"
+            f"Title: {title}\n"
+            f"Priority: {priority.upper()}\n"
+            f"Description:\n{description}\n\n"
+            f"Execute this task now. Produce the deliverable in full — not a plan, not a summary, "
+            f"but the ACTUAL WORK PRODUCT. If it's research, deliver the research. "
+            f"If it's a brief, write the full brief. If it's an audit, do the audit. "
+            f"Be thorough, specific, and actionable. Use data where possible.\n"
+            f"After the deliverable, add a one-line STATUS: at the end indicating completion."
+        )
 
     canonical_thread = f"chat_{assignee_type}_{assignee_key}"
 
-    # Skip verbose dispatch message — just execute the work directly
-    prompt = exec_prompt
-
     llm = LLMProvider(provider=provider, model=model)
     reply = llm.generate_content(
-        prompt=prompt, max_tokens=4000, temperature=temp, system_prompt=sys_prompt,
+        prompt=exec_prompt, max_tokens=4000, temperature=temp, system_prompt=sys_prompt,
     )
 
+    # ── IMAGE GENERATION: actually produce images if this is a visual task ──
+    generated_images = []
+    if is_image:
+        logging.info(f"[TaskExec] 🎨 Image task detected — generating images for: {title[:50]}")
+        generated_images = _generate_task_images(title, description, reply)
+        if generated_images:
+            # Append image URLs to the reply
+            img_section = "\n\n---\n🖼️ **GENERATED IMAGES:**\n"
+            for i, img in enumerate(generated_images):
+                img_section += f"\n**Image {i+1}:** {img['url']}\n"
+            reply += img_section
+            logging.info(f"[TaskExec] 🎨 Generated {len(generated_images)} images for task #{task.id}")
+
     # Save deliverable as an email (not chat blabber) — clean, professional
+    subject = f'✅ Deliverable: {title[:80]}'
+    if generated_images:
+        subject = f'🖼️ Images + Deliverable: {title[:70]}'
+
     ai_msg = InternalMessage(
         from_type=assignee_type, from_key=assignee_key,
         from_name=name, from_emoji=emoji,
-        subject=f'✅ Deliverable: {title[:80]}',
+        subject=subject,
         body=reply, msg_type='email',
         thread_id=canonical_thread, is_read=False,
     )
@@ -3324,14 +3456,18 @@ def _execute_individual_task(db, task, entity, assignee_type, assignee_key):
     task.status = 'done'
     task.completed_at = datetime.utcnow()
 
+    notif_body = f'{reply[:150]}...' if len(reply) > 150 else reply
+    if generated_images:
+        notif_body = f'🖼️ {len(generated_images)} image(s) generated. {notif_body}'
+
     db.add(Notification(
         type='task_completed',
         title=f'✅ {name} completed: {title[:60]}',
-        body=f'{reply[:150]}…' if len(reply) > 150 else reply,
+        body=notif_body,
         link=f'/inbox?entity_type={assignee_type}&entity_key={assignee_key}',
     ))
     db.commit()
-    logging.info(f"[TaskExec] ✅ Task #{task.id} completed by {name} — {len(reply)} chars")
+    logging.info(f"[TaskExec] ✅ Task #{task.id} completed by {name} — {len(reply)} chars, {len(generated_images)} images")
     return reply
 
 
