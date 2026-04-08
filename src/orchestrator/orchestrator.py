@@ -281,6 +281,7 @@ class Orchestrator:
             'ai_auto_enabled':   bool(agent.ai_auto_enabled),
             'ai_auto_status':    agent.ai_auto_status or 'idle',
             'connected_platforms': self._get_connected_platforms(agent.id),
+            'connected_accounts':  self._get_connected_accounts(agent.id),
         }
 
     def _get_connected_platforms(self, agent_id: int):
@@ -293,6 +294,19 @@ class Orchestrator:
                 SocialMediaAccount.access_token != '',
             ).all()
             return [r.platform for r in rows]
+        except Exception:
+            return []
+
+    def _get_connected_accounts(self, agent_id: int):
+        """Return list of {platform, username} dicts for connected accounts."""
+        try:
+            from src.database.models import SocialMediaAccount
+            rows = self.db.query(SocialMediaAccount).filter(
+                SocialMediaAccount.agent_id == agent_id,
+                SocialMediaAccount.access_token != None,
+                SocialMediaAccount.access_token != '',
+            ).all()
+            return [{'platform': r.platform, 'username': r.username or ''} for r in rows]
         except Exception:
             return []
 
@@ -326,10 +340,12 @@ class Orchestrator:
                 })
 
         # Connection breakdown across all influencer/agent accounts
-        acct_counts = {a['agent_id']: len(a.get('connected_platforms', [])) for a in agents_data}
-        agents_zero    = sum(1 for c in acct_counts.values() if c == 0)
-        agents_partial = sum(1 for c in acct_counts.values() if 0 < c < 3)
-        agents_full    = sum(1 for c in acct_counts.values() if c >= 3)
+        # Full = both Instagram + Twitter connected (TikTok aside for now)
+        _REQUIRED = {'instagram', 'twitter'}
+        acct_sets  = {a['agent_id']: set(a.get('connected_platforms', [])) for a in agents_data}
+        agents_zero    = sum(1 for s in acct_sets.values() if not s & _REQUIRED)
+        agents_partial = sum(1 for s in acct_sets.values() if len(s & _REQUIRED) == 1)
+        agents_full    = sum(1 for s in acct_sets.values() if _REQUIRED <= s)
 
         return {
             'total_agents': total_agents,

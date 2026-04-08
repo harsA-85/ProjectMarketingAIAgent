@@ -37,6 +37,8 @@ def _run_migrations():
     migrations = [
         "ALTER TABLE tasks ADD COLUMN requires_approval BOOLEAN DEFAULT 0",
         "ALTER TABLE tasks ADD COLUMN approved_at DATETIME",
+        "ALTER TABLE workflow_runs ADD COLUMN department VARCHAR(30) DEFAULT 'newsroom'",
+        "ALTER TABLE tasks ADD COLUMN department VARCHAR(30) DEFAULT 'newsroom'",
     ]
     with engine.connect() as conn:
         for sql in migrations:
@@ -45,6 +47,24 @@ def _run_migrations():
                 conn.commit()
             except Exception:
                 pass  # Column already exists — safe to ignore
+
+    # Backfill department on tasks based on assignee_key
+    _ROLE_DEPT = {
+        'cto': 'tech', 'lead_engineer': 'tech', 'data_engineer': 'tech',
+        'vp_sales': 'sales', 'biz_dev': 'sales', 'account_exec': 'sales',
+    }
+    with engine.connect() as conn:
+        for role_key, dept in _ROLE_DEPT.items():
+            try:
+                conn.execute(text(
+                    f"UPDATE tasks SET department = '{dept}' WHERE assignee_key = '{role_key}' AND (department IS NULL OR department = 'newsroom')"
+                ))
+            except Exception:
+                pass
+        try:
+            conn.commit()
+        except Exception:
+            pass
 
 
 def get_db() -> Session:

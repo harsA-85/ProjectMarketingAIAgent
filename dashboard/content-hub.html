@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Content Hub — Axel</title>
+    <style>
+        :root {
+            --bg: #f5f5f7; --surface: #ffffff; --surface-2: #f2f2f7; --sidebar-bg: #fafafa;
+            --border: rgba(0,0,0,0.07); --border-strong: rgba(0,0,0,0.12);
+            --text-1: #1c1c1e; --text-2: #6e6e73; --text-3: #aeaeb2;
+            --accent: #007aff; --accent-dim: rgba(0,122,255,0.1);
+            --success: #30d158; --warning: #ff9f0a; --danger: #ff453a;
+            --r: 12px; --r-sm: 8px; --r-lg: 16px;
+            --shadow-sm: 0 1px 3px rgba(0,0,0,0.05), 0 2px 8px rgba(0,0,0,0.04);
+            --shadow: 0 2px 12px rgba(0,0,0,0.07), 0 4px 20px rgba(0,0,0,0.04);
+        }
+        * { margin:0; padding:0; box-sizing:border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, sans-serif; background: var(--bg); color: var(--text-1); }
+        .app { display: flex; height: 100vh; overflow: hidden; }
+
+        /* SIDEBAR */
+        .sidebar { width: 220px; min-width: 220px; background: var(--sidebar-bg); border-right: 1px solid var(--border); display: flex; flex-direction: column; padding-top: 12px; }
+        .sidebar-header { padding: 8px 16px 16px; }
+        .brand { display: flex; align-items: center; gap: 10px; }
+        .brand-icon { width: 32px; height: 32px; border-radius: 8px; background: linear-gradient(135deg, #007aff, #5856d6); display: flex; align-items: center; justify-content: center; font-size: 16px; color: white; }
+        .brand-name { font-size: 15px; font-weight: 700; color: var(--text-1); }
+        .brand-sub { font-size: 10px; color: var(--text-3); }
+        .sidebar-nav { padding: 10px 8px; flex: 1; }
+        .nav-section { font-size: 10px; font-weight: 700; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.5px; padding: 14px 12px 6px; }
+        .nav-item { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 8px; font-size: 13px; color: var(--text-2); text-decoration: none; transition: all 0.15s; cursor: pointer; }
+        .nav-item .ni { font-size: 14px; width: 18px; text-align: center; }
+        .nav-item:hover { background: rgba(0,0,0,0.05); color: var(--text-1); }
+        .nav-item.active { background: var(--accent-dim); color: var(--accent); font-weight: 600; }
+
+        /* MAIN */
+        .main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+        .topbar { height: 52px; display: flex; align-items: center; padding: 0 24px; border-bottom: 1px solid var(--border); background: rgba(255,255,255,0.8); backdrop-filter: blur(20px); gap: 16px; }
+        .topbar-center { flex: 1; text-align: center; font-size: 13px; font-weight: 600; color: var(--text-1); }
+        .traffic-lights { display: flex; gap: 8px; }
+        .tl { width: 12px; height: 12px; border-radius: 50%; }
+        .tl.red { background: #ff5f57; } .tl.yellow { background: #febc2e; } .tl.green { background: #28c840; }
+
+        .content { flex: 1; overflow-y: auto; padding: 28px; }
+
+        /* STAT CARDS */
+        .stat-row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 14px; margin-bottom: 24px; }
+        .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r); padding: 18px 16px; text-align: center; box-shadow: var(--shadow-sm); }
+        .stat-num { font-size: 28px; font-weight: 700; color: var(--text-1); }
+        .stat-label { font-size: 11px; color: var(--text-3); margin-top: 4px; text-transform: uppercase; letter-spacing: 0.5px; }
+
+        /* FILTERS */
+        .filter-bar { display: flex; gap: 8px; margin-bottom: 20px; align-items: center; }
+        .filter-btn { padding: 6px 14px; border-radius: 100px; border: 1px solid var(--border); background: var(--surface); font-size: 12px; color: var(--text-2); cursor: pointer; transition: all 0.15s; }
+        .filter-btn:hover { border-color: var(--accent); color: var(--accent); }
+        .filter-btn.active { background: var(--accent); color: white; border-color: var(--accent); }
+
+        /* CONTENT TABLE */
+        .content-table-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); box-shadow: var(--shadow-sm); overflow: hidden; }
+        .content-table { width: 100%; border-collapse: collapse; }
+        .content-table thead th { font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-3); font-weight: 600; padding: 12px 14px; text-align: left; border-bottom: 1px solid var(--border); background: var(--surface-2); }
+        .content-table tbody td { padding: 14px; font-size: 12px; color: var(--text-2); border-bottom: 1px solid var(--border); vertical-align: top; }
+        .content-table tbody tr:last-child td { border-bottom: none; }
+        .content-table tbody tr:hover { background: rgba(0,122,255,0.02); }
+
+        .post-title { font-weight: 600; color: var(--text-1); margin-bottom: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 300px; }
+        .post-body { font-size: 11px; color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 300px; }
+
+        .status-pill { display: inline-block; padding: 3px 10px; border-radius: 100px; font-size: 10px; font-weight: 600; }
+        .status-pill.draft { background: var(--surface-2); color: var(--text-3); }
+        .status-pill.scheduled { background: rgba(255,159,10,0.12); color: #b36e00; }
+        .status-pill.published { background: rgba(48,209,88,0.1); color: #1a9e42; }
+        .status-pill.failed { background: rgba(255,69,58,0.1); color: var(--danger); }
+
+        .plat-icon { font-size: 14px; }
+        .empty-state { text-align: center; padding: 60px 20px; color: var(--text-3); font-size: 13px; }
+    </style>
+</head>
+<body>
+<div class="app">
+    <nav class="sidebar">
+        <div class="sidebar-header">
+            <div class="brand">
+                <div class="brand-icon">⚡</div>
+                <div class="brand-text">
+                    <div class="brand-name">Axel</div>
+                    <div class="brand-sub">Unicorn in Progress</div>
+                </div>
+            </div>
+        </div>
+        <div class="sidebar-nav">
+            <div class="nav-section">Workspace</div>
+            <a class="nav-item" href="/"><span class="ni">⬡</span> All Agents</a>
+            <a class="nav-item" href="/inbox?tasks=1"><span class="ni">📥</span> Inbox & Tasks</a>
+            <a class="nav-item" href="/vision"><span class="ni">🚀</span> Vision</a>
+            <div class="nav-section">Rooms</div>
+            <a class="nav-item" href="/newsroom.html" style="padding-left:28px;font-size:12px">👑 GM Room</a>
+            <a class="nav-item" href="/newsroom.html?room=newsroom" style="padding-left:40px;font-size:11px">📰 Newsroom</a>
+            <a class="nav-item" href="/newsroom.html?room=tech" style="padding-left:28px;font-size:12px">💻 Tech Room</a>
+            <a class="nav-item" href="/newsroom.html?room=sales" style="padding-left:28px;font-size:12px">🤝 Sales Room</a>
+            <div class="nav-section">Insights</div>
+            <a class="nav-item active" href="/content-hub"><span class="ni">📝</span> Content Hub</a>
+            <a class="nav-item" href="/analytics"><span class="ni">📊</span> Analytics</a>
+            <div class="nav-section">System</div>
+            <a class="nav-item" href="#"><span class="ni">⚙️</span> Settings</a>
+        </div>
+    </nav>
+
+    <div class="main">
+        <header class="topbar">
+            <div class="traffic-lights">
+                <span class="tl red"></span><span class="tl yellow"></span><span class="tl green"></span>
+            </div>
+            <div class="topbar-center">Content Hub</div>
+            <div style="width:60px"></div>
+        </header>
+
+        <div class="content">
+            <!-- Stat cards -->
+            <div class="stat-row" id="stat-row">
+                <div class="stat-card"><div class="stat-num" id="s-total">-</div><div class="stat-label">Total</div></div>
+                <div class="stat-card"><div class="stat-num" id="s-published" style="color:var(--success)">-</div><div class="stat-label">Published</div></div>
+                <div class="stat-card"><div class="stat-num" id="s-scheduled" style="color:#b36e00">-</div><div class="stat-label">Scheduled</div></div>
+                <div class="stat-card"><div class="stat-num" id="s-draft" style="color:var(--text-3)">-</div><div class="stat-label">Drafts</div></div>
+                <div class="stat-card"><div class="stat-num" id="s-failed" style="color:var(--danger)">-</div><div class="stat-label">Failed</div></div>
+            </div>
+
+            <!-- Filter bar -->
+            <div class="filter-bar">
+                <button class="filter-btn active" onclick="filterContent(null, this)">All</button>
+                <button class="filter-btn" onclick="filterContent('published', this)">Published</button>
+                <button class="filter-btn" onclick="filterContent('scheduled', this)">Scheduled</button>
+                <button class="filter-btn" onclick="filterContent('draft', this)">Drafts</button>
+                <button class="filter-btn" onclick="filterContent('failed', this)">Failed</button>
+                <div style="flex:1"></div>
+                <span style="font-size:11px;color:var(--text-3)" id="result-count"></span>
+            </div>
+
+            <!-- Content table -->
+            <div class="content-table-wrap">
+                <table class="content-table">
+                    <thead>
+                        <tr>
+                            <th>Content</th>
+                            <th>Agent</th>
+                            <th>Platform</th>
+                            <th>Status</th>
+                            <th>Created</th>
+                            <th>Published</th>
+                        </tr>
+                    </thead>
+                    <tbody id="content-tbody">
+                        <tr><td colspan="6" class="empty-state">Loading content...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+let _allPosts = [];
+let _currentFilter = null;
+
+const PLAT_ICONS = { instagram: '📷', twitter: '𝕏', tiktok: '🎵', facebook: '📘', linkedin: '💼', youtube: '▶️' };
+
+function esc(s) { const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
+function fmtDate(d) { if (!d) return '-'; return new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }); }
+
+async function loadContent() {
+    try {
+        const res = await fetch('/api/content/all');
+        const data = await res.json();
+
+        // Update stats
+        const s = data.summary || {};
+        document.getElementById('s-total').textContent = s.total || 0;
+        document.getElementById('s-published').textContent = s.published || 0;
+        document.getElementById('s-scheduled').textContent = s.scheduled || 0;
+        document.getElementById('s-draft').textContent = s.draft || 0;
+        document.getElementById('s-failed').textContent = s.failed || 0;
+
+        _allPosts = data.posts || [];
+        renderPosts(_allPosts);
+    } catch(e) {
+        document.getElementById('content-tbody').innerHTML = '<tr><td colspan="6" class="empty-state">Failed to load content.</td></tr>';
+    }
+}
+
+function renderPosts(posts) {
+    const tbody = document.getElementById('content-tbody');
+    document.getElementById('result-count').textContent = posts.length + ' posts';
+
+    if (!posts.length) {
+        tbody.innerHTML = '<tr><td colspan="6" class="empty-state">No content yet. Launch a pipeline from the Newsroom to generate content.</td></tr>';
+        return;
+    }
+
+    tbody.innerHTML = posts.map(p => `
+        <tr>
+            <td>
+                <div class="post-title">${esc(p.title)}</div>
+                <div class="post-body">${esc(p.body)}</div>
+                ${(p.hashtags||[]).length ? `<div style="margin-top:4px;font-size:10px;color:var(--accent)">${p.hashtags.slice(0,3).map(h=>'#'+h).join(' ')}</div>` : ''}
+            </td>
+            <td style="white-space:nowrap">${esc(p.agent_name || 'Agent #' + p.agent_id)}</td>
+            <td><span class="plat-icon">${PLAT_ICONS[p.platform] || '🌐'}</span> ${esc(p.platform)}</td>
+            <td><span class="status-pill ${p.status || 'draft'}">${esc(p.status || 'draft')}</span></td>
+            <td style="white-space:nowrap;font-size:11px">${fmtDate(p.created_at)}</td>
+            <td style="white-space:nowrap;font-size:11px">${fmtDate(p.published_at || p.scheduled_at)}</td>
+        </tr>
+    `).join('');
+}
+
+function filterContent(status, btn) {
+    _currentFilter = status;
+    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+
+    if (!status) { renderPosts(_allPosts); return; }
+    renderPosts(_allPosts.filter(p => p.status === status));
+}
+
+document.addEventListener('DOMContentLoaded', loadContent);
+</script>
+</body>
+</html>

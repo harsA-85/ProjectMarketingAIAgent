@@ -61,6 +61,21 @@ def serve_media(filename):
     response.headers['Cache-Control'] = 'public, max-age=3600'
     return response
 
+# ── Department mapping: role_key → department ──
+_ROLE_DEPT = {
+    'eic': 'newsroom', 'head_intelligence': 'newsroom', 'creative_director': 'newsroom',
+    'prompt_engineer_1': 'newsroom', 'prompt_engineer_2': 'newsroom',
+    'production_manager': 'newsroom', 'copywriter_1': 'newsroom', 'copywriter_2': 'newsroom',
+    'distribution_specialist': 'newsroom',
+    'cto': 'tech', 'lead_engineer': 'tech', 'data_engineer': 'tech',
+    'vp_sales': 'sales', 'biz_dev': 'sales', 'account_exec': 'sales',
+    'general_manager': 'leadership', 'cofounder': 'leadership',
+}
+
+def _dept_from_assignee(assignee_key):
+    """Return department string for a given role_key."""
+    return _ROLE_DEPT.get(assignee_key, 'newsroom')
+
 orchestrator = None
 
 autopilot      = None
@@ -1346,6 +1361,130 @@ def get_scheduled_posts():
 
 
 # ═══════════════════════════════════════════════════════
+# CONTENT HUB & ANALYTICS OVERVIEW
+# ═══════════════════════════════════════════════════════
+
+@app.route('/api/content/all', methods=['GET'])
+def get_all_content():
+    """Get all content across all agents with filters."""
+    from src.database.models import Content, Agent
+    status_filter = request.args.get('status')  # draft, scheduled, published, failed
+    platform_filter = request.args.get('platform')
+    limit = request.args.get('limit', 100, type=int)
+
+    q = orchestrator.db.query(Content).order_by(Content.created_at.desc())
+    if status_filter:
+        q = q.filter(Content.status == status_filter)
+    if platform_filter:
+        q = q.filter(Content.platform == platform_filter)
+    posts = q.limit(limit).all()
+
+    # Gather agent names
+    agent_ids = list(set(p.agent_id for p in posts))
+    agents = {a.id: a for a in orchestrator.db.query(Agent).filter(Agent.id.in_(agent_ids)).all()} if agent_ids else {}
+
+    # Summary counts
+    total = orchestrator.db.query(Content).count()
+    drafts = orchestrator.db.query(Content).filter(Content.status == 'draft').count()
+    scheduled = orchestrator.db.query(Content).filter(Content.status == 'scheduled').count()
+    published = orchestrator.db.query(Content).filter(Content.status == 'published').count()
+    failed = orchestrator.db.query(Content).filter(Content.status == 'failed').count()
+
+    return jsonify({
+        'summary': {
+            'total': total,
+            'draft': drafts,
+            'scheduled': scheduled,
+            'published': published,
+            'failed': failed,
+        },
+        'posts': [{
+            'id': p.id,
+            'agent_id': p.agent_id,
+            'agent_name': agents.get(p.agent_id, None) and agents[p.agent_id].name,
+            'title': p.title,
+            'body': p.body[:200] if p.body else '',
+            'platform': p.platform,
+            'status': p.status,
+            'hashtags': p.hashtags or [],
+            'media_urls': p.media_urls or [],
+            'created_at': p.created_at.isoformat() if p.created_at else None,
+            'scheduled_at': p.scheduled_at.isoformat() if p.scheduled_at else None,
+            'published_at': p.published_at.isoformat() if p.published_at else None,
+        } for p in posts]
+    }), 200
+
+
+@app.route('/api/analytics/overview', methods=['GET'])
+def get_analytics_overview():
+    """Get aggregated analytics across all agents."""
+    from src.database.models import Analytics, Content, Agent
+    from datetime import datetime, timedelta
+
+    now = datetime.utcnow()
+    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    week_start = today_start - timedelta(days=today_start.weekday())
+
+    # Get latest analytics per agent
+    all_analytics = orchestrator.db.query(Analytics).order_by(Analytics.date.desc()).all()
+
+    # Aggregate totals
+    total_followers = 0
+    total_impressions = 0
+    total_engagement = 0.0
+    agent_count = 0
+    by_platform = {}
+
+    seen_agents = set()
+    for a in all_analytics:
+        key = (a.agent_id, a.platform)
+        if key in seen_agents:
+            continue
+        seen_agents.add(key)
+        total_followers += a.followers or 0
+        total_impressions += a.impressions or 0
+        total_engagement += a.engagement_rate or 0.0
+        agent_count += 1
+
+        if a.platform not in by_platform:
+            by_platform[a.platform] = {'followers': 0, 'impressions': 0, 'posts': 0}
+        by_platform[a.platform]['followers'] += a.followers or 0
+        by_platform[a.platform]['impressions'] += a.impressions or 0
+        by_platform[a.platform]['posts'] += a.posts_published or 0
+
+    # Content counts by time period
+    posts_today = orchestrator.db.query(Content).filter(
+        Content.status == 'published', Content.published_at >= today_start
+    ).count()
+    posts_week = orchestrator.db.query(Content).filter(
+        Content.status == 'published', Content.published_at >= week_start
+    ).count()
+    posts_total = orchestrator.db.query(Content).filter(Content.status == 'published').count()
+
+    return jsonify({
+        'totals': {
+            'followers': total_followers,
+            'impressions': total_impressions,
+            'avg_engagement': round(total_engagement / max(agent_count, 1), 2),
+            'posts_today': posts_today,
+            'posts_this_week': posts_week,
+            'posts_total': posts_total,
+        },
+        'by_platform': by_platform,
+    }), 200
+
+
+@app.route('/content-hub')
+def content_hub_page():
+    return send_from_directory('', 'content-hub.html')
+
+
+@app.route('/analytics')
+def analytics_page():
+    return send_from_directory('', 'analytics.html')
+
+
+# ═══════════════════════════════════════════════════════
 # NOTIFICATIONS
 # ═══════════════════════════════════════════════════════
 
@@ -1471,14 +1610,19 @@ def start_workflow():
 
 @app.route('/api/team/workflows', methods=['GET'])
 def list_workflows():
-    """List all workflow runs."""
+    """List all workflow runs. Optional ?dept= filter (newsroom, tech, sales)."""
     from src.database.models import WorkflowRun
-    runs = orchestrator.db.query(WorkflowRun).order_by(WorkflowRun.id.desc()).limit(50).all()
+    dept = request.args.get('dept')
+    q = orchestrator.db.query(WorkflowRun).order_by(WorkflowRun.id.desc())
+    if dept:
+        q = q.filter(WorkflowRun.department == dept)
+    runs = q.limit(50).all()
     return jsonify([{
         'id': r.id,
         'status': r.status,
         'current_step': r.current_step,
         'target_agent_ids': r.target_agent_ids,
+        'department': getattr(r, 'department', 'newsroom') or 'newsroom',
         'started_at': r.started_at.isoformat() if r.started_at else None,
         'completed_at': r.completed_at.isoformat() if r.completed_at else None,
         'error_message': r.error_message,
@@ -2173,13 +2317,15 @@ def _build_team_system_prompt(db, member):
         agent_acct_lines = []
         for a in agents:
             platforms = acct_map.get(a.id, [])
-            missing = [p for p in ['instagram', 'twitter', 'tiktok'] if p not in platforms]
-            if not platforms:
-                status = '❌ No accounts linked'
-            elif missing:
-                status = f'⚠️ Linked: {", ".join(platforms)} | Missing: {", ".join(missing)}'
+            required = {'instagram', 'twitter'}
+            has = set(platforms)
+            missing_core = required - has
+            if not has & required:
+                status = '❌ No accounts linked (need Instagram + X)'
+            elif missing_core:
+                status = f'⚠️ Partial — missing: {", ".join(missing_core)}'
             else:
-                status = '✅ Fully linked (Instagram + X + TikTok)'
+                status = '✅ Fully active (Instagram + X connected)'
             agent_acct_lines.append(f'  - ID {a.id}: {a.name} ({a.brand}) — {status}')
 
         unlinked = sum(1 for a in agents if not acct_map.get(a.id))
@@ -2337,6 +2483,7 @@ def _extract_and_create_tasks(db, reply_text, thread_id, entity_type, entity_key
                 created_by_type=entity_type,
                 created_by_key=entity_key,
                 created_by_name=entity_name,
+                department=_dept_from_assignee(a_key),
                 thread_id=thread_id,
                 due_date=due,
                 requires_approval=(entity_key == 'cofounder'),
@@ -2848,10 +2995,13 @@ def get_tasks():
     assignee = request.args.get('assignee')
     status = request.args.get('status')
     parent = request.args.get('parent_id')
+    dept = request.args.get('dept')
     if assignee:
         q = q.filter(Task.assignee_key == assignee)
     if status:
         q = q.filter(Task.status == status)
+    if dept:
+        q = q.filter(Task.department == dept)
     if parent:
         q = q.filter(Task.parent_id == int(parent))
     elif not request.args.get('all'):
@@ -2863,6 +3013,7 @@ def get_tasks():
         return {
             'id': t.id, 'title': t.title, 'description': t.description,
             'status': t.status, 'priority': t.priority,
+            'department': getattr(t, 'department', None) or _dept_from_assignee(t.assignee_key),
             'requires_approval': bool(getattr(t, 'requires_approval', False)),
             'approved_at': t.approved_at.isoformat() if getattr(t, 'approved_at', None) else None,
             'created_by_type': t.created_by_type, 'created_by_key': t.created_by_key,
@@ -2880,22 +3031,99 @@ def get_tasks():
     return jsonify({'tasks': [task_dict(t) for t in tasks]}), 200
 
 
+@app.route('/api/task-result/<int:task_id>', methods=['GET'])
+def get_task_result(task_id):
+    """Get a task's deliverable — the email/message produced when it was executed."""
+    logging.info(f"[TaskResult] Hit /api/task-result/{task_id}")
+    from flask import g
+    from src.database.models import Task, InternalMessage
+    db = g.db
+    task = db.query(Task).filter(Task.id == task_id).first()
+    if not task:
+        return jsonify({'error': 'Task not found'}), 404
+
+    # Find deliverable email in assignee's thread
+    thread_id = f"chat_{task.assignee_type}_{task.assignee_key}"
+    deliverable = db.query(InternalMessage).filter(
+        InternalMessage.thread_id == thread_id,
+        InternalMessage.subject.like(f'%{task.title[:40]}%'),
+        InternalMessage.msg_type == 'email',
+    ).order_by(InternalMessage.created_at.desc()).first()
+
+    # If no exact match, get the most recent email from this assignee around task completion time
+    if not deliverable and task.completed_at:
+        from datetime import timedelta
+        window_start = task.completed_at - timedelta(minutes=5)
+        deliverable = db.query(InternalMessage).filter(
+            InternalMessage.thread_id == thread_id,
+            InternalMessage.from_key == task.assignee_key,
+            InternalMessage.msg_type == 'email',
+            InternalMessage.created_at >= window_start,
+            InternalMessage.created_at <= task.completed_at + timedelta(minutes=2),
+        ).order_by(InternalMessage.created_at.desc()).first()
+
+    # Also find any chat messages from execution
+    if not deliverable:
+        deliverable = db.query(InternalMessage).filter(
+            InternalMessage.thread_id == thread_id,
+            InternalMessage.from_key == task.assignee_key,
+        ).order_by(InternalMessage.created_at.desc()).first()
+
+    # Get subtask results too
+    subtasks = db.query(Task).filter(Task.parent_id == task_id).all()
+    sub_results = []
+    for st in subtasks:
+        st_thread = f"chat_{st.assignee_type}_{st.assignee_key}"
+        st_msg = db.query(InternalMessage).filter(
+            InternalMessage.thread_id == st_thread,
+            InternalMessage.from_key == st.assignee_key,
+            InternalMessage.msg_type == 'email',
+        ).order_by(InternalMessage.created_at.desc()).first()
+        sub_results.append({
+            'id': st.id, 'title': st.title, 'status': st.status,
+            'assignee_name': st.assignee_name, 'assignee_key': st.assignee_key,
+            'department': getattr(st, 'department', None) or _dept_from_assignee(st.assignee_key),
+            'deliverable': st_msg.body[:2000] if st_msg else None,
+            'deliverable_subject': st_msg.subject if st_msg else None,
+        })
+
+    return jsonify({
+        'task': {
+            'id': task.id, 'title': task.title, 'description': task.description,
+            'status': task.status, 'priority': task.priority,
+            'assignee_name': task.assignee_name, 'assignee_key': task.assignee_key,
+            'assignee_type': task.assignee_type,
+            'department': getattr(task, 'department', None) or _dept_from_assignee(task.assignee_key),
+            'completed_at': task.completed_at.isoformat() if task.completed_at else None,
+        },
+        'deliverable': deliverable.body[:3000] if deliverable else None,
+        'deliverable_subject': deliverable.subject if deliverable else None,
+        'subtasks': sub_results,
+        'inbox_link': f'/inbox?entity_type={task.assignee_type}&entity_key={task.assignee_key}',
+    }), 200
+
+
 @app.route('/api/tasks/pending_approval', methods=['GET'])
 def get_pending_approval_tasks():
     """Get tasks proposed by cofounder — pending and rejected (for later reconsideration)."""
     from flask import g
     from src.database.models import Task
     db = g.db
-    tasks = db.query(Task).filter(
+    q = db.query(Task).filter(
         Task.requires_approval == True,
         Task.approved_at == None,
-    ).order_by(Task.created_at.desc()).all()
+    )
+    dept = request.args.get('dept')
+    if dept:
+        q = q.filter(Task.department == dept)
+    tasks = q.order_by(Task.created_at.desc()).all()
 
     def td(t):
         return {
             'id': t.id, 'title': t.title, 'description': t.description,
             'priority': t.priority, 'assignee_name': t.assignee_name,
             'assignee_key': t.assignee_key, 'status': t.status,
+            'department': getattr(t, 'department', None) or _dept_from_assignee(t.assignee_key),
             'due_date': t.due_date.isoformat() if t.due_date else None,
             'created_at': t.created_at.isoformat() if t.created_at else None,
         }
@@ -3073,34 +3301,21 @@ def _execute_individual_task(db, task, entity, assignee_type, assignee_key):
     )
 
     canonical_thread = f"chat_{assignee_type}_{assignee_key}"
-    dispatch_msg = InternalMessage(
-        from_type='user', from_key='supervisor', from_name='You', from_emoji='',
-        body=f"📋 **Task Dispatched**\n\n**{title}**\n{description}\n\n_Priority: {priority.upper()} — Execute now._",
-        msg_type='chat', thread_id=canonical_thread, is_read=True,
-    )
-    db.add(dispatch_msg)
-    db.commit()
 
-    # Get conversation history for context
-    history = db.query(InternalMessage).filter(
-        InternalMessage.thread_id == canonical_thread
-    ).order_by(InternalMessage.created_at.desc()).limit(20).all()
-    history.reverse()
-    conv_lines = [f"{'User' if h.from_type == 'user' else name}: {h.body[:400]}" for h in history[:-1]]
-    conv_context = '\n'.join(conv_lines[-10:])
-
-    prompt = f"{conv_context}\nUser: {exec_prompt}\n{name}:" if conv_context else exec_prompt
+    # Skip verbose dispatch message — just execute the work directly
+    prompt = exec_prompt
 
     llm = LLMProvider(provider=provider, model=model)
     reply = llm.generate_content(
         prompt=prompt, max_tokens=4000, temperature=temp, system_prompt=sys_prompt,
     )
 
-    # Save AI reply to inbox
+    # Save deliverable as an email (not chat blabber) — clean, professional
     ai_msg = InternalMessage(
         from_type=assignee_type, from_key=assignee_key,
         from_name=name, from_emoji=emoji,
-        body=reply, msg_type='chat',
+        subject=f'✅ Deliverable: {title[:80]}',
+        body=reply, msg_type='email',
         thread_id=canonical_thread, is_read=False,
     )
     db.add(ai_msg)
@@ -3187,18 +3402,12 @@ def _execute_cascade_task(db, parent_task, head_entity, direct_reports):
         prompt=decompose_prompt, max_tokens=2000, temperature=temp, system_prompt=sys_prompt,
     )
 
-    # Post head's decomposition plan to their inbox thread
+    # Post concise dispatch notice to head's inbox (not the full decomposition blabber)
     head_thread = f"chat_team_member_{head_key}"
     db.add(InternalMessage(
         from_type='user', from_key='supervisor', from_name='You', from_emoji='',
-        body=f"📋 **Task from Marc → Your Department**\n\n**{title}**\n{description}\n\n_Priority: {priority.upper()} — Decompose and dispatch to your team._",
+        body=f"📋 **Task Approved → {title}**\n_Priority: {priority.upper()} — Executing now._",
         msg_type='chat', thread_id=head_thread, is_read=True,
-    ))
-    db.add(InternalMessage(
-        from_type='team_member', from_key=head_key,
-        from_name=head_name, from_emoji=head_emoji,
-        body=decompose_reply, msg_type='chat',
-        thread_id=head_thread, is_read=False,
     ))
     db.commit()
 
@@ -3261,6 +3470,7 @@ def _execute_cascade_task(db, parent_task, head_entity, direct_reports):
             created_by_type='team_member',
             created_by_key=head_key,
             created_by_name=head_name,
+            department=_dept_from_assignee(a_key),
             parent_id=task_id,
             thread_id=head_thread,
             requires_approval=False,  # head already approved — sub-tasks auto-execute
@@ -3286,37 +3496,44 @@ def _execute_cascade_task(db, parent_task, head_entity, direct_reports):
     ))
     db.commit()
 
-    # ── STEP 3: Execute each sub-task sequentially ──
-    sub_results = []
-    for i, st in enumerate(sub_task_objects):
-        if i > 0:
-            time.sleep(2)  # stagger to avoid rate limits
+    # ── STEP 3: Execute sub-tasks in parallel (2 workers) ──
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
+    def _run_sub(st):
+        sub_db = get_db()
         try:
-            member = db.query(TeamMember).filter(TeamMember.role_key == st.assignee_key).first()
-            if member:
-                result = _execute_individual_task(db, st, member, 'team_member', st.assignee_key)
-                sub_results.append({
-                    'task_id': st.id,
-                    'title': st.title,
-                    'assignee': st.assignee_name,
-                    'result': (result or '')[:500],
-                    'status': 'done',
-                })
+            from src.database.models import Task as _T, TeamMember as _TM
+            sub_task = sub_db.query(_T).filter(_T.id == st.id).first()
+            member = sub_db.query(_TM).filter(_TM.role_key == st.assignee_key).first()
+            if member and sub_task:
+                result = _execute_individual_task(sub_db, sub_task, member, 'team_member', st.assignee_key)
+                return {'task_id': st.id, 'title': st.title, 'assignee': st.assignee_name,
+                        'result': (result or '')[:500], 'status': 'done'}
             else:
-                st.status = 'blocked'
-                db.commit()
-                sub_results.append({
-                    'task_id': st.id, 'title': st.title,
-                    'assignee': st.assignee_name, 'result': '[Member not found]', 'status': 'blocked',
-                })
+                if sub_task:
+                    sub_task.status = 'blocked'
+                    sub_db.commit()
+                return {'task_id': st.id, 'title': st.title, 'assignee': st.assignee_name,
+                        'result': '[Member not found]', 'status': 'blocked'}
         except Exception as e:
             logging.error(f"[Cascade] Sub-task #{st.id} failed: {e}")
-            st.status = 'blocked'
-            db.commit()
-            sub_results.append({
-                'task_id': st.id, 'title': st.title,
-                'assignee': st.assignee_name, 'result': f'[Error: {str(e)[:100]}]', 'status': 'failed',
-            })
+            try:
+                sub_task = sub_db.query(Task).filter(Task.id == st.id).first()
+                if sub_task:
+                    sub_task.status = 'blocked'
+                    sub_db.commit()
+            except Exception:
+                pass
+            return {'task_id': st.id, 'title': st.title, 'assignee': st.assignee_name,
+                    'result': f'[Error: {str(e)[:100]}]', 'status': 'failed'}
+        finally:
+            sub_db.close()
+
+    sub_results = []
+    with ThreadPoolExecutor(max_workers=2, thread_name_prefix='sub-task') as pool:
+        futures = {pool.submit(_run_sub, st): st for st in sub_task_objects}
+        for future in as_completed(futures):
+            sub_results.append(future.result())
 
     # ── STEP 4: Head produces executive summary ──
     completed = sum(1 for r in sub_results if r['status'] == 'done')
@@ -3413,17 +3630,39 @@ def approve_all_tasks():
         })
     db.commit()
 
-    # Dispatch all in background (staggered 2s apart to avoid rate limits)
-    import time as _time
-    def _run_all(snaps):
-        for i, snap in enumerate(snaps):
-            if i > 0:
-                _time.sleep(3)  # stagger to avoid LLM rate limits
-            _execute_task_in_background(snap)
-    thread = threading.Thread(target=_run_all, args=(snapshots,), name='task-exec-all', daemon=True)
+    # Dispatch in parallel batches (3 concurrent workers to respect rate limits)
+    from concurrent.futures import ThreadPoolExecutor
+    def _run_all_parallel(snaps):
+        with ThreadPoolExecutor(max_workers=3, thread_name_prefix='task-exec') as pool:
+            pool.map(_execute_task_in_background, snaps)
+    thread = threading.Thread(target=_run_all_parallel, args=(snapshots,), name='task-exec-all', daemon=True)
     thread.start()
 
     return jsonify({'ok': True, 'approved': len(snapshots)}), 200
+
+
+@app.route('/api/tasks/progress', methods=['GET'])
+def get_tasks_progress():
+    """Real-time progress: how many tasks are pending/in_progress/done/blocked."""
+    from flask import g
+    from src.database.models import Task
+    db = g.db
+    pending = db.query(Task).filter(Task.requires_approval == True, Task.approved_at == None, Task.status != 'rejected').count()
+    in_progress = db.query(Task).filter(Task.status == 'in_progress').count()
+    done = db.query(Task).filter(Task.status == 'done').count()
+    blocked = db.query(Task).filter(Task.status == 'blocked').count()
+    recent_done = db.query(Task).filter(Task.status == 'done').order_by(Task.completed_at.desc()).limit(5).all()
+    return jsonify({
+        'pending_approval': pending,
+        'in_progress': in_progress,
+        'done': done,
+        'blocked': blocked,
+        'recent_completed': [{
+            'id': t.id, 'title': t.title, 'assignee_name': t.assignee_name,
+            'department': getattr(t, 'department', None) or _dept_from_assignee(t.assignee_key),
+            'completed_at': t.completed_at.isoformat() if t.completed_at else None,
+        } for t in recent_done],
+    }), 200
 
 
 @app.route('/api/cofounder/pulse', methods=['POST'])
@@ -3631,6 +3870,7 @@ def create_task():
         assignee_type=assignee_type,
         assignee_key=assignee_key,
         assignee_name=assignee_name,
+        department=data.get('department') or _dept_from_assignee(assignee_key),
         parent_id=data.get('parent_id'),
         due_date=due,
         thread_id=data.get('thread_id'),
@@ -3729,6 +3969,7 @@ def twitter_oauth_start():
         'state':                 state,
         'code_challenge':        challenge,
         'code_challenge_method': 'S256',
+        'force_login':           'true',   # always show login form — no pre-filled account
     }
     from urllib.parse import urlencode
     url = 'https://twitter.com/i/oauth2/authorize?' + urlencode(params)

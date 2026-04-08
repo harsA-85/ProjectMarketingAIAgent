@@ -229,6 +229,8 @@ class Task(Base):
     # Approval flow — cofounder-proposed tasks need sign-off before activation
     requires_approval = Column(Boolean, default=False)
     approved_at    = Column(DateTime, nullable=True)
+    # Department flag — newsroom, tech, sales
+    department     = Column(String(30), default='newsroom')
     # Context
     thread_id      = Column(String(100), nullable=True)        # chat thread that spawned this
     created_at     = Column(DateTime, default=datetime.utcnow)
@@ -295,6 +297,7 @@ class WorkflowRun(Base):
     started_at      = Column(DateTime, nullable=True)
     completed_at    = Column(DateTime, nullable=True)
     error_message   = Column(Text, nullable=True)
+    department      = Column(String(30), default='newsroom')    # newsroom|tech|sales
     created_at      = Column(DateTime, default=datetime.utcnow)
 
     # Relationships

@@ -1079,13 +1079,14 @@
             <a class="nav-item" href="/inbox?tasks=1"><span class="ni">📥</span> Inbox & Tasks</a>
             <a class="nav-item" href="/vision"><span class="ni">🚀</span> Vision</a>
             <div class="nav-section">Rooms</div>
-            <a class="nav-sub" id="nav-newsroom" href="#" onclick="switchRoom('newsroom',this);return false">📰 Newsroom</a>
             <a class="nav-sub" id="nav-room-gm"    href="#" onclick="switchRoom('gm',this);return false">👑 GM Room</a>
+            <a class="nav-sub" id="nav-newsroom"   href="#" onclick="switchRoom('newsroom',this);return false" style="padding-left:36px;font-size:11px">📰 Newsroom</a>
             <a class="nav-sub" id="nav-room-tech"  href="#" onclick="switchRoom('tech',this);return false">💻 Tech Room</a>
             <a class="nav-sub" id="nav-room-sales" href="#" onclick="switchRoom('sales',this);return false">🤝 Sales Room</a>
+            <div class="nav-section">Insights</div>
+            <a class="nav-item" href="/content-hub"><span class="ni">📝</span> Content Hub</a>
+            <a class="nav-item" href="/analytics"><span class="ni">📊</span> Analytics</a>
             <div class="nav-section">System</div>
-            <a class="nav-item" href="#"><span class="ni">📊</span> Analytics</a>
-            <a class="nav-item" href="#"><span class="ni">📅</span> Schedule</a>
             <a class="nav-item" href="#"><span class="ni">⚙️</span> Settings</a>
         </div>
 
@@ -1115,8 +1116,8 @@
         <!-- CONTENT -->
         <div class="content">
 
-        <!-- ═══ NEWSROOM ROOM (default) ═══ -->
-        <div id="room-newsroom" class="room-view active">
+        <!-- ═══ GM ROOM (default — global overview) ═══ -->
+        <div id="room-gm" class="room-view active">
 
             <!-- TEAM STRIP (always visible) -->
             <div class="team-panel fade-up">
@@ -1125,15 +1126,40 @@
                 </div>
             </div>
 
+            <!-- Dept status cards -->
+            <div class="dept-status-row" id="gm-dept-status">
+                <a class="dept-status-card" href="#" onclick="switchRoom('newsroom',null);return false">
+                    <div class="dept-status-icon">📰</div>
+                    <div class="dept-status-name">Editorial</div>
+                    <div class="dept-status-sub">Pipeline & Content</div>
+                    <div class="dept-status-chip" id="dept-chip-newsroom">● Active</div>
+                </a>
+                <a class="dept-status-card" href="#" onclick="switchRoom('tech',null);return false">
+                    <div class="dept-status-icon">💻</div>
+                    <div class="dept-status-name">Tech</div>
+                    <div class="dept-status-sub">Engineering & Product</div>
+                    <div class="dept-status-chip" id="dept-chip-tech">● Active</div>
+                </a>
+                <a class="dept-status-card" href="#" onclick="switchRoom('sales',null);return false">
+                    <div class="dept-status-icon">🤝</div>
+                    <div class="dept-status-name">Sales</div>
+                    <div class="dept-status-sub">Partnerships & Revenue</div>
+                    <div class="dept-status-chip" id="dept-chip-sales">● Active</div>
+                </a>
+            </div>
+
             <!-- TAB BAR -->
-            <div class="tab-bar">
-                <button class="tab-btn active" onclick="switchTab('pipeline', this)">▶ Pipeline</button>
+            <div class="tab-bar" style="display:flex;align-items:center">
+                <button class="tab-btn" onclick="switchTab('pipeline', this)">▶ Pipeline</button>
+                <button class="tab-btn active" onclick="switchTab('tasks', this)">📋 Tasks <span id="gm-tasks-badge" style="display:none;background:var(--danger);color:#fff;font-size:10px;padding:1px 6px;border-radius:10px;margin-left:4px;font-weight:700">0</span></button>
                 <button class="tab-btn" onclick="switchTab('orgchart', this)">🏛 Org Chart</button>
-                <button class="tab-btn" onclick="switchTab('history', this)">📋 History</button>
+                <button class="tab-btn" onclick="switchTab('history', this)">📜 History</button>
+                <div style="flex:1"></div>
+                <button class="btn btn-ghost" style="font-size:12px;padding:5px 12px;margin-bottom:2px" onclick="chatWithHead('general_manager')">💬 Chat with GM</button>
             </div>
 
             <!-- TAB: PIPELINE -->
-            <div class="tab-pane active" id="tab-pipeline">
+            <div class="tab-pane" id="tab-pipeline">
                 <div class="pipeline-panel fade-up">
                     <div class="section-header" style="margin-bottom:20px">
                         <div class="section-title" style="flex:1">Pipeline</div>
@@ -1148,6 +1174,53 @@
                             <div class="artifact-empty-icon">📄</div>
                             Select a pipeline step to preview its output
                         </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TAB: TASKS COMMAND CENTER -->
+            <div class="tab-pane active" id="tab-tasks">
+                <!-- Live stats bar -->
+                <div style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap">
+                    <div id="gm-stat-pending" style="flex:1;min-width:140px;background:linear-gradient(135deg,rgba(255,159,10,0.08),rgba(255,159,10,0.03));border:1px solid rgba(255,159,10,0.2);border-radius:var(--r);padding:14px 18px">
+                        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:var(--warning);margin-bottom:4px">⏳ Pending Approval</div>
+                        <div style="font-size:28px;font-weight:800;color:var(--text-1)" id="gm-stat-pending-num">—</div>
+                    </div>
+                    <div id="gm-stat-running" style="flex:1;min-width:140px;background:linear-gradient(135deg,rgba(0,122,255,0.08),rgba(0,122,255,0.03));border:1px solid rgba(0,122,255,0.2);border-radius:var(--r);padding:14px 18px">
+                        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:var(--accent);margin-bottom:4px">⚡ In Progress</div>
+                        <div style="font-size:28px;font-weight:800;color:var(--text-1)" id="gm-stat-running-num">—</div>
+                    </div>
+                    <div style="flex:1;min-width:140px;background:linear-gradient(135deg,rgba(48,209,88,0.08),rgba(48,209,88,0.03));border:1px solid rgba(48,209,88,0.2);border-radius:var(--r);padding:14px 18px">
+                        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:var(--success);margin-bottom:4px">✅ Completed</div>
+                        <div style="font-size:28px;font-weight:800;color:var(--text-1)" id="gm-stat-done-num">—</div>
+                    </div>
+                    <div style="flex:1;min-width:140px;background:linear-gradient(135deg,rgba(255,69,58,0.08),rgba(255,69,58,0.03));border:1px solid rgba(255,69,58,0.2);border-radius:var(--r);padding:14px 18px">
+                        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:var(--danger);margin-bottom:4px">🚫 Blocked</div>
+                        <div style="font-size:28px;font-weight:800;color:var(--text-1)" id="gm-stat-blocked-num">—</div>
+                    </div>
+                </div>
+
+                <!-- Approve All bar -->
+                <div id="gm-approve-bar" style="display:none;background:linear-gradient(135deg,rgba(255,159,10,0.06),rgba(0,122,255,0.04));border:1px solid rgba(255,159,10,0.25);border-radius:var(--r);padding:14px 20px;margin-bottom:16px;display:flex;align-items:center;gap:12px">
+                    <div style="flex:1">
+                        <div style="font-size:13px;font-weight:700;color:var(--text-1)">🔔 Tasks awaiting your approval</div>
+                        <div style="font-size:11px;color:var(--text-2);margin-top:2px" id="gm-approve-sub">Marc proposed tasks for your team</div>
+                    </div>
+                    <button id="gm-approve-all-btn" onclick="_approveAllGM(this)" style="padding:8px 20px;font-size:13px;font-weight:700;border:none;border-radius:8px;background:linear-gradient(135deg,#007aff,#5856d6);color:#fff;cursor:pointer;transition:all 0.2s;box-shadow:0 2px 8px rgba(0,122,255,0.3)">✓ Approve All</button>
+                </div>
+
+                <!-- Task list -->
+                <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);overflow:hidden;box-shadow:var(--shadow-sm)">
+                    <div id="gm-tasks-list" style="max-height:500px;overflow-y:auto">
+                        <div style="padding:40px;text-align:center;color:var(--text-3);font-size:13px">Loading tasks...</div>
+                    </div>
+                </div>
+
+                <!-- Recently completed -->
+                <div style="margin-top:16px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);overflow:hidden;box-shadow:var(--shadow-sm)">
+                    <div style="padding:12px 18px;border-bottom:1px solid var(--border);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:var(--text-3)">Recently Completed</div>
+                    <div id="gm-tasks-done" style="max-height:250px;overflow-y:auto">
+                        <div style="padding:20px;text-align:center;color:var(--text-3);font-size:12px">No completed tasks yet</div>
                     </div>
                 </div>
             </div>
@@ -1182,65 +1255,54 @@
                 </div>
             </div>
 
-        </div><!-- /room-newsroom -->
+        </div><!-- /room-gm -->
 
-        <!-- ═══ GM ROOM ═══ -->
-        <div id="room-gm" class="room-view">
+        <!-- ═══ NEWSROOM (Editorial Department) ═══ -->
+        <div id="room-newsroom" class="room-view">
             <div class="room-header">
-                <div class="room-hero-emoji" style="background:linear-gradient(135deg,rgba(255,214,10,0.15),rgba(255,159,10,0.15));border:1px solid rgba(255,159,10,0.2)">🏛️</div>
+                <div class="room-hero-emoji" style="background:linear-gradient(135deg,rgba(255,69,58,0.1),rgba(255,159,10,0.08));border:1px solid rgba(255,69,58,0.2)">📰</div>
                 <div class="room-hero-info">
-                    <div class="room-hero-title" id="gm-title">GM Room</div>
-                    <div class="room-hero-sub" id="gm-sub">General Manager · Company Operations Overview</div>
+                    <div class="room-hero-title">Newsroom</div>
+                    <div class="room-hero-sub">Editorial & Content · Editor-in-Chief</div>
                 </div>
                 <div class="room-hero-actions">
-                    <button class="btn btn-ghost" onclick="chatWithHead('general_manager')">💬 Chat with GM</button>
+                    <button class="btn btn-ghost" onclick="chatWithHead('eic')">💬 Chat with Victoria</button>
                     <button class="btn btn-primary" onclick="openNewWorkflowModal()">💡 New Idea</button>
                 </div>
             </div>
-
-            <!-- Dept status cards -->
-            <div class="dept-status-row" id="gm-dept-status">
-                <a class="dept-status-card" href="#" onclick="switchRoom('newsroom',null);return false">
-                    <div class="dept-status-icon">📰</div>
-                    <div class="dept-status-name">Editorial</div>
-                    <div class="dept-status-sub">Pipeline & Content</div>
-                    <div class="dept-status-chip">● Active</div>
-                </a>
-                <a class="dept-status-card" href="#" onclick="switchRoom('tech',null);return false">
-                    <div class="dept-status-icon">💻</div>
-                    <div class="dept-status-name">Tech</div>
-                    <div class="dept-status-sub">Engineering & Product</div>
-                    <div class="dept-status-chip">● Active</div>
-                </a>
-                <a class="dept-status-card" href="#" onclick="switchRoom('sales',null);return false">
-                    <div class="dept-status-icon">🤝</div>
-                    <div class="dept-status-name">Sales</div>
-                    <div class="dept-status-sub">Partnerships & Revenue</div>
-                    <div class="dept-status-chip">● Active</div>
-                </a>
-            </div>
-
             <div class="room-body">
-                <!-- Left: Org chart for GM -->
                 <div>
+                    <div class="room-panel" style="margin-bottom:16px">
+                        <div class="room-panel-title">Editorial Team</div>
+                        <div id="newsroom-org-chart"><!-- rendered dynamically --></div>
+                    </div>
                     <div class="room-panel">
-                        <div class="room-panel-title">Leadership Team</div>
-                        <div id="gm-org-chart"><!-- rendered dynamically --></div>
+                        <div class="room-panel-title">Editorial Workflow</div>
+                        <div id="newsroom-wf-bar"><!-- rendered dynamically --></div>
                     </div>
                 </div>
-                <!-- Right: Tasks + Quick stats -->
                 <div style="display:flex;flex-direction:column;gap:16px">
                     <div class="room-panel">
-                        <div class="room-panel-title">Pending Approvals</div>
-                        <div id="gm-tasks-list" style="font-size:12px;color:var(--text-3)">Loading...</div>
+                        <div class="room-panel-title">Editorial Tasks</div>
+                        <div id="newsroom-tasks-list" style="font-size:12px;color:var(--text-3)">Loading...</div>
                     </div>
                     <div class="room-panel">
-                        <div class="room-panel-title">Recent Dispatches</div>
-                        <div id="gm-dispatch-list" style="font-size:12px;color:var(--text-3)">Loading...</div>
+                        <div class="room-panel-title">Recent Activity</div>
+                        <div id="newsroom-activity" style="font-size:12px;color:var(--text-3)">Loading...</div>
                     </div>
                 </div>
             </div>
-        </div><!-- /room-gm -->
+            <!-- Newsroom Pipeline History -->
+            <div class="room-panel" style="margin-top:16px">
+                <div class="room-panel-title">Pipeline History</div>
+                <div class="wf-table-wrap" style="max-height:400px;border:none;box-shadow:none">
+                    <table class="wf-table">
+                        <thead><tr><th>#</th><th>Status</th><th>Step</th><th>Started</th></tr></thead>
+                        <tbody id="newsroom-wf-tbody"><tr><td colspan="4" class="wf-empty">Loading...</td></tr></tbody>
+                    </table>
+                </div>
+            </div>
+        </div><!-- /room-newsroom -->
 
         <!-- ═══ TECH ROOM ═══ -->
         <div id="room-tech" class="room-view">
@@ -1275,6 +1337,16 @@
                         <div class="room-panel-title">Activity</div>
                         <div id="tech-activity" style="font-size:12px;color:var(--text-3)">No recent activity.</div>
                     </div>
+                </div>
+            </div>
+            <!-- Tech Pipeline History (only shows if tech workflows exist) -->
+            <div class="room-panel" style="margin-top:16px;display:none" id="tech-history-panel">
+                <div class="room-panel-title">Pipeline History</div>
+                <div class="wf-table-wrap" style="max-height:400px;border:none;box-shadow:none">
+                    <table class="wf-table">
+                        <thead><tr><th>#</th><th>Status</th><th>Step</th><th>Started</th></tr></thead>
+                        <tbody id="tech-wf-tbody"></tbody>
+                    </table>
                 </div>
             </div>
         </div><!-- /room-tech -->
@@ -1312,6 +1384,16 @@
                         <div class="room-panel-title">Pipeline Activity</div>
                         <div id="sales-activity" style="font-size:12px;color:var(--text-3)">No recent activity.</div>
                     </div>
+                </div>
+            </div>
+            <!-- Sales Pipeline History (only shows if sales workflows exist) -->
+            <div class="room-panel" style="margin-top:16px;display:none" id="sales-history-panel">
+                <div class="room-panel-title">Pipeline History</div>
+                <div class="wf-table-wrap" style="max-height:400px;border:none;box-shadow:none">
+                    <table class="wf-table">
+                        <thead><tr><th>#</th><th>Status</th><th>Step</th><th>Started</th></tr></thead>
+                        <tbody id="sales-wf-tbody"></tbody>
+                    </table>
                 </div>
             </div>
         </div><!-- /room-sales -->
@@ -1688,19 +1770,51 @@ document.addEventListener('DOMContentLoaded', () => {
     loadTeam();
     loadWorkflows();
     loadNotifications();
+    loadGMTasks();       // load Tasks tab data (default tab)
     setInterval(loadNotifications, 10000);  // poll every 10s
+    setInterval(_loadGMTaskBadge, 15000);   // refresh badge count
 
-    // Check for room param
+    // Check for room param — GM is default (global overview)
     const roomParam = new URLSearchParams(window.location.search).get('room');
-    if (roomParam && ['gm','tech','sales'].includes(roomParam)) {
+    if (roomParam && ['newsroom','tech','sales'].includes(roomParam)) {
         switchRoom(roomParam, null);
     } else {
-        switchRoom('newsroom', null);
+        switchRoom('gm', null);
     }
 });
 
+async function _loadGMTaskBadge() {
+    try {
+        const r = await fetch('/api/tasks/progress');
+        const p = await r.json();
+        const badge = document.getElementById('gm-tasks-badge');
+        const cnt = (p.pending_approval || 0) + (p.in_progress || 0);
+        if (cnt > 0) { badge.textContent = cnt; badge.style.display = 'inline'; }
+        else { badge.style.display = 'none'; }
+
+        // Update dept status chips with task counts
+        for (const dept of ['newsroom', 'tech', 'sales']) {
+            try {
+                const dr = await fetch(`/api/tasks?dept=${dept}&all=1`);
+                const dd = await dr.json();
+                const tasks = dd.tasks || [];
+                const active = tasks.filter(t => t.status === 'in_progress').length;
+                const pending = tasks.filter(t => t.requires_approval && !t.approved_at && t.status !== 'rejected').length;
+                const done = tasks.filter(t => t.status === 'done').length;
+                const chip = document.getElementById(`dept-chip-${dept}`);
+                if (chip) {
+                    if (active > 0) chip.innerHTML = `<span style="color:var(--accent)">&#9679; ${active} running</span>`;
+                    else if (pending > 0) chip.innerHTML = `<span style="color:var(--warning)">&#9679; ${pending} pending</span>`;
+                    else if (done > 0) chip.innerHTML = `<span style="color:var(--success)">&#9679; ${done} done</span>`;
+                    else chip.textContent = '● Idle';
+                }
+            } catch(e) {}
+        }
+    } catch(e) {}
+}
+
 /* ── ROOMS ── */
-let _currentRoom = 'newsroom';
+let _currentRoom = 'gm';
 
 function switchRoom(room, sidebarEl) {
     _currentRoom = room;
@@ -1710,64 +1824,68 @@ function switchRoom(room, sidebarEl) {
     if (view) view.classList.add('active');
 
     // Update topbar title
-    const titles = { newsroom: 'Newsroom', gm: 'GM Room', tech: 'Tech Room', sales: 'Sales Room' };
+    const titles = { gm: 'GM Room', newsroom: 'Newsroom', tech: 'Tech Room', sales: 'Sales Room' };
     const center = document.querySelector('.topbar-center');
-    if (center) center.textContent = titles[room] || 'Newsroom';
+    if (center) center.textContent = titles[room] || 'GM Room';
 
     // Update sidebar active states
     document.querySelectorAll('.nav-item, .nav-sub').forEach(el => el.classList.remove('active'));
-    const navId = room === 'newsroom' ? 'nav-newsroom' : 'nav-room-' + room;
+    const navId = room === 'newsroom' ? 'nav-newsroom' : room === 'gm' ? 'nav-room-gm' : 'nav-room-' + room;
     document.getElementById(navId)?.classList.add('active');
 
-    // Update URL without reload
-    const url = room === 'newsroom' ? '/newsroom.html' : '/newsroom.html?room=' + room;
+    // Update URL without reload — GM is the default (no param)
+    const url = room === 'gm' ? '/newsroom.html' : '/newsroom.html?room=' + room;
     window.history.replaceState({}, '', url);
 
     // Render room-specific content
-    if (room === 'gm')    renderGMRoom();
-    if (room === 'tech')  renderTechRoom();
-    if (room === 'sales') renderSalesRoom();
+    if (room === 'newsroom') renderNewsroom();
+    if (room === 'tech')     renderTechRoom();
+    if (room === 'sales')    renderSalesRoom();
 }
 
-function renderGMRoom() {
+function renderNewsroom() {
     if (!window._teamByKey) return;
     const byKey = window._teamByKey;
 
-    const gmNode = byKey['general_manager'];
-    const cofNode = byKey['cofounder'];
-    const eicNode = byKey['eic'];
-    const ctoNode = byKey['cto'];
-    const vpNode  = byKey['vp_sales'];
+    const roles = ['eic','head_intelligence','creative_director','prompt_engineer_1','prompt_engineer_2',
+                   'production_manager','copywriter_1','copywriter_2','distribution_specialist'];
 
-    function miniNode(m) {
+    function editNode(m) {
         if (!m) return '';
-        const shortModel = (m.llm_model || 'sonnet-4-6').replace('claude-','').replace('gemini-flash-','G ').replace('gemini-','G ');
-        return `<div style="background:var(--surface-2);border:1px solid var(--border);border-radius:10px;padding:12px 16px;text-align:center;min-width:110px;cursor:pointer" onclick="chatWithHead('${m.role_key}')">
+        return `<div style="background:var(--surface-2);border:1px solid rgba(255,69,58,0.15);border-radius:10px;padding:12px 16px;text-align:center;min-width:110px;cursor:pointer" onclick="chatWithHead('${m.role_key}')">
             <div style="font-size:22px;margin-bottom:4px">${m.emoji||'👤'}</div>
             <div style="font-size:12px;font-weight:600;color:var(--text-1)">${m.display_name}</div>
             <div style="font-size:10px;color:var(--text-2);margin-top:2px">${m.role_title}</div>
-            <div style="font-size:9px;background:rgba(204,120,50,0.1);color:#b36a00;border-radius:100px;padding:2px 6px;margin-top:5px;display:inline-block">${shortModel}</div>
         </div>`;
     }
 
-    const chart = document.getElementById('gm-org-chart');
+    const eic = byKey['eic'];
+    const heads = ['head_intelligence','creative_director','production_manager','distribution_specialist']
+        .map(k => byKey[k]).filter(Boolean);
+    const workers = ['prompt_engineer_1','prompt_engineer_2','copywriter_1','copywriter_2']
+        .map(k => byKey[k]).filter(Boolean);
+
+    const chart = document.getElementById('newsroom-org-chart');
     if (chart) chart.innerHTML = `
         <div style="display:flex;flex-direction:column;align-items:center;gap:12px">
-            <div style="display:flex;gap:12px;justify-content:center">
-                ${cofNode ? miniNode(cofNode) : ''}
-                ${gmNode  ? miniNode(gmNode)  : ''}
+            ${eic ? `<div style="display:flex;justify-content:center">${editNode(eic)}</div>
+            <div style="width:1px;height:16px;background:var(--border-strong)"></div>` : ''}
+            <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
+                ${heads.map(h => editNode(h)).join('')}
             </div>
-            <div style="width:1px;height:20px;background:var(--border-strong)"></div>
-            <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap">
-                ${eicNode ? miniNode(eicNode) : ''}
-                ${ctoNode ? miniNode(ctoNode) : ''}
-                ${vpNode  ? miniNode(vpNode)  : ''}
-            </div>
+            ${workers.length ? `<div style="width:1px;height:12px;background:var(--border-strong)"></div>
+            <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap">
+                ${workers.map(w => editNode(w)).join('')}
+            </div>` : ''}
         </div>
     `;
 
-    loadRoomTasks('gm-tasks-list', null);
-    loadRoomDispatches('gm-dispatch-list');
+    const wfEl = document.getElementById('newsroom-wf-bar');
+    if (wfEl) wfEl.innerHTML = renderMiniWfBar(['🔍 Intel Scan','👑 EIC Brief','🎨 Visual Dir.','🖊️ Writers Draft','📸 Prompt Eng.','⚙️ Production QC','✅ Fact-Check','🚀 Distribution']);
+
+    loadRoomTasks('newsroom-tasks-list', 'newsroom');
+    loadRoomDispatches('newsroom-activity');
+    loadRoomWorkflows('newsroom-wf-tbody', 'newsroom');
 }
 
 function renderTechRoom() {
@@ -1802,6 +1920,7 @@ function renderTechRoom() {
     if (wfEl) wfEl.innerHTML = renderMiniWfBar(['📐 Architecture','🗓 Sprint Plan','⚡ Development','🔍 Code Review','🧪 Testing','🚢 Deploy','📊 Monitor']);
 
     loadRoomTasks('tech-tasks-list', 'tech');
+    loadRoomWorkflows('tech-wf-tbody', 'tech');
 }
 
 function renderSalesRoom() {
@@ -1836,6 +1955,7 @@ function renderSalesRoom() {
     if (wfEl) wfEl.innerHTML = renderMiniWfBar(['🎯 Lead Gen','🔎 Qualify','📧 Outreach','🎤 Demo','📄 Proposal','🤝 Negotiate','✅ Close','🚀 Onboard']);
 
     loadRoomTasks('sales-tasks-list', 'sales');
+    loadRoomWorkflows('sales-wf-tbody', 'sales');
 }
 
 function renderMiniWfBar(steps) {
@@ -1848,18 +1968,24 @@ async function loadRoomTasks(containerId, dept) {
     const el = document.getElementById(containerId);
     if (!el) return;
     try {
-        const r = await fetch('/api/tasks/pending_approval');
+        const url = dept ? `/api/tasks/pending_approval?dept=${dept}` : '/api/tasks/pending_approval';
+        const r = await fetch(url);
         const data = await r.json();
         const tasks = (data.tasks || []).slice(0, 5);
         if (!tasks.length) { el.innerHTML = '<div style="color:var(--text-3);font-size:12px;padding:8px 0">No pending tasks.</div>'; return; }
-        el.innerHTML = tasks.map(t => `
-            <div style="padding:9px 0;border-bottom:1px solid var(--border);display:flex;align-items:flex-start;gap:8px;cursor:pointer" onclick="window.location='/inbox?tasks=1'">
+        const deptColors = { newsroom:'rgba(255,69,58,0.1)', tech:'rgba(90,200,250,0.1)', sales:'rgba(52,199,89,0.1)', leadership:'rgba(255,214,10,0.1)' };
+        const deptText   = { newsroom:'#c0392b', tech:'#007aff', sales:'#1a9e42', leadership:'#b36a00' };
+        const deptIcons  = { newsroom:'📰', tech:'💻', sales:'🤝', leadership:'👑' };
+        el.innerHTML = tasks.map(t => {
+            const d = t.department || 'newsroom';
+            return `<div style="padding:9px 0;border-bottom:1px solid var(--border);display:flex;align-items:flex-start;gap:8px;cursor:pointer" onclick="window.location='/inbox?tasks=1'">
                 <div style="flex:1;min-width:0">
                     <div style="font-size:12px;font-weight:600;color:var(--text-1);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${t.title||'Untitled'}</div>
-                    <div style="font-size:11px;color:var(--text-2);margin-top:2px">${t.assigned_to||'Unassigned'}</div>
+                    <div style="font-size:11px;color:var(--text-2);margin-top:2px">${t.assignee_name||t.assigned_to||'Unassigned'}</div>
                 </div>
+                <span style="font-size:9px;padding:2px 6px;border-radius:100px;white-space:nowrap;background:${deptColors[d]||deptColors.newsroom};color:${deptText[d]||deptText.newsroom}">${deptIcons[d]||''} ${d}</span>
                 <span style="font-size:9px;padding:2px 6px;border-radius:100px;white-space:nowrap;background:rgba(255,159,10,0.12);color:#b36e00">${t.priority||'normal'}</span>
-            </div>`).join('');
+            </div>`}).join('');
     } catch(e) { el.innerHTML = '<div style="color:var(--text-3);font-size:12px">Unable to load tasks.</div>'; }
 }
 
@@ -1879,6 +2005,81 @@ async function loadRoomDispatches(containerId) {
     } catch(e) { el.innerHTML = '<div style="color:var(--text-3);font-size:12px">No dispatches yet.</div>'; }
 }
 
+async function loadRoomWorkflows(tbodyId, dept) {
+    const tbody = document.getElementById(tbodyId);
+    if (!tbody) return;
+    const panel = tbody.closest('.room-panel');
+    try {
+        const url = dept ? `/api/team/workflows?dept=${dept}` : '/api/team/workflows';
+        const res = await fetch(url);
+        if (!res.ok) throw new Error('Failed');
+        const data = await res.json();
+        const runs = Array.isArray(data) ? data : (data.workflows || []);
+        if (!runs.length) {
+            if (panel) panel.style.display = 'none';
+            return;
+        }
+        if (panel) panel.style.display = '';
+        tbody.innerHTML = runs.slice(0, 10).map(r => {
+            const stepKeys = STEPS.map(s => s.key);
+            const curIdx = stepKeys.indexOf(r.current_step || '');
+            const pct = r.status === 'completed' ? 100 : r.status === 'failed' ? Math.max(10, ((curIdx) / 5) * 100) : curIdx >= 0 ? ((curIdx + 0.5) / 5) * 100 : 0;
+            const barCls = r.status === 'completed' ? 'completed' : r.status === 'failed' ? 'failed' : 'running';
+            const dots = STEPS.map((s, i) => {
+                const cls = r.status === 'completed' ? 'done' : i < curIdx ? 'done' : i === curIdx ? (r.status === 'failed' ? 'fail' : 'active') : '';
+                return `<div class="wf-step-dot ${cls}" title="${s.label}">${s.icon}</div>`;
+            }).join('');
+            const runId = esc(r.id || r.run_id || '-');
+            // Build clickable step chips
+            const stepChips = STEPS.map((s, i) => {
+                const st = r.status === 'completed' ? 'done' : i < curIdx ? 'done' : i === curIdx ? (r.status === 'failed' ? 'fail' : 'active') : 'pending';
+                const bg = st === 'done' ? 'rgba(48,209,88,0.1)' : st === 'active' ? 'rgba(0,122,255,0.1)' : st === 'fail' ? 'rgba(255,69,58,0.1)' : 'var(--surface-2)';
+                const color = st === 'done' ? '#1a9e42' : st === 'active' ? 'var(--accent)' : st === 'fail' ? 'var(--danger)' : 'var(--text-3)';
+                return `<span onclick="event.stopPropagation();openRunStep('${runId}','${s.key}')" style="cursor:pointer;font-size:10px;padding:3px 8px;border-radius:100px;background:${bg};color:${color};white-space:nowrap;border:1px solid transparent;transition:border 0.15s" onmouseover="this.style.borderColor='${color}'" onmouseout="this.style.borderColor='transparent'">${s.icon} ${s.label}</span>`;
+            }).join('');
+            return `<tr style="cursor:pointer" onclick="toggleRunDetail(this,'${runId}')">
+                <td class="wf-id">${runId}</td>
+                <td>
+                    <span class="status-badge ${r.status || 'pending'}"><span class="status-dot ${r.status || 'pending'}"></span>${capitalize(r.status || 'pending')}</span>
+                    <div class="wf-progress-wrap"><div class="wf-progress-bar ${barCls}" style="width:${pct}%"></div></div>
+                    <div class="wf-step-dots">${dots}</div>
+                </td>
+                <td>${esc(r.current_step || r.step || '-')}</td>
+                <td>${formatTime(r.started_at || r.started)}</td>
+            </tr>
+            <tr class="room-wf-detail" style="display:none">
+                <td colspan="4" style="padding:12px 14px;background:var(--surface-2);border-bottom:1px solid var(--border)">
+                    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">${stepChips}</div>
+                    <div style="display:flex;justify-content:space-between;align-items:center">
+                        <span style="font-size:10px;color:var(--text-3)">Click a step to view details</span>
+                        <a href="#" onclick="event.preventDefault();switchRoom('gm',null);setTimeout(()=>{switchTab('pipeline',document.querySelectorAll('.tab-btn')[0]);viewWorkflow('${runId}')},200)" style="font-size:11px;color:var(--accent);text-decoration:none;font-weight:600">Open in Pipeline →</a>
+                    </div>
+                </td>
+            </tr>`;
+        }).join('');
+    } catch(e) {
+        if (panel) panel.style.display = 'none';
+    }
+}
+
+function toggleRunDetail(row, runId) {
+    const detail = row.nextElementSibling;
+    if (!detail || !detail.classList.contains('room-wf-detail')) return;
+    const isOpen = detail.style.display !== 'none';
+    // Close all open details in same table
+    row.closest('tbody').querySelectorAll('.room-wf-detail').forEach(d => d.style.display = 'none');
+    if (!isOpen) detail.style.display = '';
+}
+
+function openRunStep(runId, stepKey) {
+    switchRoom('gm', null);
+    setTimeout(() => {
+        switchTab('pipeline', document.querySelectorAll('.tab-btn')[0]);
+        viewWorkflow(runId);
+        setTimeout(() => selectStep(stepKey), 500);
+    }, 200);
+}
+
 /* ── TABS ── */
 function switchTab(name, btn) {
     document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
@@ -1886,6 +2087,272 @@ function switchTab(name, btn) {
     document.getElementById('tab-' + name).classList.add('active');
     btn.classList.add('active');
     if (name === 'orgchart') renderOrgChart();
+    if (name === 'tasks') loadGMTasks();
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   GM TASKS COMMAND CENTER
+═══════════════════════════════════════════════════════════════ */
+let _gmTasksPoll = null;
+
+async function loadGMTasks() {
+    try {
+        // Fetch progress stats + pending tasks in parallel
+        const [progR, pendR, allR] = await Promise.all([
+            fetch('/api/tasks/progress'),
+            fetch('/api/tasks/pending_approval'),
+            fetch('/api/tasks?status=done&limit=20'),
+        ]);
+        const prog = await progR.json();
+        const pend = await pendR.json();
+        let allDone = [];
+        try { allDone = (await allR.json()).tasks || []; } catch(e) {}
+
+        // Update stat cards
+        document.getElementById('gm-stat-pending-num').textContent = prog.pending_approval || 0;
+        document.getElementById('gm-stat-running-num').textContent = prog.in_progress || 0;
+        document.getElementById('gm-stat-done-num').textContent = prog.done || 0;
+        document.getElementById('gm-stat-blocked-num').textContent = prog.blocked || 0;
+
+        // Update badge on tab
+        const badge = document.getElementById('gm-tasks-badge');
+        const pendCount = prog.pending_approval || 0;
+        if (pendCount > 0) {
+            badge.textContent = pendCount;
+            badge.style.display = 'inline';
+        } else {
+            badge.style.display = 'none';
+        }
+
+        // Approve bar
+        const approveBar = document.getElementById('gm-approve-bar');
+        const pendTasks = (pend.tasks || []).filter(t => t.status !== 'rejected');
+        if (pendTasks.length > 0) {
+            approveBar.style.display = 'flex';
+            document.getElementById('gm-approve-sub').textContent = `${pendTasks.length} task${pendTasks.length > 1 ? 's' : ''} proposed by Marc for your team`;
+        } else {
+            approveBar.style.display = 'none';
+        }
+
+        // Render pending + in-progress tasks
+        const allTasks = [...pendTasks];
+        // Also add in-progress and blocked tasks
+        try {
+            const ipR = await fetch('/api/tasks?status=in_progress');
+            const ipD = await ipR.json();
+            (ipD.tasks || []).forEach(t => { t._status = 'in_progress'; allTasks.push(t); });
+        } catch(e) {}
+        try {
+            const bR = await fetch('/api/tasks?status=blocked');
+            const bD = await bR.json();
+            (bD.tasks || []).forEach(t => { t._status = 'blocked'; allTasks.push(t); });
+        } catch(e) {}
+
+        const deptColors = { newsroom: '#ff453a', tech: '#007aff', sales: '#ff9f0a', leadership: '#5856d6' };
+        const deptEmoji = { newsroom: '📰', tech: '💻', sales: '🤝', leadership: '👑' };
+        const prioColor = { urgent: '#ff453a', high: '#ff9f0a', medium: '#007aff', low: '#aeaeb2' };
+
+        const list = document.getElementById('gm-tasks-list');
+        if (allTasks.length === 0) {
+            list.innerHTML = '<div style="padding:40px;text-align:center;color:var(--text-3);font-size:13px">No pending tasks. Chat with Marc to get started! 🚀</div>';
+        } else {
+            list.innerHTML = allTasks.map(t => {
+                const dept = t.department || 'newsroom';
+                const status = t._status || t.status || 'todo';
+                const isPending = status === 'todo' || status === 'pending';
+                const isRunning = status === 'in_progress';
+                const isBlocked = status === 'blocked';
+
+                let statusBadge = '';
+                if (isPending) statusBadge = '<span style="font-size:10px;padding:2px 8px;border-radius:6px;background:rgba(255,159,10,0.12);color:#cc7f08;font-weight:600">⏳ Pending</span>';
+                else if (isRunning) statusBadge = '<span style="font-size:10px;padding:2px 8px;border-radius:6px;background:rgba(0,122,255,0.12);color:var(--accent);font-weight:600">⚡ Running</span>';
+                else if (isBlocked) statusBadge = '<span style="font-size:10px;padding:2px 8px;border-radius:6px;background:rgba(255,69,58,0.12);color:var(--danger);font-weight:600">🚫 Blocked</span>';
+
+                return `<div style="padding:12px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px;${isBlocked ? 'opacity:0.6' : ''}">
+                    <div style="width:4px;align-self:stretch;border-radius:2px;background:${prioColor[t.priority] || '#aeaeb2'};flex-shrink:0"></div>
+                    <div style="flex:1;min-width:0">
+                        <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px">
+                            <span style="font-size:13px;font-weight:600;color:var(--text-1)">${_esc(t.title)}</span>
+                            ${statusBadge}
+                        </div>
+                        <div style="display:flex;align-items:center;gap:8px;font-size:11px;color:var(--text-2)">
+                            <span style="font-size:10px;padding:1px 6px;border-radius:4px;background:${deptColors[dept]}15;color:${deptColors[dept]};font-weight:600">${deptEmoji[dept] || ''} ${dept}</span>
+                            <span>→ ${_esc(t.assignee_name)}</span>
+                            <span style="color:var(--text-3)">·</span>
+                            <span style="color:${prioColor[t.priority] || 'var(--text-3)'}">${t.priority}</span>
+                        </div>
+                        ${t.description ? '<div style="font-size:11px;color:var(--text-3);margin-top:4px;line-height:1.4;overflow:hidden;max-height:36px">' + _esc(t.description).substring(0, 150) + '</div>' : ''}
+                    </div>
+                    <div style="display:flex;gap:6px;flex-shrink:0">
+                        ${isPending ? `<button onclick="_approveSingleGM(${t.id},this)" style="padding:5px 14px;font-size:11px;font-weight:700;border:none;border-radius:6px;background:var(--success);color:#fff;cursor:pointer">✓ Approve</button>
+                        <button onclick="_rejectSingleGM(${t.id},this)" style="padding:5px 10px;font-size:11px;font-weight:600;border:1px solid var(--border);border-radius:6px;background:none;color:var(--text-2);cursor:pointer">✕</button>` : ''}
+                    </div>
+                </div>`;
+            }).join('');
+        }
+
+        // Recently completed — clickable to view results
+        const doneList = document.getElementById('gm-tasks-done');
+        // Fetch ALL done tasks (not just 5)
+        let allDoneTasks = [];
+        try {
+            const doneR = await fetch('/api/tasks?status=done');
+            const doneD = await doneR.json();
+            allDoneTasks = (doneD.tasks || []).slice(0, 15);
+        } catch(e) { allDoneTasks = prog.recent_completed || []; }
+
+        if (allDoneTasks.length > 0) {
+            doneList.innerHTML = allDoneTasks.map(t => {
+                const dept = t.department || 'newsroom';
+                return `<div style="cursor:pointer;padding:10px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;transition:background 0.15s" onmouseover="this.style.background='var(--surface-2)'" onmouseout="this.style.background=''" onclick="viewTaskResult(${t.id})">
+                    <span style="color:var(--success);font-size:14px">✅</span>
+                    <div style="flex:1;min-width:0">
+                        <div style="font-size:12px;font-weight:600;color:var(--text-1)">${_esc(t.title)}</div>
+                        <div style="font-size:10px;color:var(--text-3);margin-top:1px">${_esc(t.assignee_name)} · ${t.completed_at ? new Date(t.completed_at).toLocaleString() : ''}</div>
+                    </div>
+                    <span style="font-size:9px;padding:1px 6px;border-radius:4px;background:${deptColors[dept]}15;color:${deptColors[dept]};font-weight:600">${dept}</span>
+                    <span style="font-size:11px;color:var(--accent);font-weight:600">View →</span>
+                </div>`;
+            }).join('');
+        } else {
+            doneList.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-3);font-size:12px">No completed tasks yet</div>';
+        }
+
+        // Auto-poll if tasks are running
+        if (prog.in_progress > 0 && !_gmTasksPoll) {
+            _gmTasksPoll = setInterval(() => {
+                if (document.getElementById('tab-tasks')?.classList.contains('active')) {
+                    loadGMTasks();
+                } else {
+                    clearInterval(_gmTasksPoll); _gmTasksPoll = null;
+                }
+            }, 4000);
+        } else if (prog.in_progress === 0 && _gmTasksPoll) {
+            clearInterval(_gmTasksPoll); _gmTasksPoll = null;
+        }
+    } catch(e) { console.error('loadGMTasks:', e); }
+}
+
+function _esc(s) { const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
+
+async function _approveSingleGM(id, btn) {
+    btn.disabled = true; btn.textContent = '⏳';
+    try {
+        await fetch(`/api/tasks/${id}/approve`, { method: 'POST' });
+        btn.textContent = '⚡ Running';
+        btn.style.background = 'var(--accent)';
+        setTimeout(loadGMTasks, 1500);
+    } catch(e) { btn.textContent = '✕ Error'; }
+}
+
+async function _rejectSingleGM(id, btn) {
+    btn.disabled = true;
+    try {
+        await fetch(`/api/tasks/${id}/reject`, { method: 'POST' });
+        setTimeout(loadGMTasks, 500);
+    } catch(e) { btn.textContent = '✕'; }
+}
+
+async function viewTaskResult(taskId) {
+    // Show a modal with the task deliverable
+    let overlay = document.getElementById('task-result-overlay');
+    if (!overlay) {
+        overlay = document.createElement('div');
+        overlay.id = 'task-result-overlay';
+        overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(4px)';
+        overlay.onclick = e => { if (e.target === overlay) overlay.style.display = 'none'; };
+        document.body.appendChild(overlay);
+    }
+    overlay.style.display = 'flex';
+    overlay.innerHTML = '<div style="background:var(--surface);border-radius:16px;max-width:800px;width:100%;max-height:85vh;overflow:hidden;box-shadow:var(--shadow-xl);display:flex;flex-direction:column"><div style="padding:20px 24px;text-align:center;color:var(--text-3);font-size:13px">Loading result...</div></div>';
+
+    try {
+        const r = await fetch(`/api/task-result/${taskId}`);
+        const data = await r.json();
+        const t = data.task;
+        const deptColors = { newsroom: '#ff453a', tech: '#007aff', sales: '#ff9f0a', leadership: '#5856d6' };
+
+        let content = '';
+
+        // Main deliverable
+        if (data.deliverable) {
+            content += `<div style="padding:16px 24px;border-bottom:1px solid var(--border)">
+                <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:var(--success);margin-bottom:8px">${_esc(data.deliverable_subject || 'Deliverable')}</div>
+                <div style="font-size:13px;line-height:1.7;color:var(--text-1);white-space:pre-wrap;font-family:-apple-system,system-ui,sans-serif">${_esc(data.deliverable)}</div>
+            </div>`;
+        } else {
+            content += `<div style="padding:16px 24px;text-align:center;color:var(--text-3);font-size:12px">No deliverable found — check the inbox thread</div>`;
+        }
+
+        // Subtask results
+        if (data.subtasks && data.subtasks.length > 0) {
+            content += `<div style="padding:12px 24px;border-top:1px solid var(--border);background:var(--surface-2)">
+                <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:var(--text-3);margin-bottom:8px">Sub-task Results (${data.subtasks.length})</div>`;
+            for (const st of data.subtasks) {
+                const stColor = st.status === 'done' ? 'var(--success)' : st.status === 'blocked' ? 'var(--danger)' : 'var(--accent)';
+                content += `<div style="margin-bottom:10px;background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden">
+                    <div style="padding:10px 14px;display:flex;align-items:center;gap:8px;cursor:pointer" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'block':'none'">
+                        <span style="color:${stColor};font-size:12px">${st.status === 'done' ? '✅' : st.status === 'blocked' ? '🚫' : '⚡'}</span>
+                        <div style="flex:1;min-width:0">
+                            <div style="font-size:12px;font-weight:600;color:var(--text-1)">${_esc(st.title)}</div>
+                            <div style="font-size:10px;color:var(--text-3)">${_esc(st.assignee_name)}</div>
+                        </div>
+                        <span style="font-size:10px;color:var(--accent)">expand ▾</span>
+                    </div>
+                    <div style="display:none;padding:10px 14px;border-top:1px solid var(--border);font-size:12px;line-height:1.6;color:var(--text-2);white-space:pre-wrap;max-height:300px;overflow-y:auto">${st.deliverable ? _esc(st.deliverable) : '<em style="color:var(--text-3)">No deliverable saved</em>'}</div>
+                </div>`;
+            }
+            content += `</div>`;
+        }
+
+        overlay.innerHTML = `<div style="background:var(--surface);border-radius:16px;max-width:800px;width:100%;max-height:85vh;overflow:hidden;box-shadow:var(--shadow-xl);display:flex;flex-direction:column">
+            <div style="padding:18px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px;flex-shrink:0">
+                <div style="width:4px;align-self:stretch;border-radius:2px;background:${deptColors[t.department] || '#aeaeb2'}"></div>
+                <div style="flex:1">
+                    <div style="font-size:15px;font-weight:700;color:var(--text-1)">${_esc(t.title)}</div>
+                    <div style="font-size:12px;color:var(--text-2);margin-top:2px">${_esc(t.assignee_name)} · ${t.department} · ${t.status}</div>
+                </div>
+                <a href="${data.inbox_link}" style="font-size:11px;color:var(--accent);text-decoration:none;font-weight:600;padding:5px 12px;border:1px solid var(--accent);border-radius:6px">📥 Open in Inbox</a>
+                <button onclick="document.getElementById('task-result-overlay').style.display='none'" style="border:none;background:none;font-size:18px;color:var(--text-3);cursor:pointer;padding:4px">✕</button>
+            </div>
+            <div style="flex:1;overflow-y:auto">
+                ${content}
+            </div>
+        </div>`;
+    } catch(e) {
+        overlay.innerHTML = `<div style="background:var(--surface);border-radius:16px;padding:40px;text-align:center;color:var(--danger)">Error loading result: ${e.message}<br><button onclick="document.getElementById('task-result-overlay').style.display='none'" style="margin-top:12px;padding:6px 16px;border:1px solid var(--border);border-radius:6px;background:none;cursor:pointer">Close</button></div>`;
+    }
+}
+
+async function _approveAllGM(btn) {
+    btn.disabled = true; btn.textContent = '⏳ Approving all...';
+    try {
+        const r = await fetch('/api/tasks/approve_all', { method: 'POST' });
+        const data = await r.json();
+        const total = data.approved || 0;
+        btn.textContent = `⚡ ${total} tasks executing...`;
+        btn.style.background = 'linear-gradient(90deg, var(--accent), #5ac8fa)';
+
+        // Start polling progress
+        let count = 0;
+        const poll = setInterval(async () => {
+            try {
+                const pr = await fetch('/api/tasks/progress');
+                const pg = await pr.json();
+                btn.textContent = `⚡ ${pg.in_progress || 0} running · ${pg.done || 0} done · ${pg.blocked || 0} blocked`;
+                loadGMTasks();
+                if ((pg.in_progress || 0) === 0 || count > 120) {
+                    clearInterval(poll);
+                    btn.textContent = `✅ All done — ${pg.done || 0} completed`;
+                    btn.style.background = 'var(--success)';
+                    setTimeout(loadGMTasks, 1000);
+                }
+                count++;
+            } catch(e) {}
+        }, 3000);
+    } catch(e) {
+        btn.textContent = '✓ Approve All'; btn.disabled = false;
+    }
 }
 
 function openInPipelineTab(runId) {
@@ -2022,9 +2489,9 @@ async function renderOrgChart() {
     window._teamByKey = byKey;
 
     // Re-render current room if it's already active
-    if (_currentRoom === 'gm')    renderGMRoom();
-    if (_currentRoom === 'tech')  renderTechRoom();
-    if (_currentRoom === 'sales') renderSalesRoom();
+    if (_currentRoom === 'newsroom') renderNewsroom();
+    if (_currentRoom === 'tech')     renderTechRoom();
+    if (_currentRoom === 'sales')    renderSalesRoom();
 
     function node(key) {
         const m = byKey[key];
@@ -2214,7 +2681,7 @@ async function loadWorkflows() {
                 return `<div class="wf-step-dot ${cls}" title="${s.label}">${s.icon}</div>`;
             }).join('');
             return `
-            <tr onclick="viewWorkflow('${esc(r.id || r.run_id)}')">
+            <tr onclick="viewWorkflowInline('${esc(r.id || r.run_id)}')">
                 <td class="wf-id">${esc(r.id || r.run_id || '-')}</td>
                 <td>
                     <span class="status-badge ${r.status || 'pending'}"><span class="status-dot ${r.status || 'pending'}"></span>${capitalize(r.status || 'pending')}</span>
@@ -2237,36 +2704,61 @@ function viewWorkflow(runId) {
     selectedStep = null;
 
     // ── Immediate visual feedback ──────────────────────────────
-    // 1. Update run label
     document.getElementById('pipeline-run-label').textContent = 'Run #' + runId;
-
-    // 2. Reset stepper to pending (shows change instantly before fetch)
     renderStepper(null);
-
-    // 3. Clear artifact panel with a loading indicator
     const preview = document.getElementById('artifact-preview');
     if (preview) preview.innerHTML = '<div style="color:var(--text-3);font-size:13px;padding:24px;text-align:center">Loading run #' + runId + '…</div>';
 
-    // 4. Highlight selected history row, deselect others
+    // Highlight selected history row
+    document.querySelectorAll('#wf-history-body tr').forEach(tr => { tr.style.background = ''; tr.style.fontWeight = ''; });
     document.querySelectorAll('#wf-history-body tr').forEach(tr => {
-        tr.style.background = '';
-        tr.style.fontWeight = '';
-    });
-    const rows = document.querySelectorAll('#wf-history-body tr');
-    rows.forEach(tr => {
         if (tr.getAttribute('onclick') && tr.getAttribute('onclick').includes("'" + runId + "'")) {
-            tr.style.background = 'var(--accent-dim)';
-            tr.style.fontWeight = '600';
+            tr.style.background = 'var(--accent-dim)'; tr.style.fontWeight = '600';
         }
     });
 
-    // 5. Scroll pipeline into view
     const pipelineEl = document.getElementById('stepper');
     if (pipelineEl) pipelineEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 
-    // ── Now fetch real data ────────────────────────────────────
-    pollWorkflow(runId);
-    loadArtifacts(runId);
+    // ── Fetch status + artifacts in parallel, only poll if still running ──
+    if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+    document.getElementById('btn-stop-wf').style.display = 'none';
+
+    Promise.all([
+        fetch(`/api/team/workflow/${runId}`).then(r => r.ok ? r.json() : null),
+        fetch(`/api/team/workflow/${runId}/artifacts`).then(r => r.ok ? r.json() : null)
+    ]).then(([statusData, artifactData]) => {
+        // Process status
+        if (statusData) {
+            const statuses = {};
+            const stepOrder = STEPS.map(s => s.key);
+            const currentIdx = stepOrder.indexOf(statusData.current_step);
+            stepOrder.forEach((key, i) => {
+                if (statusData.status === 'completed') statuses[key] = 'completed';
+                else if (statusData.status === 'failed') { statuses[key] = i < currentIdx ? 'completed' : i === currentIdx ? 'failed' : 'pending'; }
+                else { statuses[key] = i < currentIdx ? 'completed' : i === currentIdx ? 'running' : 'pending'; }
+            });
+            currentStepLogs = statusData.step_logs || [];
+            currentWfStatus = statusData;
+            renderStepper(statuses);
+
+            // Only poll if workflow is still running
+            if (statusData.status === 'running' || statusData.status === 'pending') {
+                document.getElementById('btn-stop-wf').style.display = 'inline-flex';
+                pollTimer = setInterval(() => fetchWorkflowStatus(runId), 3000);
+            }
+        }
+        // Process artifacts
+        if (artifactData) {
+            currentArtifacts = {};
+            if (artifactData.trend_report) currentArtifacts.signal = artifactData.trend_report;
+            if (artifactData.content_brief) currentArtifacts.angle = artifactData.content_brief;
+            if (artifactData.master_content) currentArtifacts.co_creation = artifactData.master_content;
+            if (artifactData.master_content) currentArtifacts.fact_check = artifactData.master_content;
+            if (artifactData.atomized) currentArtifacts.atomization = { items: artifactData.atomized };
+        }
+        if (selectedStep) showArtifact(selectedStep);
+    }).catch(() => {});
 }
 
 /* ─────────────────────────────────────────────
@@ -2811,42 +3303,25 @@ function formatTime(ts) {
 /* ── HISTORY INLINE PIPELINE ── */
 let _expandedRunId = null;
 
-function viewWorkflow(runId) {
-    currentRunId = runId;
-    selectedStep = null;
-
-    // If we're on the Pipeline tab, update it there too
-    document.getElementById('pipeline-run-label').textContent = 'Run #' + runId;
-    renderStepper(null);
-    const preview = document.getElementById('artifact-preview');
-    if (preview) preview.innerHTML = '<div style="color:var(--text-3);font-size:13px;padding:24px;text-align:center">Loading run #' + runId + '…</div>';
-
+/* viewWorkflow is defined above — this section only handles inline expansion in History tab */
+function viewWorkflowInline(runId) {
     // Toggle inline expansion in History tab
     const tbody = document.getElementById('wf-tbody');
     const existing = document.getElementById('wf-detail-' + runId);
 
-    // Collapse previously expanded row
     if (_expandedRunId && _expandedRunId !== runId) {
         const prev = document.getElementById('wf-detail-' + _expandedRunId);
         if (prev) prev.remove();
         document.querySelectorAll('#wf-tbody tr.wf-selected').forEach(r => r.classList.remove('wf-selected'));
     }
 
-    if (existing) {
-        // Already open — collapse it
-        existing.remove();
-        _expandedRunId = null;
-        return;
-    }
-
+    if (existing) { existing.remove(); _expandedRunId = null; return; }
     _expandedRunId = runId;
 
-    // Highlight the clicked row
     document.querySelectorAll('#wf-tbody tr').forEach(r => r.classList.remove('wf-selected'));
     const clickedRow = [...tbody.querySelectorAll('tr')].find(r => (r.getAttribute('onclick') || '').includes("'" + runId + "'"));
     if (clickedRow) clickedRow.classList.add('wf-selected');
 
-    // Insert detail row immediately after clicked row
     const detailRow = document.createElement('tr');
     detailRow.id = 'wf-detail-' + runId;
     detailRow.className = 'wf-detail-row';
@@ -2869,34 +3344,33 @@ function viewWorkflow(runId) {
         </div>
     </div></td>`;
 
-    if (clickedRow) {
-        clickedRow.after(detailRow);
+    if (clickedRow) clickedRow.after(detailRow);
+    else tbody.appendChild(detailRow);
+
+    // Use cached data if available, otherwise fetch
+    if (currentWfStatus && String(currentWfStatus.id) === String(runId)) {
+        _applyInlineStepStatus(runId, currentWfStatus.step_logs || []);
     } else {
-        tbody.appendChild(detailRow);
-    }
-
-    // Fetch step statuses from step_logs
-    fetch(`/api/team/workflow/${runId}`)
-        .then(r => r.json())
-        .then(data => {
-            const logs = data.step_logs || [];
-            // Compute per-step status: completed if all done, failed if any failed
-            const stepMap = {};
-            logs.forEach(l => {
-                const k = l.step;
-                if (!stepMap[k]) stepMap[k] = 'completed';
-                if (l.status === 'failed') stepMap[k] = 'failed';
-                else if (l.status === 'running' && stepMap[k] !== 'failed') stepMap[k] = 'running';
-            });
-            STEPS.forEach(s => {
-                const el = document.getElementById(`wf-is-${runId}-${s.key}`);
-                if (!el) return;
-                const st = stepMap[s.key] || 'pending';
-                el.className = 'wf-inline-step ' + st;
-            });
+        fetch(`/api/team/workflow/${runId}`).then(r => r.json()).then(data => {
+            _applyInlineStepStatus(runId, data.step_logs || []);
         }).catch(() => {});
-
+    }
     detailRow.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function _applyInlineStepStatus(runId, logs) {
+    const stepMap = {};
+    logs.forEach(l => {
+        const k = l.step;
+        if (!stepMap[k]) stepMap[k] = 'completed';
+        if (l.status === 'failed') stepMap[k] = 'failed';
+        else if (l.status === 'running' && stepMap[k] !== 'failed') stepMap[k] = 'running';
+    });
+    STEPS.forEach(s => {
+        const el = document.getElementById(`wf-is-${runId}-${s.key}`);
+        if (!el) return;
+        el.className = 'wf-inline-step ' + (stepMap[s.key] || 'pending');
+    });
 }
 
 // Map inline step key → artifact field name used by _formatArtifact
@@ -2908,14 +3382,21 @@ const _STEP_ARTIFACT_MAP = {
     atomization: 'atomized',
 };
 
+// Cache artifacts per run to avoid re-fetching
+const _inlineArtifactCache = {};
+
 async function selectInlineStep(runId, stepKey, el) {
     document.querySelectorAll(`#wf-inline-stepper-${runId} .wf-inline-step`).forEach(s => s.classList.remove('selected'));
     el.classList.add('selected');
     const art = document.getElementById(`wf-inline-artifact-${runId}`);
     art.innerHTML = '<div style="color:var(--text-3);font-size:12px;text-align:center;padding:20px">Loading…</div>';
     try {
-        const r = await fetch(`/api/team/workflow/${runId}/artifacts`);
-        const data = await r.json();
+        let data = _inlineArtifactCache[runId];
+        if (!data) {
+            const r = await fetch(`/api/team/workflow/${runId}/artifacts`);
+            data = await r.json();
+            _inlineArtifactCache[runId] = data;
+        }
 
         const artifactKey = _STEP_ARTIFACT_MAP[stepKey] || stepKey;
         const artifactData = data[artifactKey];

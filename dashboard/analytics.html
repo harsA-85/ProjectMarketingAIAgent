@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Analytics — Axel</title>
+    <style>
+        :root {
+            --bg: #f5f5f7; --surface: #ffffff; --surface-2: #f2f2f7; --sidebar-bg: #fafafa;
+            --border: rgba(0,0,0,0.07); --border-strong: rgba(0,0,0,0.12);
+            --text-1: #1c1c1e; --text-2: #6e6e73; --text-3: #aeaeb2;
+            --accent: #007aff; --accent-dim: rgba(0,122,255,0.1);
+            --success: #30d158; --warning: #ff9f0a; --danger: #ff453a;
+            --r: 12px; --r-sm: 8px; --r-lg: 16px;
+            --shadow-sm: 0 1px 3px rgba(0,0,0,0.05), 0 2px 8px rgba(0,0,0,0.04);
+            --shadow: 0 2px 12px rgba(0,0,0,0.07), 0 4px 20px rgba(0,0,0,0.04);
+        }
+        * { margin:0; padding:0; box-sizing:border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, sans-serif; background: var(--bg); color: var(--text-1); }
+        .app { display: flex; height: 100vh; overflow: hidden; }
+
+        .sidebar { width: 220px; min-width: 220px; background: var(--sidebar-bg); border-right: 1px solid var(--border); display: flex; flex-direction: column; padding-top: 12px; }
+        .sidebar-header { padding: 8px 16px 16px; }
+        .brand { display: flex; align-items: center; gap: 10px; }
+        .brand-icon { width: 32px; height: 32px; border-radius: 8px; background: linear-gradient(135deg, #007aff, #5856d6); display: flex; align-items: center; justify-content: center; font-size: 16px; color: white; }
+        .brand-name { font-size: 15px; font-weight: 700; color: var(--text-1); }
+        .brand-sub { font-size: 10px; color: var(--text-3); }
+        .sidebar-nav { padding: 10px 8px; flex: 1; }
+        .nav-section { font-size: 10px; font-weight: 700; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.5px; padding: 14px 12px 6px; }
+        .nav-item { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 8px; font-size: 13px; color: var(--text-2); text-decoration: none; transition: all 0.15s; cursor: pointer; }
+        .nav-item .ni { font-size: 14px; width: 18px; text-align: center; }
+        .nav-item:hover { background: rgba(0,0,0,0.05); color: var(--text-1); }
+        .nav-item.active { background: var(--accent-dim); color: var(--accent); font-weight: 600; }
+
+        .main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+        .topbar { height: 52px; display: flex; align-items: center; padding: 0 24px; border-bottom: 1px solid var(--border); background: rgba(255,255,255,0.8); backdrop-filter: blur(20px); gap: 16px; }
+        .topbar-center { flex: 1; text-align: center; font-size: 13px; font-weight: 600; color: var(--text-1); }
+        .traffic-lights { display: flex; gap: 8px; }
+        .tl { width: 12px; height: 12px; border-radius: 50%; }
+        .tl.red { background: #ff5f57; } .tl.yellow { background: #febc2e; } .tl.green { background: #28c840; }
+
+        .content { flex: 1; overflow-y: auto; padding: 28px; }
+
+        /* HERO STATS */
+        .hero-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 28px; }
+        .hero-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); padding: 24px; box-shadow: var(--shadow-sm); position: relative; overflow: hidden; }
+        .hero-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; }
+        .hero-card.followers::before { background: linear-gradient(90deg, #007aff, #5ac8fa); }
+        .hero-card.impressions::before { background: linear-gradient(90deg, #ff9f0a, #ffd60a); }
+        .hero-card.engagement::before { background: linear-gradient(90deg, #30d158, #34c759); }
+        .hero-num { font-size: 36px; font-weight: 800; color: var(--text-1); letter-spacing: -1px; }
+        .hero-label { font-size: 12px; color: var(--text-3); margin-top: 4px; text-transform: uppercase; letter-spacing: 0.5px; }
+        .hero-sub { font-size: 11px; color: var(--text-2); margin-top: 8px; }
+
+        /* POSTS OVERVIEW */
+        .posts-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 28px; }
+        .posts-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r); padding: 20px; text-align: center; box-shadow: var(--shadow-sm); }
+        .posts-num { font-size: 28px; font-weight: 700; }
+        .posts-label { font-size: 11px; color: var(--text-3); margin-top: 4px; }
+
+        /* PLATFORM BREAKDOWN */
+        .section-title { font-size: 14px; font-weight: 700; color: var(--text-1); margin-bottom: 14px; }
+        .platform-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 14px; margin-bottom: 28px; }
+        .platform-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r); padding: 18px; box-shadow: var(--shadow-sm); }
+        .plat-header { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+        .plat-icon { font-size: 20px; }
+        .plat-name { font-size: 13px; font-weight: 600; color: var(--text-1); text-transform: capitalize; }
+        .plat-stat { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid var(--border); font-size: 12px; }
+        .plat-stat:last-child { border-bottom: none; }
+        .plat-stat-label { color: var(--text-3); }
+        .plat-stat-val { font-weight: 600; color: var(--text-1); }
+
+        /* AGENT LEADERBOARD */
+        .leaderboard-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); box-shadow: var(--shadow-sm); overflow: hidden; }
+        .lb-table { width: 100%; border-collapse: collapse; }
+        .lb-table thead th { font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-3); font-weight: 600; padding: 12px 14px; text-align: left; border-bottom: 1px solid var(--border); background: var(--surface-2); }
+        .lb-table tbody td { padding: 12px 14px; font-size: 12px; color: var(--text-2); border-bottom: 1px solid var(--border); }
+        .lb-table tbody tr:last-child td { border-bottom: none; }
+        .lb-rank { font-weight: 700; color: var(--text-1); font-size: 14px; }
+        .lb-name { font-weight: 600; color: var(--text-1); }
+
+        .empty-state { text-align: center; padding: 40px 20px; color: var(--text-3); font-size: 13px; }
+
+        /* Mini bar chart */
+        .mini-bar-row { display: flex; align-items: flex-end; gap: 3px; height: 40px; margin-top: 10px; }
+        .mini-bar { flex: 1; background: var(--accent-dim); border-radius: 3px 3px 0 0; min-height: 3px; transition: height 0.3s; }
+        .mini-bar.active { background: var(--accent); }
+    </style>
+</head>
+<body>
+<div class="app">
+    <nav class="sidebar">
+        <div class="sidebar-header">
+            <div class="brand">
+                <div class="brand-icon">⚡</div>
+                <div class="brand-text">
+                    <div class="brand-name">Axel</div>
+                    <div class="brand-sub">Unicorn in Progress</div>
+                </div>
+            </div>
+        </div>
+        <div class="sidebar-nav">
+            <div class="nav-section">Workspace</div>
+            <a class="nav-item" href="/"><span class="ni">⬡</span> All Agents</a>
+            <a class="nav-item" href="/inbox?tasks=1"><span class="ni">📥</span> Inbox & Tasks</a>
+            <a class="nav-item" href="/vision"><span class="ni">🚀</span> Vision</a>
+            <div class="nav-section">Rooms</div>
+            <a class="nav-item" href="/newsroom.html" style="padding-left:28px;font-size:12px">👑 GM Room</a>
+            <a class="nav-item" href="/newsroom.html?room=newsroom" style="padding-left:40px;font-size:11px">📰 Newsroom</a>
+            <a class="nav-item" href="/newsroom.html?room=tech" style="padding-left:28px;font-size:12px">💻 Tech Room</a>
+            <a class="nav-item" href="/newsroom.html?room=sales" style="padding-left:28px;font-size:12px">🤝 Sales Room</a>
+            <div class="nav-section">Insights</div>
+            <a class="nav-item" href="/content-hub"><span class="ni">📝</span> Content Hub</a>
+            <a class="nav-item active" href="/analytics"><span class="ni">📊</span> Analytics</a>
+            <div class="nav-section">System</div>
+            <a class="nav-item" href="#"><span class="ni">⚙️</span> Settings</a>
+        </div>
+    </nav>
+
+    <div class="main">
+        <header class="topbar">
+            <div class="traffic-lights">
+                <span class="tl red"></span><span class="tl yellow"></span><span class="tl green"></span>
+            </div>
+            <div class="topbar-center">Analytics Overview</div>
+            <div style="width:60px"></div>
+        </header>
+
+        <div class="content">
+            <!-- Hero stats -->
+            <div class="hero-row">
+                <div class="hero-card followers">
+                    <div class="hero-num" id="h-followers">-</div>
+                    <div class="hero-label">Total Followers</div>
+                    <div class="hero-sub" id="h-followers-sub">Across all platforms</div>
+                </div>
+                <div class="hero-card impressions">
+                    <div class="hero-num" id="h-impressions">-</div>
+                    <div class="hero-label">Total Impressions</div>
+                    <div class="hero-sub">Views across all content</div>
+                </div>
+                <div class="hero-card engagement">
+                    <div class="hero-num" id="h-engagement">-</div>
+                    <div class="hero-label">Avg Engagement Rate</div>
+                    <div class="hero-sub">Likes, comments, shares</div>
+                </div>
+            </div>
+
+            <!-- Posts published breakdown -->
+            <div class="posts-row">
+                <div class="posts-card">
+                    <div class="posts-num" id="p-today" style="color:var(--accent)">-</div>
+                    <div class="posts-label">Published Today</div>
+                </div>
+                <div class="posts-card">
+                    <div class="posts-num" id="p-week" style="color:var(--warning)">-</div>
+                    <div class="posts-label">Published This Week</div>
+                </div>
+                <div class="posts-card">
+                    <div class="posts-num" id="p-total" style="color:var(--success)">-</div>
+                    <div class="posts-label">Published All Time</div>
+                </div>
+            </div>
+
+            <!-- Platform breakdown -->
+            <div class="section-title">Performance by Platform</div>
+            <div class="platform-grid" id="platform-grid">
+                <div class="empty-state">Loading platforms...</div>
+            </div>
+
+            <!-- Agent leaderboard -->
+            <div class="section-title">Agent Leaderboard</div>
+            <div class="leaderboard-wrap">
+                <table class="lb-table">
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Agent</th>
+                            <th>Followers</th>
+                            <th>Posts</th>
+                            <th>Engagement</th>
+                            <th>Platforms</th>
+                        </tr>
+                    </thead>
+                    <tbody id="lb-tbody">
+                        <tr><td colspan="6" class="empty-state">Loading...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+const PLAT_ICONS = { instagram: '📷', twitter: '𝕏', tiktok: '🎵', facebook: '📘', linkedin: '💼', youtube: '▶️' };
+
+function fmtNum(n) {
+    if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M';
+    if (n >= 1000) return (n / 1000).toFixed(1) + 'K';
+    return String(n);
+}
+
+async function loadAnalytics() {
+    try {
+        const res = await fetch('/api/analytics/overview');
+        const data = await res.json();
+        const t = data.totals || {};
+
+        document.getElementById('h-followers').textContent = fmtNum(t.followers || 0);
+        document.getElementById('h-impressions').textContent = fmtNum(t.impressions || 0);
+        document.getElementById('h-engagement').textContent = (t.avg_engagement || 0) + '%';
+
+        document.getElementById('p-today').textContent = t.posts_today || 0;
+        document.getElementById('p-week').textContent = t.posts_this_week || 0;
+        document.getElementById('p-total').textContent = t.posts_total || 0;
+
+        // Platform breakdown
+        const bp = data.by_platform || {};
+        const grid = document.getElementById('platform-grid');
+        const platforms = Object.keys(bp);
+        if (!platforms.length) {
+            grid.innerHTML = '<div class="empty-state">No platform data yet. Connect accounts and publish content to see analytics.</div>';
+        } else {
+            grid.innerHTML = platforms.map(p => {
+                const d = bp[p];
+                return `<div class="platform-card">
+                    <div class="plat-header">
+                        <span class="plat-icon">${PLAT_ICONS[p] || '🌐'}</span>
+                        <span class="plat-name">${p}</span>
+                    </div>
+                    <div class="plat-stat"><span class="plat-stat-label">Followers</span><span class="plat-stat-val">${fmtNum(d.followers || 0)}</span></div>
+                    <div class="plat-stat"><span class="plat-stat-label">Impressions</span><span class="plat-stat-val">${fmtNum(d.impressions || 0)}</span></div>
+                    <div class="plat-stat"><span class="plat-stat-label">Posts</span><span class="plat-stat-val">${d.posts || 0}</span></div>
+                </div>`;
+            }).join('');
+        }
+    } catch(e) {
+        console.error('Analytics load failed:', e);
+    }
+}
+
+async function loadLeaderboard() {
+    try {
+        const res = await fetch('/api/agents');
+        const data = await res.json();
+        const agents = data.agents || [];
+
+        // Fetch analytics for each agent that has accounts
+        const rows = [];
+        for (const a of agents) {
+            try {
+                const r = await fetch(`/api/analytics/agent/${a.id}`);
+                if (!r.ok) continue;
+                const report = await r.json();
+                rows.push({
+                    name: a.name,
+                    followers: report.total_followers || report.followers || 0,
+                    posts: report.posts_published || report.total_posts || 0,
+                    engagement: report.avg_engagement || report.engagement_rate || 0,
+                    platforms: (a.connected_platforms || []).length,
+                });
+            } catch(e) {
+                rows.push({ name: a.name, followers: 0, posts: 0, engagement: 0, platforms: (a.connected_platforms || []).length });
+            }
+        }
+
+        // Sort by followers desc
+        rows.sort((a, b) => b.followers - a.followers);
+
+        const tbody = document.getElementById('lb-tbody');
+        if (!rows.length) {
+            tbody.innerHTML = '<tr><td colspan="6" class="empty-state">No agents yet.</td></tr>';
+            return;
+        }
+        tbody.innerHTML = rows.slice(0, 20).map((r, i) => `
+            <tr>
+                <td class="lb-rank">${i + 1}</td>
+                <td class="lb-name">${r.name}</td>
+                <td>${fmtNum(r.followers)}</td>
+                <td>${r.posts}</td>
+                <td>${r.engagement}%</td>
+                <td>${r.platforms} connected</td>
+            </tr>
+        `).join('');
+    } catch(e) {
+        document.getElementById('lb-tbody').innerHTML = '<tr><td colspan="6" class="empty-state">Could not load leaderboard.</td></tr>';
+    }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    loadAnalytics();
+    loadLeaderboard();
+});
+</script>
+</body>
+</html>

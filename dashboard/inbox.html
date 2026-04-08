@@ -269,12 +269,13 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe 
             <a class="nav-item active" href="/inbox?tasks=1"><span class="ni">📥</span> Inbox & Tasks</a>
             <a class="nav-item" href="/vision"><span class="ni">🚀</span> Vision</a>
             <div class="nav-section">Rooms</div>
-            <a class="nav-item" href="/newsroom.html"            style="padding-left:28px;font-size:12px">📰 Newsroom</a>
-            <a class="nav-item" href="/newsroom.html?room=gm"    style="padding-left:28px;font-size:12px">👑 GM Room</a>
-            <a class="nav-item" href="/newsroom.html?room=tech"  style="padding-left:28px;font-size:12px">💻 Tech Room</a>
-            <a class="nav-item" href="/newsroom.html?room=sales" style="padding-left:28px;font-size:12px">🤝 Sales Room</a>
-            <a class="nav-item" href="#"><span class="ni">📊</span> Analytics</a>
-            <a class="nav-item" href="#"><span class="ni">📅</span> Schedule</a>
+            <a class="nav-item" href="/newsroom.html"                    style="padding-left:28px;font-size:12px">👑 GM Room</a>
+            <a class="nav-item" href="/newsroom.html?room=newsroom"  style="padding-left:40px;font-size:11px">📰 Newsroom</a>
+            <a class="nav-item" href="/newsroom.html?room=tech"      style="padding-left:28px;font-size:12px">💻 Tech Room</a>
+            <a class="nav-item" href="/newsroom.html?room=sales"     style="padding-left:28px;font-size:12px">🤝 Sales Room</a>
+            <div class="nav-section">Insights</div>
+            <a class="nav-item" href="/content-hub"><span class="ni">📝</span> Content Hub</a>
+            <a class="nav-item" href="/analytics"><span class="ni">📊</span> Analytics</a>
             <div class="nav-section">System</div>
             <a class="nav-item" href="#"><span class="ni">⚙️</span> Settings</a>
         </div>
@@ -1177,10 +1178,31 @@ async function _approveAllInbox(btn) {
         const r = await fetch('/api/tasks/approve_all', { method: 'POST' });
         const data = await r.json();
         if (data.error) throw new Error(data.error);
-        btn.textContent = `✅ Approved ${data.approved || 'all'}`;
-        btn.style.background = 'var(--success)';
-        toast(`${data.approved || 'All'} tasks approved — team is working!`, 'success');
-        setTimeout(() => { showTaskReview(); loadPendingApprovals(); loadTasks(); }, 1500);
+        const total = data.approved || 0;
+        btn.textContent = `⚡ ${total} tasks executing…`;
+        btn.style.background = 'linear-gradient(90deg,var(--accent),#5ac8fa)';
+        btn.style.color = 'white';
+        toast(`${total} tasks approved — team is executing in parallel!`, 'success');
+
+        // Poll progress until all tasks finish
+        let _pollCount = 0;
+        const _progressPoll = setInterval(async () => {
+            try {
+                const pr = await fetch('/api/tasks/progress');
+                const pg = await pr.json();
+                const ip = pg.in_progress || 0;
+                const done = pg.done || 0;
+                const blocked = pg.blocked || 0;
+                btn.textContent = `⚡ ${ip} running · ${done} done · ${blocked} blocked`;
+                if (ip === 0 || _pollCount > 120) {
+                    clearInterval(_progressPoll);
+                    btn.textContent = `✅ All done — ${done} completed`;
+                    btn.style.background = 'var(--success)';
+                    setTimeout(() => { showTaskReview(); loadPendingApprovals(); loadTasks(); loadInbox(); }, 1000);
+                }
+                _pollCount++;
+            } catch(e) { /* silent */ }
+        }, 3000);
     } catch(e) { btn.textContent = '✓ Approve All'; btn.disabled = false; toast('Error: ' + e.message, 'error'); }
 }
 
