@@ -39,6 +39,7 @@ def _run_migrations():
         "ALTER TABLE tasks ADD COLUMN approved_at DATETIME",
         "ALTER TABLE workflow_runs ADD COLUMN department VARCHAR(30) DEFAULT 'newsroom'",
         "ALTER TABLE tasks ADD COLUMN department VARCHAR(30) DEFAULT 'newsroom'",
+        "ALTER TABLE tasks ADD COLUMN archived BOOLEAN DEFAULT 0",
     ]
     with engine.connect() as conn:
         for sql in migrations:

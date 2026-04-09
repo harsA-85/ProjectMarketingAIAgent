@@ -1209,6 +1209,29 @@
                     <button id="gm-approve-all-btn" onclick="_approveAllGM(this)" style="padding:8px 20px;font-size:13px;font-weight:700;border:none;border-radius:8px;background:linear-gradient(135deg,#007aff,#5856d6);color:#fff;cursor:pointer;transition:all 0.2s;box-shadow:0 2px 8px rgba(0,122,255,0.3)">✓ Approve All</button>
                 </div>
 
+                <!-- Date filter & archive bar -->
+                <div id="gm-filter-bar" style="display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap">
+                    <div style="display:flex;align-items:center;gap:4px;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:3px 4px">
+                        <button onclick="_setDateRange('today')" class="gm-date-btn" data-range="today" style="padding:5px 10px;font-size:11px;font-weight:600;border:none;border-radius:6px;background:none;color:var(--text-2);cursor:pointer;transition:all 0.15s">Today</button>
+                        <button onclick="_setDateRange('week')" class="gm-date-btn" data-range="week" style="padding:5px 10px;font-size:11px;font-weight:600;border:none;border-radius:6px;background:none;color:var(--text-2);cursor:pointer;transition:all 0.15s">This Week</button>
+                        <button onclick="_setDateRange('month')" class="gm-date-btn" data-range="month" style="padding:5px 10px;font-size:11px;font-weight:600;border:none;border-radius:6px;background:none;color:var(--text-2);cursor:pointer;transition:all 0.15s">This Month</button>
+                        <button onclick="_setDateRange('all')" class="gm-date-btn active" data-range="all" style="padding:5px 10px;font-size:11px;font-weight:600;border:none;border-radius:6px;background:var(--accent);color:#fff;cursor:pointer;transition:all 0.15s">All Time</button>
+                        <button onclick="_setDateRange('custom')" class="gm-date-btn" data-range="custom" style="padding:5px 10px;font-size:11px;font-weight:600;border:none;border-radius:6px;background:none;color:var(--text-2);cursor:pointer;transition:all 0.15s">Custom</button>
+                    </div>
+                    <div id="gm-custom-dates" style="display:none;align-items:center;gap:4px">
+                        <input type="date" id="gm-date-from" style="padding:4px 8px;font-size:11px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text-1)" onchange="_applyCustomDateRange()">
+                        <span style="font-size:11px;color:var(--text-3)">to</span>
+                        <input type="date" id="gm-date-to" style="padding:4px 8px;font-size:11px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text-1)" onchange="_applyCustomDateRange()">
+                    </div>
+                    <div style="flex:1"></div>
+                    <button onclick="_archiveBatch('done')" style="padding:5px 12px;font-size:11px;font-weight:600;border:1px solid rgba(48,209,88,0.3);border-radius:6px;background:rgba(48,209,88,0.08);color:var(--success);cursor:pointer;transition:all 0.15s" title="Archive all completed tasks">📦 Archive Done</button>
+                    <button onclick="_archiveBatch('blocked')" style="padding:5px 12px;font-size:11px;font-weight:600;border:1px solid rgba(255,69,58,0.3);border-radius:6px;background:rgba(255,69,58,0.08);color:var(--danger);cursor:pointer;transition:all 0.15s" title="Archive all blocked tasks">📦 Archive Blocked</button>
+                    <label style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text-2);cursor:pointer;user-select:none">
+                        <input type="checkbox" id="gm-show-archived" onchange="_toggleShowArchived()" style="accent-color:var(--accent)">
+                        Show Archived
+                    </label>
+                </div>
+
                 <!-- Task list -->
                 <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);overflow:hidden;box-shadow:var(--shadow-sm)">
                     <div id="gm-tasks-filter-label" style="display:none;padding:8px 18px;border-bottom:1px solid var(--border);background:var(--surface-2);display:flex;align-items:center;justify-content:space-between">
@@ -2099,6 +2122,88 @@ function switchTab(name, btn) {
 ═══════════════════════════════════════════════════════════════ */
 let _gmTasksPoll = null;
 let _gmTaskFilter = 'all'; // 'all', 'pending', 'in_progress', 'done', 'blocked'
+let _gmDateFrom = null;   // ISO date string or null
+let _gmDateTo = null;     // ISO date string or null
+let _gmShowArchived = false;
+let _gmDateRange = 'all'; // 'today', 'week', 'month', 'all', 'custom'
+
+function _setDateRange(range) {
+    _gmDateRange = range;
+    const now = new Date();
+    const today = now.toISOString().slice(0, 10);
+    // Update button styles
+    document.querySelectorAll('.gm-date-btn').forEach(b => {
+        if (b.dataset.range === range) {
+            b.style.background = 'var(--accent)'; b.style.color = '#fff';
+        } else {
+            b.style.background = 'none'; b.style.color = 'var(--text-2)';
+        }
+    });
+    const customEl = document.getElementById('gm-custom-dates');
+    if (range === 'custom') {
+        if (customEl) customEl.style.display = 'flex';
+        return; // wait for user to pick dates
+    }
+    if (customEl) customEl.style.display = 'none';
+    if (range === 'today') {
+        _gmDateFrom = today; _gmDateTo = today;
+    } else if (range === 'week') {
+        const d = new Date(now); d.setDate(d.getDate() - d.getDay()); // Sunday
+        _gmDateFrom = d.toISOString().slice(0, 10); _gmDateTo = today;
+    } else if (range === 'month') {
+        _gmDateFrom = today.slice(0, 8) + '01'; _gmDateTo = today;
+    } else {
+        _gmDateFrom = null; _gmDateTo = null;
+    }
+    loadGMTasks();
+}
+
+function _applyCustomDateRange() {
+    const from = document.getElementById('gm-date-from')?.value;
+    const to = document.getElementById('gm-date-to')?.value;
+    _gmDateFrom = from || null;
+    _gmDateTo = to || null;
+    loadGMTasks();
+}
+
+function _toggleShowArchived() {
+    _gmShowArchived = document.getElementById('gm-show-archived')?.checked || false;
+    loadGMTasks();
+}
+
+async function _archiveBatch(status) {
+    if (!confirm(`Archive all ${status} tasks? They will be hidden from active views.`)) return;
+    try {
+        const r = await fetch('/api/tasks/archive_batch', {
+            method: 'POST', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ status })
+        });
+        const d = await r.json();
+        if (d.ok) {
+            loadGMTasks();
+        } else {
+            alert(d.error || 'Archive failed');
+        }
+    } catch(e) { alert('Archive error: ' + e.message); }
+}
+
+function _relativeTime(isoStr) {
+    if (!isoStr) return '';
+    const d = new Date(isoStr);
+    const now = new Date();
+    const diffMs = now - d;
+    const diffSec = Math.floor(diffMs / 1000);
+    const diffMin = Math.floor(diffSec / 60);
+    const diffHr = Math.floor(diffMin / 60);
+    const diffDay = Math.floor(diffHr / 24);
+    if (diffSec < 60) return 'just now';
+    if (diffMin < 60) return diffMin + 'm ago';
+    if (diffHr < 24) return diffHr + 'h ago';
+    if (diffDay < 7) return diffDay + 'd ago';
+    // Show short date for older
+    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    return months[d.getMonth()] + ' ' + d.getDate();
+}
 
 function _filterGMTasks(status) {
     // Toggle: clicking same filter again resets to 'all'
@@ -2134,11 +2239,16 @@ function _filterGMTasks(status) {
 
 async function loadGMTasks() {
     try {
+        // Build date & archived query params
+        let _dp = '';
+        if (_gmDateFrom) _dp += '&date_from=' + encodeURIComponent(_gmDateFrom);
+        if (_gmDateTo) _dp += '&date_to=' + encodeURIComponent(_gmDateTo);
+        if (_gmShowArchived) _dp += '&archived=1';
         // Fetch progress stats + pending tasks in parallel
         const [progR, pendR, allR] = await Promise.all([
             fetch('/api/tasks/progress'),
             fetch('/api/tasks/pending_approval'),
-            fetch('/api/tasks?status=done&limit=20'),
+            fetch('/api/tasks?status=done&limit=20' + _dp),
         ]);
         const prog = await progR.json();
         const pend = await pendR.json();
@@ -2177,19 +2287,19 @@ async function loadGMTasks() {
         pendTasks.forEach(t => { t._status = 'pending'; allTasks.push(t); });
         // In-progress
         try {
-            const ipR = await fetch('/api/tasks?status=in_progress');
+            const ipR = await fetch('/api/tasks?status=in_progress' + _dp);
             const ipD = await ipR.json();
             (ipD.tasks || []).forEach(t => { t._status = 'in_progress'; allTasks.push(t); });
         } catch(e) {}
         // Blocked
         try {
-            const bR = await fetch('/api/tasks?status=blocked');
+            const bR = await fetch('/api/tasks?status=blocked' + _dp);
             const bD = await bR.json();
             (bD.tasks || []).forEach(t => { t._status = 'blocked'; allTasks.push(t); });
         } catch(e) {}
         // Done (for filter view)
         try {
-            const dR = await fetch('/api/tasks?status=done');
+            const dR = await fetch('/api/tasks?status=done' + _dp);
             const dD = await dR.json();
             (dD.tasks || []).forEach(t => { t._status = 'done'; allTasks.push(t); });
         } catch(e) {}
@@ -2235,6 +2345,7 @@ async function loadGMTasks() {
                             <span>→ ${_esc(t.assignee_name)}</span>
                             <span style="color:var(--text-3)">·</span>
                             <span style="color:${prioColor[t.priority] || 'var(--text-3)'}">${t.priority}</span>
+                            <span style="color:var(--text-3)">${_relativeTime(t.created_at)}</span>
                         </div>
                         ${t.description ? '<div style="font-size:11px;color:var(--text-3);margin-top:4px;line-height:1.4;overflow:hidden;max-height:36px">' + _esc(t.description).substring(0, 150) + '</div>' : ''}
                     </div>
@@ -2254,7 +2365,7 @@ async function loadGMTasks() {
         // Fetch ALL done tasks (not just 5)
         let allDoneTasks = [];
         try {
-            const doneR = await fetch('/api/tasks?status=done');
+            const doneR = await fetch('/api/tasks?status=done' + _dp);
             const doneD = await doneR.json();
             allDoneTasks = (doneD.tasks || []).slice(0, 15);
         } catch(e) { allDoneTasks = prog.recent_completed || []; }

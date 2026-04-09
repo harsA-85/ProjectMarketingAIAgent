@@ -231,6 +231,8 @@ class Task(Base):
     approved_at    = Column(DateTime, nullable=True)
     # Department flag — newsroom, tech, sales
     department     = Column(String(30), default='newsroom')
+    # Archiving — hide completed/blocked tasks from active views
+    archived       = Column(Boolean, default=False)
     # Context
     thread_id      = Column(String(100), nullable=True)        # chat thread that spawned this
     created_at     = Column(DateTime, default=datetime.utcnow)

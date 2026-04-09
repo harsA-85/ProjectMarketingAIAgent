@@ -2996,6 +2996,9 @@ def get_tasks():
     status = request.args.get('status')
     parent = request.args.get('parent_id')
     dept = request.args.get('dept')
+    date_from = request.args.get('date_from')
+    date_to = request.args.get('date_to')
+    show_archived = request.args.get('archived')
     if assignee:
         q = q.filter(Task.assignee_key == assignee)
     if status:
@@ -3006,6 +3009,27 @@ def get_tasks():
         q = q.filter(Task.parent_id == int(parent))
     elif not request.args.get('all'):
         q = q.filter(Task.parent_id == None)  # top-level only by default
+    # Date range filtering on created_at
+    if date_from:
+        try:
+            from datetime import datetime as _dt
+            dt_from = _dt.fromisoformat(date_from)
+            q = q.filter(Task.created_at >= dt_from)
+        except (ValueError, TypeError):
+            pass
+    if date_to:
+        try:
+            from datetime import datetime as _dt
+            dt_to = _dt.fromisoformat(date_to)
+            # Include the entire end date by adding one day
+            from datetime import timedelta
+            dt_to = dt_to + timedelta(days=1)
+            q = q.filter(Task.created_at < dt_to)
+        except (ValueError, TypeError):
+            pass
+    # Exclude archived tasks by default; ?archived=1 shows them
+    if not show_archived or show_archived != '1':
+        q = q.filter((Task.archived == False) | (Task.archived == None))
     tasks = q.order_by(Task.created_at.desc()).limit(100).all()
 
     def task_dict(t):
@@ -3025,10 +3049,46 @@ def get_tasks():
             'completed_at': t.completed_at.isoformat() if t.completed_at else None,
             'thread_id': t.thread_id,
             'created_at': t.created_at.isoformat() if t.created_at else None,
+            'archived': bool(getattr(t, 'archived', False)),
             'subtask_count': len(subtasks),
             'subtasks_done': sum(1 for s in subtasks if s.status == 'done'),
         }
     return jsonify({'tasks': [task_dict(t) for t in tasks]}), 200
+
+
+@app.route('/api/tasks/<int:task_id>/archive', methods=['POST'])
+def archive_task(task_id):
+    """Archive a single task by setting archived=True."""
+    from flask import g
+    from src.database.models import Task
+    db = g.db
+    task = db.query(Task).filter(Task.id == task_id).first()
+    if not task:
+        return jsonify({'error': 'Task not found'}), 404
+    task.archived = True
+    db.commit()
+    return jsonify({'ok': True, 'task_id': task_id}), 200
+
+
+@app.route('/api/tasks/archive_batch', methods=['POST'])
+def archive_tasks_batch():
+    """Archive multiple tasks by status. Body: {"status": "done"} or {"status": "blocked"}."""
+    from flask import g
+    from src.database.models import Task
+    db = g.db
+    data = request.get_json(force=True) or {}
+    target_status = data.get('status')
+    if not target_status:
+        return jsonify({'error': 'Missing "status" field (e.g. "done", "blocked")'}), 400
+    tasks = db.query(Task).filter(
+        Task.status == target_status,
+        (Task.archived == False) | (Task.archived == None),
+    ).all()
+    count = len(tasks)
+    for t in tasks:
+        t.archived = True
+    db.commit()
+    return jsonify({'ok': True, 'archived_count': count, 'status': target_status}), 200
 
 
 @app.route('/api/task-result/<int:task_id>', methods=['GET'])
@@ -3168,6 +3228,7 @@ def get_pending_approval_tasks():
     q = db.query(Task).filter(
         Task.requires_approval == True,
         Task.approved_at == None,
+        (Task.archived == False) | (Task.archived == None),
     )
     dept = request.args.get('dept')
     if dept:
@@ -3814,11 +3875,12 @@ def get_tasks_progress():
     from flask import g
     from src.database.models import Task
     db = g.db
-    pending = db.query(Task).filter(Task.requires_approval == True, Task.approved_at == None, Task.status != 'rejected').count()
-    in_progress = db.query(Task).filter(Task.status == 'in_progress').count()
-    done = db.query(Task).filter(Task.status == 'done').count()
-    blocked = db.query(Task).filter(Task.status == 'blocked').count()
-    recent_done = db.query(Task).filter(Task.status == 'done').order_by(Task.completed_at.desc()).limit(5).all()
+    _not_archived = (Task.archived == False) | (Task.archived == None)
+    pending = db.query(Task).filter(Task.requires_approval == True, Task.approved_at == None, Task.status != 'rejected', _not_archived).count()
+    in_progress = db.query(Task).filter(Task.status == 'in_progress', _not_archived).count()
+    done = db.query(Task).filter(Task.status == 'done', _not_archived).count()
+    blocked = db.query(Task).filter(Task.status == 'blocked', _not_archived).count()
+    recent_done = db.query(Task).filter(Task.status == 'done', _not_archived).order_by(Task.completed_at.desc()).limit(5).all()
     return jsonify({
         'pending_approval': pending,
         'in_progress': in_progress,
