@@ -3111,6 +3111,36 @@ def get_task_result(task_id):
                         fname = os.path.basename(fp)
                         images.append({'url': f'/static/media/{fname}', 'prompt': ''})
 
+    # Compute timing info for in-progress / blocked tasks
+    timing = {}
+    if task.approved_at:
+        timing['approved_at'] = task.approved_at.isoformat()
+    if task.created_at:
+        timing['created_at'] = task.created_at.isoformat()
+        from datetime import datetime as _dt
+        elapsed = (_dt.utcnow() - task.created_at).total_seconds()
+        timing['elapsed_seconds'] = int(elapsed)
+        if elapsed > 3600:
+            timing['elapsed_label'] = f'{int(elapsed // 3600)}h {int((elapsed % 3600) // 60)}m'
+        elif elapsed > 60:
+            timing['elapsed_label'] = f'{int(elapsed // 60)}m {int(elapsed % 60)}s'
+        else:
+            timing['elapsed_label'] = f'{int(elapsed)}s'
+    if task.approved_at and task.status == 'in_progress':
+        run_elapsed = (_dt.utcnow() - task.approved_at).total_seconds()
+        timing['running_seconds'] = int(run_elapsed)
+        if run_elapsed > 600:
+            timing['status_hint'] = 'possibly_stuck'
+        elif run_elapsed > 120:
+            timing['status_hint'] = 'running_long'
+        else:
+            timing['status_hint'] = 'running'
+    if task.status == 'blocked':
+        # Check for error in description
+        import re
+        err = re.search(r'\[(?:ERROR|EXECUTION ERROR):?\s*(.*?)\]', task.description or '')
+        timing['error'] = err.group(1) if err else None
+
     return jsonify({
         'task': {
             'id': task.id, 'title': task.title, 'description': task.description,
@@ -3120,6 +3150,7 @@ def get_task_result(task_id):
             'department': getattr(task, 'department', None) or _dept_from_assignee(task.assignee_key),
             'completed_at': task.completed_at.isoformat() if task.completed_at else None,
         },
+        'timing': timing,
         'deliverable': deliverable.body[:3000] if deliverable else None,
         'deliverable_subject': deliverable.subject if deliverable else None,
         'images': images,

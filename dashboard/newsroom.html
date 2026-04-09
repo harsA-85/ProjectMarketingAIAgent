@@ -1180,21 +1180,21 @@
 
             <!-- TAB: TASKS COMMAND CENTER -->
             <div class="tab-pane active" id="tab-tasks">
-                <!-- Live stats bar -->
+                <!-- Live stats bar — clickable filters -->
                 <div style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap">
-                    <div id="gm-stat-pending" style="flex:1;min-width:140px;background:linear-gradient(135deg,rgba(255,159,10,0.08),rgba(255,159,10,0.03));border:1px solid rgba(255,159,10,0.2);border-radius:var(--r);padding:14px 18px">
+                    <div id="gm-stat-pending" onclick="_filterGMTasks('pending')" style="cursor:pointer;flex:1;min-width:140px;background:linear-gradient(135deg,rgba(255,159,10,0.08),rgba(255,159,10,0.03));border:2px solid rgba(255,159,10,0.2);border-radius:var(--r);padding:14px 18px;transition:all 0.2s">
                         <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:var(--warning);margin-bottom:4px">⏳ Pending Approval</div>
                         <div style="font-size:28px;font-weight:800;color:var(--text-1)" id="gm-stat-pending-num">—</div>
                     </div>
-                    <div id="gm-stat-running" style="flex:1;min-width:140px;background:linear-gradient(135deg,rgba(0,122,255,0.08),rgba(0,122,255,0.03));border:1px solid rgba(0,122,255,0.2);border-radius:var(--r);padding:14px 18px">
+                    <div id="gm-stat-running" onclick="_filterGMTasks('in_progress')" style="cursor:pointer;flex:1;min-width:140px;background:linear-gradient(135deg,rgba(0,122,255,0.08),rgba(0,122,255,0.03));border:2px solid rgba(0,122,255,0.2);border-radius:var(--r);padding:14px 18px;transition:all 0.2s">
                         <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:var(--accent);margin-bottom:4px">⚡ In Progress</div>
                         <div style="font-size:28px;font-weight:800;color:var(--text-1)" id="gm-stat-running-num">—</div>
                     </div>
-                    <div style="flex:1;min-width:140px;background:linear-gradient(135deg,rgba(48,209,88,0.08),rgba(48,209,88,0.03));border:1px solid rgba(48,209,88,0.2);border-radius:var(--r);padding:14px 18px">
+                    <div id="gm-stat-done" onclick="_filterGMTasks('done')" style="cursor:pointer;flex:1;min-width:140px;background:linear-gradient(135deg,rgba(48,209,88,0.08),rgba(48,209,88,0.03));border:2px solid rgba(48,209,88,0.2);border-radius:var(--r);padding:14px 18px;transition:all 0.2s">
                         <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:var(--success);margin-bottom:4px">✅ Completed</div>
                         <div style="font-size:28px;font-weight:800;color:var(--text-1)" id="gm-stat-done-num">—</div>
                     </div>
-                    <div style="flex:1;min-width:140px;background:linear-gradient(135deg,rgba(255,69,58,0.08),rgba(255,69,58,0.03));border:1px solid rgba(255,69,58,0.2);border-radius:var(--r);padding:14px 18px">
+                    <div id="gm-stat-blocked" onclick="_filterGMTasks('blocked')" style="cursor:pointer;flex:1;min-width:140px;background:linear-gradient(135deg,rgba(255,69,58,0.08),rgba(255,69,58,0.03));border:2px solid rgba(255,69,58,0.2);border-radius:var(--r);padding:14px 18px;transition:all 0.2s">
                         <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:var(--danger);margin-bottom:4px">🚫 Blocked</div>
                         <div style="font-size:28px;font-weight:800;color:var(--text-1)" id="gm-stat-blocked-num">—</div>
                     </div>
@@ -1211,6 +1211,10 @@
 
                 <!-- Task list -->
                 <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);overflow:hidden;box-shadow:var(--shadow-sm)">
+                    <div id="gm-tasks-filter-label" style="display:none;padding:8px 18px;border-bottom:1px solid var(--border);background:var(--surface-2);display:flex;align-items:center;justify-content:space-between">
+                        <span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:var(--text-3)" id="gm-filter-text">All Tasks</span>
+                        <a href="#" onclick="_filterGMTasks('all');return false" style="font-size:11px;color:var(--accent);text-decoration:none;font-weight:600" id="gm-filter-clear" style="display:none">✕ Clear filter</a>
+                    </div>
                     <div id="gm-tasks-list" style="max-height:500px;overflow-y:auto">
                         <div style="padding:40px;text-align:center;color:var(--text-3);font-size:13px">Loading tasks...</div>
                     </div>
@@ -2094,6 +2098,39 @@ function switchTab(name, btn) {
    GM TASKS COMMAND CENTER
 ═══════════════════════════════════════════════════════════════ */
 let _gmTasksPoll = null;
+let _gmTaskFilter = 'all'; // 'all', 'pending', 'in_progress', 'done', 'blocked'
+
+function _filterGMTasks(status) {
+    // Toggle: clicking same filter again resets to 'all'
+    _gmTaskFilter = (_gmTaskFilter === status) ? 'all' : status;
+
+    // Highlight active card
+    const cardMap = { pending: 'gm-stat-pending', in_progress: 'gm-stat-running', done: 'gm-stat-done', blocked: 'gm-stat-blocked' };
+    for (const [key, id] of Object.entries(cardMap)) {
+        const el = document.getElementById(id);
+        if (!el) continue;
+        if (_gmTaskFilter === key) {
+            el.style.borderColor = key === 'pending' ? 'var(--warning)' : key === 'in_progress' ? 'var(--accent)' : key === 'done' ? 'var(--success)' : 'var(--danger)';
+            el.style.boxShadow = '0 2px 12px rgba(0,0,0,0.1)';
+            el.style.transform = 'scale(1.02)';
+        } else {
+            el.style.borderColor = '';
+            el.style.boxShadow = '';
+            el.style.transform = '';
+        }
+    }
+
+    // Update filter label
+    const labelMap = { all: 'Active Tasks', pending: '⏳ Pending Approval', in_progress: '⚡ In Progress', done: '✅ Completed', blocked: '🚫 Blocked' };
+    const filterLabel = document.getElementById('gm-filter-text');
+    const filterClear = document.getElementById('gm-filter-clear');
+    const filterBar = document.getElementById('gm-tasks-filter-label');
+    if (filterLabel) filterLabel.textContent = labelMap[_gmTaskFilter] || 'All Tasks';
+    if (filterClear) filterClear.style.display = _gmTaskFilter === 'all' ? 'none' : 'inline';
+    if (filterBar) filterBar.style.display = 'flex';
+
+    loadGMTasks();
+}
 
 async function loadGMTasks() {
     try {
@@ -2134,29 +2171,45 @@ async function loadGMTasks() {
             approveBar.style.display = 'none';
         }
 
-        // Render pending + in-progress tasks
-        const allTasks = [...pendTasks];
-        // Also add in-progress and blocked tasks
+        // Fetch all task types
+        const allTasks = [];
+        // Pending
+        pendTasks.forEach(t => { t._status = 'pending'; allTasks.push(t); });
+        // In-progress
         try {
             const ipR = await fetch('/api/tasks?status=in_progress');
             const ipD = await ipR.json();
             (ipD.tasks || []).forEach(t => { t._status = 'in_progress'; allTasks.push(t); });
         } catch(e) {}
+        // Blocked
         try {
             const bR = await fetch('/api/tasks?status=blocked');
             const bD = await bR.json();
             (bD.tasks || []).forEach(t => { t._status = 'blocked'; allTasks.push(t); });
         } catch(e) {}
+        // Done (for filter view)
+        try {
+            const dR = await fetch('/api/tasks?status=done');
+            const dD = await dR.json();
+            (dD.tasks || []).forEach(t => { t._status = 'done'; allTasks.push(t); });
+        } catch(e) {}
+
+        // Apply filter
+        const filter = _gmTaskFilter;
+        const filteredTasks = filter === 'all'
+            ? allTasks.filter(t => t._status !== 'done')  // default: show pending + running + blocked
+            : allTasks.filter(t => t._status === filter);
 
         const deptColors = { newsroom: '#ff453a', tech: '#007aff', sales: '#ff9f0a', leadership: '#5856d6' };
         const deptEmoji = { newsroom: '📰', tech: '💻', sales: '🤝', leadership: '👑' };
         const prioColor = { urgent: '#ff453a', high: '#ff9f0a', medium: '#007aff', low: '#aeaeb2' };
 
         const list = document.getElementById('gm-tasks-list');
-        if (allTasks.length === 0) {
-            list.innerHTML = '<div style="padding:40px;text-align:center;color:var(--text-3);font-size:13px">No pending tasks. Chat with Marc to get started! 🚀</div>';
+        const filterLabel = { all: 'active', pending: 'pending', in_progress: 'in-progress', done: 'completed', blocked: 'blocked' };
+        if (filteredTasks.length === 0) {
+            list.innerHTML = `<div style="padding:40px;text-align:center;color:var(--text-3);font-size:13px">No ${filterLabel[filter] || ''} tasks. ${filter === 'all' ? 'Chat with Marc to get started! 🚀' : '<a href="#" onclick="_filterGMTasks(\'all\');return false" style="color:var(--accent)">Show all →</a>'}</div>`;
         } else {
-            list.innerHTML = allTasks.map(t => {
+            list.innerHTML = filteredTasks.map(t => {
                 const dept = t.department || 'newsroom';
                 const status = t._status || t.status || 'todo';
                 const isPending = status === 'todo' || status === 'pending';
@@ -2164,8 +2217,10 @@ async function loadGMTasks() {
                 const isBlocked = status === 'blocked';
 
                 let statusBadge = '';
+                const isDone = status === 'done';
                 if (isPending) statusBadge = '<span style="font-size:10px;padding:2px 8px;border-radius:6px;background:rgba(255,159,10,0.12);color:#cc7f08;font-weight:600">⏳ Pending</span>';
                 else if (isRunning) statusBadge = '<span style="font-size:10px;padding:2px 8px;border-radius:6px;background:rgba(0,122,255,0.12);color:var(--accent);font-weight:600">⚡ Running</span>';
+                else if (isDone) statusBadge = '<span style="font-size:10px;padding:2px 8px;border-radius:6px;background:rgba(48,209,88,0.12);color:var(--success);font-weight:600">✅ Done</span>';
                 else if (isBlocked) statusBadge = '<span style="font-size:10px;padding:2px 8px;border-radius:6px;background:rgba(255,69,58,0.12);color:var(--danger);font-weight:600">🚫 Blocked</span>';
 
                 return `<div style="padding:12px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px;${isBlocked ? 'opacity:0.6' : ''}">
@@ -2185,7 +2240,10 @@ async function loadGMTasks() {
                     </div>
                     <div style="display:flex;gap:6px;flex-shrink:0">
                         ${isPending ? `<button onclick="_approveSingleGM(${t.id},this)" style="padding:5px 14px;font-size:11px;font-weight:700;border:none;border-radius:6px;background:var(--success);color:#fff;cursor:pointer">✓ Approve</button>
-                        <button onclick="_rejectSingleGM(${t.id},this)" style="padding:5px 10px;font-size:11px;font-weight:600;border:1px solid var(--border);border-radius:6px;background:none;color:var(--text-2);cursor:pointer">✕</button>` : ''}
+                        <button onclick="_rejectSingleGM(${t.id},this)" style="padding:5px 10px;font-size:11px;font-weight:600;border:1px solid var(--border);border-radius:6px;background:none;color:var(--text-2);cursor:pointer">✕</button>`
+                        : status === 'done' ? `<button onclick="viewTaskResult(${t.id})" style="padding:5px 14px;font-size:11px;font-weight:600;border:1px solid var(--accent);border-radius:6px;background:none;color:var(--accent);cursor:pointer">View →</button>`
+                        : (isRunning || isBlocked) ? `<button onclick="viewTaskResult(${t.id})" style="padding:5px 14px;font-size:11px;font-weight:600;border:1px solid ${isRunning ? 'var(--accent)' : 'var(--danger)'};border-radius:6px;background:none;color:${isRunning ? 'var(--accent)' : 'var(--danger)'};cursor:pointer">${isRunning ? 'Status →' : 'Details →'}</button>`
+                        : ''}
                     </div>
                 </div>`;
             }).join('');
@@ -2273,6 +2331,47 @@ async function viewTaskResult(taskId) {
         const deptColors = { newsroom: '#ff453a', tech: '#007aff', sales: '#ff9f0a', leadership: '#5856d6' };
 
         let content = '';
+        const timing = data.timing || {};
+
+        // Status banner for in-progress / blocked tasks
+        if (t.status === 'in_progress') {
+            const hint = timing.status_hint || 'running';
+            const elapsed = timing.elapsed_label || '';
+            const runSec = timing.running_seconds || 0;
+            let bannerColor = 'var(--accent)';
+            let bannerBg = 'rgba(0,122,255,0.06)';
+            let bannerIcon = '⚡';
+            let bannerText = `Running for ${elapsed}`;
+            let bannerSub = 'The AI is working on this task...';
+            if (hint === 'possibly_stuck') {
+                bannerColor = 'var(--warning)';
+                bannerBg = 'rgba(255,159,10,0.06)';
+                bannerIcon = '⚠️';
+                bannerText = `Running for ${elapsed} — may be stuck`;
+                bannerSub = 'This task has been running longer than expected. It might be waiting on a rate limit or API timeout.';
+            } else if (hint === 'running_long') {
+                bannerText = `Running for ${elapsed} — working...`;
+                bannerSub = 'Cascade tasks with multiple sub-tasks can take a few minutes.';
+            }
+            content += `<div style="padding:16px 24px;border-bottom:1px solid var(--border);background:${bannerBg}">
+                <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+                    <span style="font-size:20px">${bannerIcon}</span>
+                    <span style="font-size:14px;font-weight:700;color:${bannerColor}">${bannerText}</span>
+                </div>
+                <div style="font-size:12px;color:var(--text-2);line-height:1.5">${bannerSub}</div>
+                ${timing.approved_at ? '<div style="font-size:10px;color:var(--text-3);margin-top:6px">Approved: ' + new Date(timing.approved_at).toLocaleString() + '</div>' : ''}
+            </div>`;
+        } else if (t.status === 'blocked') {
+            const errMsg = timing.error || 'Unknown error — check server logs';
+            content += `<div style="padding:16px 24px;border-bottom:1px solid var(--border);background:rgba(255,69,58,0.04)">
+                <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+                    <span style="font-size:20px">🚫</span>
+                    <span style="font-size:14px;font-weight:700;color:var(--danger)">Task Blocked</span>
+                </div>
+                <div style="font-size:12px;color:var(--text-2);line-height:1.5;margin-bottom:8px">${_esc(errMsg)}</div>
+                <div style="font-size:10px;color:var(--text-3)">Created: ${timing.created_at ? new Date(timing.created_at).toLocaleString() : 'Unknown'} · Elapsed: ${timing.elapsed_label || '?'}</div>
+            </div>`;
+        }
 
         // Images (if any)
         if (data.images && data.images.length > 0) {
@@ -2318,14 +2417,20 @@ async function viewTaskResult(taskId) {
             content += `</div>`;
         }
 
+        const statusIcon = t.status === 'done' ? '✅' : t.status === 'in_progress' ? '⚡' : t.status === 'blocked' ? '🚫' : '⏳';
+        const statusColor = t.status === 'done' ? 'var(--success)' : t.status === 'in_progress' ? 'var(--accent)' : t.status === 'blocked' ? 'var(--danger)' : 'var(--warning)';
+
         overlay.innerHTML = `<div style="background:var(--surface);border-radius:16px;max-width:800px;width:100%;max-height:85vh;overflow:hidden;box-shadow:var(--shadow-xl);display:flex;flex-direction:column">
             <div style="padding:18px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px;flex-shrink:0">
-                <div style="width:4px;align-self:stretch;border-radius:2px;background:${deptColors[t.department] || '#aeaeb2'}"></div>
+                <div style="width:4px;align-self:stretch;border-radius:2px;background:${statusColor}"></div>
                 <div style="flex:1">
-                    <div style="font-size:15px;font-weight:700;color:var(--text-1)">${_esc(t.title)}</div>
-                    <div style="font-size:12px;color:var(--text-2);margin-top:2px">${_esc(t.assignee_name)} · ${t.department} · ${t.status}</div>
+                    <div style="display:flex;align-items:center;gap:8px">
+                        <span style="font-size:15px;font-weight:700;color:var(--text-1)">${_esc(t.title)}</span>
+                        <span style="font-size:10px;padding:2px 8px;border-radius:6px;background:${statusColor}18;color:${statusColor};font-weight:700">${statusIcon} ${t.status}</span>
+                    </div>
+                    <div style="font-size:12px;color:var(--text-2);margin-top:2px">${_esc(t.assignee_name)} · ${t.department}${t.completed_at ? ' · ' + new Date(t.completed_at).toLocaleString() : ''}</div>
                 </div>
-                <a href="${data.inbox_link}" style="font-size:11px;color:var(--accent);text-decoration:none;font-weight:600;padding:5px 12px;border:1px solid var(--accent);border-radius:6px">📥 Open in Inbox</a>
+                <a href="${data.inbox_link}" style="font-size:11px;color:var(--accent);text-decoration:none;font-weight:600;padding:5px 12px;border:1px solid var(--accent);border-radius:6px">📥 Inbox</a>
                 <button onclick="document.getElementById('task-result-overlay').style.display='none'" style="border:none;background:none;font-size:18px;color:var(--text-3);cursor:pointer;padding:4px">✕</button>
             </div>
             <div style="flex:1;overflow-y:auto">
