@@ -105,6 +105,60 @@ try:
 except Exception as e:
     logging.error(f"BOOTSTRAP FAILED: {e}\n{traceback.format_exc()}")
 
+# ── One-time backfill: create Content drafts for orphaned AtomizedContent ──
+def _backfill_atomized_drafts():
+    """Convert existing AtomizedContent records without Content links into drafts."""
+    try:
+        from src.database.db import get_db
+        from src.database.models import AtomizedContent, Content, MasterContent
+        import json as _j
+        db = get_db()
+        # Fix stale references (content_id pointing to deleted Content rows)
+        for a in db.query(AtomizedContent).filter(AtomizedContent.content_id != None).all():
+            if not db.query(Content).filter(Content.id == a.content_id).first():
+                a.content_id = None
+        db.commit()
+        orphans = db.query(AtomizedContent).filter(
+            AtomizedContent.content_id == None,
+            AtomizedContent.status != 'deleted',
+        ).all()
+        if not orphans:
+            return
+        for a in orphans:
+            mc = db.query(MasterContent).filter(
+                MasterContent.workflow_run_id == a.workflow_run_id
+            ).first()
+            headline = mc.headline if mc else ''
+            title = headline[:100] if headline else (a.body or '')[:100]
+            # Parse hashtags/media from JSON strings
+            def _pl(v):
+                if isinstance(v, list): return v
+                if isinstance(v, str):
+                    try:
+                        p = _j.loads(v)
+                        return p if isinstance(p, list) else []
+                    except Exception:
+                        return []
+                return []
+            post = Content(
+                agent_id=a.agent_id,
+                title=title,
+                body=a.body or '',
+                hashtags=_pl(a.hashtags),
+                media_urls=_pl(a.media_urls),
+                platform=a.platform,
+                status='draft',
+            )
+            db.add(post)
+            db.flush()
+            a.content_id = post.id
+        db.commit()
+        logging.info(f"[Backfill] Created {len(orphans)} Content drafts from orphaned AtomizedContent")
+    except Exception as e:
+        logging.warning(f"[Backfill] Failed: {e}")
+
+_backfill_atomized_drafts()
+
 @app.before_request
 def open_db_session():
     """Open a fresh DB session scoped to this request (thread-safe via flask.g)."""
@@ -149,7 +203,9 @@ def agent_detail():
 @app.route('/newsroom.html', methods=['GET'])
 def newsroom():
     """Serve the newsroom page"""
-    return send_file(os.path.join(os.path.dirname(__file__), 'newsroom.html'))
+    resp = send_file(os.path.join(os.path.dirname(__file__), 'newsroom.html'))
+    resp.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+    return resp
 
 
 @app.route('/health', methods=['GET'])
@@ -202,7 +258,7 @@ def get_agent_posts(agent_id):
     """Get all posts for a specific agent"""
     try:
         from src.database.models import Content
-        posts = orchestrator.db.query(Content).filter(Content.agent_id == agent_id).all()
+        posts = orchestrator.db.query(Content).filter(Content.agent_id == agent_id).order_by(Content.created_at.desc()).all()
         posts_data = [
             {
                 'id': p.id,
@@ -213,6 +269,7 @@ def get_agent_posts(agent_id):
                 'hashtags': p.hashtags,
                 'mentions': p.mentions,
                 'media_urls': p.media_urls or [],
+                'post_id': p.post_id,
                 'created_at': p.created_at.isoformat() if p.created_at else None,
                 'scheduled_at': p.scheduled_at.isoformat() if p.scheduled_at else None,
                 'published_at': p.published_at.isoformat() if p.published_at else None,
@@ -709,7 +766,7 @@ def publish_to_all_platforms(content_id):
 
 def _adapt_caption_for_platform(text: str, platform: str) -> str:
     """Trim/adapt caption for platform character limits."""
-    limits = {'twitter': 270, 'instagram': 2200, 'tiktok': 2200}
+    limits = {'twitter': 260, 'instagram': 2200, 'tiktok': 2200}
     limit = limits.get(platform, 2200)
     if len(text) > limit:
         text = text[:limit - 3] + '…'
@@ -1027,10 +1084,13 @@ def publish_content_now(content_id):
         if not post:
             return jsonify({'error': 'Post not found'}), 404
 
-        # Find a connected account for this agent + platform
+        # Find a connected account for this agent + platform (normalize platform names)
+        post_plat = (post.platform or '').lower().replace('/', '').replace(' ', '')
+        _plat_aliases = {'twitterx': 'twitter', 'x': 'twitter', 'ig': 'instagram', 'insta': 'instagram'}
+        normalized_plat = _plat_aliases.get(post_plat, post_plat)
         account = orchestrator.db.query(SocialMediaAccount).filter(
             SocialMediaAccount.agent_id == post.agent_id,
-            SocialMediaAccount.platform == post.platform
+            SocialMediaAccount.platform == normalized_plat
         ).first()
 
         # --- Helper: save base64 images to disk and return public URLs ---
@@ -1176,10 +1236,169 @@ def publish_content_now(content_id):
         platform_result = None
         platform_error = None
 
+        def _refresh_twitter_token(acct):
+            """Refresh an expired Twitter OAuth2 access token."""
+            import requests as _req
+            try:
+                resp = _req.post(
+                    'https://api.twitter.com/2/oauth2/token',
+                    data={
+                        'grant_type': 'refresh_token',
+                        'refresh_token': acct.refresh_token,
+                        'client_id': _TWITTER_CLIENT_ID,
+                    },
+                    auth=(_TWITTER_CLIENT_ID, _TWITTER_CLIENT_SECRET),
+                    timeout=15,
+                )
+                if resp.status_code == 200:
+                    tokens = resp.json()
+                    acct.access_token = tokens.get('access_token', acct.access_token)
+                    if tokens.get('refresh_token'):
+                        acct.refresh_token = tokens['refresh_token']
+                    orchestrator.db.commit()
+                    import logging
+                    logging.info(f"[Twitter] Refreshed token for @{acct.username}")
+                    return acct.access_token
+                else:
+                    import logging
+                    logging.error(f"[Twitter] Token refresh failed: {resp.status_code} {resp.text[:200]}")
+                    return None
+            except Exception as e:
+                import logging
+                logging.error(f"[Twitter] Token refresh error: {e}")
+                return None
+
+        def publish_twitter(post, token, acct):
+            """Publish a tweet using Twitter API v2 with OAuth 1.0a signing."""
+            import logging
+            import urllib.error
+            import hmac, hashlib, time as _time, uuid as _uuid
+            from urllib.parse import quote as _pct, urlencode as _urlencode
+
+            tweet_text = _clean_body_for_publish(post.body, platform='twitter')
+            if not tweet_text or not tweet_text.strip():
+                raise RuntimeError(f"Tweet text is empty after cleaning. Raw body: {repr(post.body[:200])}")
+
+            # Twitter counts emojis/special chars as 2; use a weighted count
+            def _tw_len(s):
+                count = 0
+                for ch in s:
+                    count += 2 if ord(ch) > 0xFFFF else 1
+                return count
+
+            if _tw_len(tweet_text) > 260:
+                while _tw_len(tweet_text) > 257:
+                    tweet_text = tweet_text[:-1]
+                tweet_text = tweet_text.rstrip() + '...'
+
+            logging.warning(f"[Twitter] Sending tweet text ({len(tweet_text)} chars): {repr(tweet_text[:100])}")
+
+            # --- OAuth 1.0a signing (uses Consumer Key + Access Token from env) ---
+            _api_key    = os.environ.get('TWITTER_API_KEY', '')
+            _api_secret = os.environ.get('TWITTER_API_SECRET', '')
+            _acc_token  = os.environ.get('TWITTER_ACCESS_TOKEN', '')
+            _acc_secret = os.environ.get('TWITTER_ACCESS_TOKEN_SECRET', '')
+
+            def _oauth1_do_tweet(text):
+                """Post tweet using OAuth 1.0a signed request to API v2."""
+                url = 'https://api.twitter.com/2/tweets'
+                method = 'POST'
+
+                # OAuth params
+                oauth_params = {
+                    'oauth_consumer_key':     _api_key,
+                    'oauth_nonce':            _uuid.uuid4().hex,
+                    'oauth_signature_method': 'HMAC-SHA1',
+                    'oauth_timestamp':        str(int(_time.time())),
+                    'oauth_token':            _acc_token,
+                    'oauth_version':          '1.0',
+                }
+
+                # Signature base string (only oauth params for POST with JSON body)
+                param_str = '&'.join(
+                    f"{_pct(k, safe='')}={_pct(v, safe='')}"
+                    for k, v in sorted(oauth_params.items())
+                )
+                base_str = f"{method}&{_pct(url, safe='')}&{_pct(param_str, safe='')}"
+                signing_key = f"{_pct(_api_secret, safe='')}&{_pct(_acc_secret, safe='')}"
+                signature = base64.b64encode(
+                    hmac.new(signing_key.encode(), base_str.encode(), hashlib.sha1).digest()
+                ).decode()
+
+                oauth_params['oauth_signature'] = signature
+                auth_header = 'OAuth ' + ', '.join(
+                    f'{_pct(k, safe="")}="{_pct(v, safe="")}"'
+                    for k, v in sorted(oauth_params.items())
+                )
+
+                payload = jsonlib.dumps({'text': text}).encode()
+                req = urllib.request.Request(url, data=payload, method='POST')
+                req.add_header('Authorization', auth_header)
+                req.add_header('Content-Type', 'application/json')
+                with urllib.request.urlopen(req, timeout=15) as r:
+                    result = jsonlib.loads(r.read())
+                    return result.get('data', {}).get('id', '')
+
+            # --- OAuth 2.0 Bearer fallback ---
+            def _bearer_do_tweet(tk, text):
+                payload = jsonlib.dumps({'text': text}).encode()
+                req = urllib.request.Request(
+                    'https://api.twitter.com/2/tweets',
+                    data=payload,
+                    method='POST'
+                )
+                req.add_header('Authorization', f'Bearer {tk}')
+                req.add_header('Content-Type', 'application/json')
+                with urllib.request.urlopen(req, timeout=15) as r:
+                    result = jsonlib.loads(r.read())
+                    return result.get('data', {}).get('id', '')
+
+            _has_oauth1 = all([_api_key, _api_secret, _acc_token, _acc_secret])
+
+            # Try OAuth 2.0 Bearer first, fall back to OAuth 1.0a on 403
+            try:
+                tweet_id = _bearer_do_tweet(token, tweet_text)
+                logging.info("[Twitter] Posted via OAuth 2.0 Bearer")
+                return True, tweet_id
+            except urllib.error.HTTPError as e:
+                body = e.read().decode('utf-8', errors='replace')
+                logging.error(f"[Twitter] Bearer error {e.code}: {body[:300]}")
+
+                # 401 = expired token → try refresh
+                if e.code == 401 and acct.refresh_token:
+                    logging.info("[Twitter] Token expired (401), refreshing...")
+                    new_token = _refresh_twitter_token(acct)
+                    if new_token:
+                        try:
+                            tweet_id = _bearer_do_tweet(new_token, tweet_text)
+                            logging.info("[Twitter] Posted via OAuth 2.0 Bearer (refreshed)")
+                            return True, tweet_id
+                        except urllib.error.HTTPError:
+                            pass  # fall through to OAuth 1.0a
+
+                # 403 = permission issue → fall back to OAuth 1.0a
+                if _has_oauth1 and e.code in (401, 403):
+                    logging.info("[Twitter] Falling back to OAuth 1.0a...")
+                    try:
+                        tweet_id = _oauth1_do_tweet(tweet_text)
+                        logging.info("[Twitter] Posted via OAuth 1.0a")
+                        return True, tweet_id
+                    except urllib.error.HTTPError as e2:
+                        body2 = e2.read().decode('utf-8', errors='replace')
+                        logging.error(f"[Twitter] OAuth1.0a also failed {e2.code}: {body2[:300]}")
+                        raise RuntimeError(f"Twitter API error {e2.code}: {body2[:300]}")
+
+                raise RuntimeError(f"Twitter API error {e.code}: {body[:300]}")
+
         if account and account.access_token:
             try:
-                if post.platform == 'instagram':
+                if normalized_plat == 'instagram':
                     ok, platform_result = publish_instagram(post, account.access_token)
+                    if not ok:
+                        platform_error = platform_result
+                        platform_result = None
+                elif normalized_plat == 'twitter':
+                    ok, platform_result = publish_twitter(post, account.access_token, account)
                     if not ok:
                         platform_error = platform_result
                         platform_result = None
@@ -1191,13 +1410,14 @@ def publish_content_now(content_id):
             platform_error = "No connected account with API token found for this platform. Post marked as published locally."
 
         if platform_result:
-            # Actually published — mark as published
+            # Actually published — mark as published and store platform post ID
             post.status = 'published'
             post.published_at = datetime.utcnow()
+            post.post_id = str(platform_result)
             orchestrator.db.commit()
             return jsonify({
                 'content_id': content_id,
-                'message': 'Post published to Instagram!',
+                'message': f'Post published to {post.platform}!',
                 'platform_post_id': str(platform_result)
             }), 200
         else:
@@ -1213,22 +1433,124 @@ def publish_content_now(content_id):
         return jsonify({'error': str(e)}), 400
 
 
-def _clean_body_for_publish(raw):
-    """Extract clean text from potentially JSON-encoded body"""
+def _clean_body_for_publish(raw, platform=''):
+    """Extract clean text from potentially JSON-encoded body.
+    For Twitter/X: extracts only the first tweet from thread-formatted content."""
     import json as j
+    import re
     if not raw:
         return ''
     text = raw.strip()
-    if text.startswith('{'):
+    # Handle JSON array: ["tweet 1", "tweet 2", ...] → take first element
+    if text.startswith('['):
+        try:
+            parsed = j.loads(text)
+            if isinstance(parsed, list):
+                parts = [str(p).strip() for p in parsed if p]
+                text = parts[0] if parts else raw
+        except Exception:
+            # JSON parse failed — strip array/string delimiters manually
+            cleaned = text.lstrip('[').rstrip(']').strip()
+            # Split on ", " between array elements and take the first
+            if '", "' in cleaned:
+                cleaned = cleaned.split('", "')[0]
+            cleaned = cleaned.strip('"').strip("'").strip()
+            if cleaned:
+                text = cleaned
+    elif text.startswith('{'):
         try:
             parsed = j.loads(text.replace("\\'", "'"))
             text = parsed.get('caption') or parsed.get('body') or raw
         except Exception:
-            import re
             m = re.search(r'"caption"\s*:\s*"([\s\S]+?)"\s*,\s*"hashtags', text)
             if m:
                 text = m.group(1)
-    return text.replace('\\n', '\n').replace('\\t', '\t')
+    # Strip markdown code fences if present
+    text = re.sub(r'^```[a-z]*\n?', '', text, flags=re.MULTILINE).strip('`').strip()
+    text = text.replace('\\n', '\n').replace('\\t', '\t')
+
+    # ── Twitter/X: extract only the first tweet from thread-formatted content ──
+    if platform and platform.lower() in ('twitter', 'x', 'twitter/x'):
+        # Pattern: "1/ ..." "2/ ..." — split on numbered tweet markers
+        thread_split = re.split(r'\n+\s*\d+[/\.]\s+', text)
+        if len(thread_split) > 1:
+            # First chunk may start with "1/ " prefix — strip it
+            first = re.sub(r'^\d+[/\.]\s+', '', thread_split[0] if thread_split[0].strip() else thread_split[1])
+            text = first.strip()
+
+    return text
+
+
+def _sanitize_twitter_body(text):
+    """Enforce 260-char limit and clean up Twitter content.
+    Call this BEFORE saving any Content record with a Twitter platform."""
+    import re, json as j
+    if not text:
+        return text
+    # Reject internal operational notes that aren't real tweets
+    _skip = ['capacity note', 'note to victoria', "i'm executing", "i'm running this",
+             'briefing james', 'briefing elena', "problem: i don't have",
+             'these are ready to go. a few notes', 'prepared by:', 'executive summary']
+    if any(s in text[:150].lower() for s in _skip):
+        return ''
+    # Strip JSON array wrappers
+    if text.strip().startswith('['):
+        try:
+            parsed = j.loads(text)
+            if isinstance(parsed, list) and parsed:
+                text = str(parsed[0]).strip()
+        except Exception:
+            m = re.match(r'\[\s*"(.*?)(?:"|$)', text.strip(), re.DOTALL)
+            if m:
+                text = m.group(1).strip()
+    # Strip markdown formatting that shouldn't appear in tweets
+    text = re.sub(r'^```[a-z]*\n?', '', text, flags=re.MULTILINE)  # code fences
+    text = text.replace('```', '')
+    text = re.sub(r'\*\*(.+?)\*\*', r'\1', text)      # **bold** -> bold
+    text = re.sub(r'\*(.+?)\*', r'\1', text)           # *italic* -> italic
+    text = re.sub(r'__(.+?)__', r'\1', text)           # __underline__
+    text = re.sub(r'^#+\s+', '', text, flags=re.MULTILINE)  # # headers
+    text = re.sub(r'^>\s?', '', text, flags=re.MULTILINE)   # > blockquotes
+    text = re.sub(r'^[-*]\s+', '', text, flags=re.MULTILINE) # bullet points
+    # Strip LLM thinking/meta lines (labels like "FOMO Mechanic:", "Hook:", "CTA:")
+    text = re.sub(r'^(?:FOMO\s+\w+|Hook|CTA|Mechanic|Format|Angle|Tone|Voice|Strategy)\s*:.*\n?',
+                  '', text, flags=re.MULTILINE | re.IGNORECASE).strip()
+    # Strip thread markers: "1/ ...", "THREAD:", "Tweet 1:"
+    text = re.sub(r'^\d+[/\.]\s+', '', text).strip()
+    text = re.sub(r'^(?:THREAD|Tweet\s*\d+|TWEET\s*\d+)\s*:\s*', '', text).strip()
+    # Split multi-tweet thread, take first only
+    parts = re.split(r'\n+\s*\d+[/\.]\s+', text)
+    if len(parts) > 1:
+        text = parts[0].strip() or parts[1].strip()
+    # Collapse excessive whitespace/newlines
+    text = re.sub(r'\n{3,}', '\n\n', text).strip()
+    # Enforce 260-char limit (emojis count as 2)
+    tw = lambda s: sum(2 if ord(c) > 0xFFFF else 1 for c in s)
+    if tw(text) > 260:
+        # Try to cut at a natural sentence/line break instead of mid-word
+        lines = text.split('\n')
+        trimmed = ''
+        for line in lines:
+            candidate = (trimmed + '\n' + line).strip() if trimmed else line.strip()
+            if tw(candidate) <= 260:
+                trimmed = candidate
+            else:
+                break
+        if trimmed and tw(trimmed) >= 60:
+            text = trimmed
+        else:
+            # Fallback: hard truncate at last full sentence within limit
+            while tw(text) > 257:
+                text = text[:-1]
+            # Try to break at last sentence end
+            for end in ['. ', '.\n', '! ', '?\n', '? ']:
+                idx = text.rfind(end)
+                if idx > 60:
+                    text = text[:idx+1].rstrip()
+                    break
+            else:
+                text = text.rstrip() + '...'
+    return text
 
 
 @app.route('/api/content/<int:content_id>/edit', methods=['PUT'])
@@ -1253,12 +1575,16 @@ def edit_content(content_id):
 
 @app.route('/api/content/<int:content_id>/delete', methods=['DELETE'])
 def delete_content(content_id):
-    """Delete a post"""
+    """Delete a post and clear any AtomizedContent references."""
     try:
-        from src.database.models import Content
+        from src.database.models import Content, AtomizedContent
         post = orchestrator.db.query(Content).filter(Content.id == content_id).first()
         if not post:
             return jsonify({'error': 'Post not found'}), 404
+        # Clear FK references so backfill doesn't re-create this post
+        orchestrator.db.query(AtomizedContent).filter(
+            AtomizedContent.content_id == content_id
+        ).update({'content_id': None, 'status': 'deleted'})
         orchestrator.db.delete(post)
         orchestrator.db.commit()
         return jsonify({'content_id': content_id, 'message': 'Post deleted'}), 200
@@ -1787,19 +2113,30 @@ def approve_atomized(run_id):
         # Schedule at next peak time for the platform
         sched_time = next_peak_time(a.platform, 2)
 
-        post = Content(
-            agent_id=a.agent_id,
-            title=a.body[:100],
-            body=a.body,
-            hashtags=a.hashtags,
-            media_urls=a.media_urls,
-            platform=a.platform,
-            status='scheduled',
-            scheduled_at=sched_time,
-        )
-        orchestrator.db.add(post)
-        orchestrator.db.flush()
-        a.content_id = post.id
+        # If atomization already created a Content draft, reuse it
+        if a.content_id:
+            post = orchestrator.db.query(Content).filter(Content.id == a.content_id).first()
+            if post:
+                post.status = 'scheduled'
+                post.scheduled_at = sched_time
+            else:
+                a.content_id = None  # stale ref, will create below
+
+        if not a.content_id:
+            post = Content(
+                agent_id=a.agent_id,
+                title=a.body[:100],
+                body=a.body,
+                hashtags=a.hashtags,
+                media_urls=a.media_urls,
+                platform=a.platform,
+                status='scheduled',
+                scheduled_at=sched_time,
+            )
+            orchestrator.db.add(post)
+            orchestrator.db.flush()
+            a.content_id = post.id
+
         a.status = 'pushed_to_agent'
 
         # Get agent name for notification
@@ -1821,6 +2158,38 @@ def approve_atomized(run_id):
             'content_id': post.id, 'agent_id': a.agent_id,
             'platform': a.platform, 'scheduled_at': sched_time.isoformat(),
         })
+
+        # ── Auto-create visual design task for Instagram posts ──
+        if a.platform and a.platform.lower() == 'instagram':
+            post_preview = (a.body or '')[:500]
+            visual_task = Task(
+                title=f'Design Instagram visuals for {agent_name} — post #{post.id}',
+                description=(
+                    f"A new Instagram post has been scheduled for {agent_name} (@{agent.brand if agent else '?'}).\n\n"
+                    f"POST CONTENT:\n{post_preview}\n\n"
+                    f"YOUR JOB:\n"
+                    f"1. Analyze the post and recommend a visual format: single image, carousel (how many slides?), reel cover, or story\n"
+                    f"2. For each image, describe what it should look like — composition, colors, mood, text overlays\n"
+                    f"3. Instagram posts often have TEXT ON THE IMAGE (headlines, quotes, stats). Include specific text overlay content for each slide\n"
+                    f"4. Consider the agent's persona and brand voice for visual style\n"
+                    f"5. Generate the actual images using the prompts you designed\n\n"
+                    f"IMPORTANT: This is for Instagram — visual impact is everything. "
+                    f"Think bold text overlays, data callouts, provocative headlines ON the image itself. "
+                    f"Not just a photo — a designed post that stops the scroll.\n\n"
+                    f"Content ID: {post.id} | Agent ID: {a.agent_id}"
+                ),
+                status='pending',
+                priority='high',
+                created_by_type='system',
+                created_by_key='pipeline',
+                created_by_name='Pipeline',
+                assignee_type='team_member',
+                assignee_key='creative_director',
+                assignee_name='Sasha Noir',
+                requires_approval=True,
+                department='newsroom',
+            )
+            orchestrator.db.add(visual_task)
 
     orchestrator.db.commit()
     return jsonify({'pushed': len(created), 'posts': created}), 200
@@ -1844,19 +2213,31 @@ def schedule_all_atomized(run_id):
     created = []
     for a in atoms:
         sched_time = next_peak_time(a.platform, 2)
-        post = Content(
-            agent_id=a.agent_id,
-            title=(a.body or '')[:100],
-            body=a.body,
-            hashtags=a.hashtags,
-            media_urls=a.media_urls if hasattr(a, 'media_urls') else None,
-            platform=a.platform,
-            status='scheduled',
-            scheduled_at=sched_time,
-        )
-        orchestrator.db.add(post)
-        orchestrator.db.flush()
-        a.content_id = post.id
+
+        # If atomization already created a Content draft, reuse it
+        if a.content_id:
+            post = orchestrator.db.query(Content).filter(Content.id == a.content_id).first()
+            if post:
+                post.status = 'scheduled'
+                post.scheduled_at = sched_time
+            else:
+                a.content_id = None
+
+        if not a.content_id:
+            post = Content(
+                agent_id=a.agent_id,
+                title=(a.body or '')[:100],
+                body=a.body,
+                hashtags=a.hashtags,
+                media_urls=a.media_urls if hasattr(a, 'media_urls') else None,
+                platform=a.platform,
+                status='scheduled',
+                scheduled_at=sched_time,
+            )
+            orchestrator.db.add(post)
+            orchestrator.db.flush()
+            a.content_id = post.id
+
         a.status = 'pushed_to_agent'
         agent = _agent_map2.get(a.agent_id)
         agent_name = agent.name if agent else f'Agent #{a.agent_id}'
@@ -3009,28 +3390,39 @@ def get_tasks():
         q = q.filter(Task.parent_id == int(parent))
     elif not request.args.get('all'):
         q = q.filter(Task.parent_id == None)  # top-level only by default
-    # Date range filtering on created_at
-    if date_from:
+    # Date range filtering — match tasks created OR completed within the range
+    if date_from or date_to:
+        from datetime import datetime as _dt, timedelta
         try:
-            from datetime import datetime as _dt
-            dt_from = _dt.fromisoformat(date_from)
-            q = q.filter(Task.created_at >= dt_from)
+            dt_from = _dt.fromisoformat(date_from) if date_from else None
         except (ValueError, TypeError):
-            pass
-    if date_to:
+            dt_from = None
         try:
-            from datetime import datetime as _dt
-            dt_to = _dt.fromisoformat(date_to)
-            # Include the entire end date by adding one day
-            from datetime import timedelta
-            dt_to = dt_to + timedelta(days=1)
-            q = q.filter(Task.created_at < dt_to)
+            dt_to = (_dt.fromisoformat(date_to) + timedelta(days=1)) if date_to else None
         except (ValueError, TypeError):
-            pass
+            dt_to = None
+        from sqlalchemy import or_
+        # Match tasks where ANY timestamp falls in the range
+        date_cols = [Task.created_at, Task.completed_at, Task.approved_at, Task.updated_at]
+        date_conditions = []
+        for col in date_cols:
+            if dt_from and dt_to:
+                date_conditions.append((col >= dt_from) & (col < dt_to))
+            elif dt_from:
+                date_conditions.append(col >= dt_from)
+            elif dt_to:
+                date_conditions.append(col < dt_to)
+        if date_conditions:
+            q = q.filter(or_(*date_conditions))
     # Exclude archived tasks by default; ?archived=1 shows them
     if not show_archived or show_archived != '1':
         q = q.filter((Task.archived == False) | (Task.archived == None))
-    tasks = q.order_by(Task.created_at.desc()).limit(100).all()
+    from sqlalchemy import func, case
+    sort_col = case(
+        (Task.completed_at != None, Task.completed_at),
+        else_=Task.created_at,
+    )
+    tasks = q.order_by(sort_col.desc()).limit(500).all()
 
     def task_dict(t):
         subtasks = db.query(Task).filter(Task.parent_id == t.id).all()
@@ -3129,22 +3521,37 @@ def get_task_result(task_id):
             InternalMessage.from_key == task.assignee_key,
         ).order_by(InternalMessage.created_at.desc()).first()
 
-    # Get subtask results too
+    # Get subtask results too — prefer task.deliverable column, fall back to InternalMessage
     subtasks = db.query(Task).filter(Task.parent_id == task_id).all()
     sub_results = []
     for st in subtasks:
-        st_thread = f"chat_{st.assignee_type}_{st.assignee_key}"
-        st_msg = db.query(InternalMessage).filter(
-            InternalMessage.thread_id == st_thread,
-            InternalMessage.from_key == st.assignee_key,
-            InternalMessage.msg_type == 'email',
-        ).order_by(InternalMessage.created_at.desc()).first()
+        st_deliverable = getattr(st, 'deliverable', None) or ''
+        st_subject = None
+        if not st_deliverable:
+            # Fall back to InternalMessage lookup
+            st_thread = f"chat_{st.assignee_type}_{st.assignee_key}"
+            st_msg = db.query(InternalMessage).filter(
+                InternalMessage.thread_id == st_thread,
+                InternalMessage.from_key == st.assignee_key,
+                InternalMessage.msg_type == 'email',
+                InternalMessage.subject.ilike(f'%{st.title[:30]}%'),
+            ).order_by(InternalMessage.created_at.desc()).first()
+            if not st_msg:
+                # Broader fallback — any recent email from this assignee
+                st_msg = db.query(InternalMessage).filter(
+                    InternalMessage.thread_id == st_thread,
+                    InternalMessage.from_key == st.assignee_key,
+                    InternalMessage.msg_type == 'email',
+                ).order_by(InternalMessage.created_at.desc()).first()
+            if st_msg:
+                st_deliverable = st_msg.body[:3000]
+                st_subject = st_msg.subject
         sub_results.append({
             'id': st.id, 'title': st.title, 'status': st.status,
             'assignee_name': st.assignee_name, 'assignee_key': st.assignee_key,
             'department': getattr(st, 'department', None) or _dept_from_assignee(st.assignee_key),
-            'deliverable': st_msg.body[:2000] if st_msg else None,
-            'deliverable_subject': st_msg.subject if st_msg else None,
+            'deliverable': st_deliverable[:3000] if st_deliverable else None,
+            'deliverable_subject': st_subject,
         })
 
     # Extract image URLs from deliverable body (pattern: /static/media/...)
@@ -3201,6 +3608,35 @@ def get_task_result(task_id):
         err = re.search(r'\[(?:ERROR|EXECUTION ERROR):?\s*(.*?)\]', task.description or '')
         timing['error'] = err.group(1) if err else None
 
+    # Find published posts linked to this task (by agent ID in description/title)
+    published_posts = []
+    try:
+        import re as _re
+        from src.database.models import Content
+        # Extract agent ID from task description or title
+        aid_match = _re.search(r'Agent\s*(?:ID\s*)?(\d+)', (task.description or '') + ' ' + (task.title or ''), _re.IGNORECASE)
+        if aid_match:
+            _aid = int(aid_match.group(1))
+            recent_pub = db.query(Content).filter(
+                Content.agent_id == _aid,
+                Content.status == 'published',
+                Content.post_id.isnot(None),
+            ).order_by(Content.published_at.desc()).limit(3).all()
+            for rp in recent_pub:
+                plat = (rp.platform or '').lower().replace('/', '').replace(' ', '')
+                url = None
+                if ('twitter' in plat or plat == 'x') and rp.post_id:
+                    url = f'https://x.com/i/status/{rp.post_id}'
+                elif 'instagram' in plat and rp.post_id:
+                    url = f'https://www.instagram.com/p/{rp.post_id}/'
+                published_posts.append({
+                    'id': rp.id, 'platform': rp.platform, 'post_id': rp.post_id,
+                    'url': url, 'published_at': rp.published_at.isoformat() if rp.published_at else None,
+                    'title': (rp.title or '')[:80],
+                })
+    except Exception:
+        pass
+
     return jsonify({
         'task': {
             'id': task.id, 'title': task.title, 'description': task.description,
@@ -3215,6 +3651,7 @@ def get_task_result(task_id):
         'deliverable_subject': deliverable.subject if deliverable else None,
         'images': images,
         'subtasks': sub_results,
+        'published_posts': published_posts,
         'inbox_link': f'/inbox?entity_type={task.assignee_type}&entity_key={task.assignee_key}',
     }), 200
 
@@ -3381,10 +3818,11 @@ def _execute_task_in_background(task_snapshot):
         db.close()
 
 
-_IMAGE_ROLES = {'prompt_engineer_1', 'prompt_engineer_2', 'creative_director'}
-_IMAGE_KEYWORDS = ['profile picture', 'profile pic', 'portrait', 'headshot', 'generate image',
-                   'ai image', 'visual', 'photo', 'photograph', 'design asset', 'carousel',
-                   'generate.*picture', 'create.*image', 'produce.*visual']
+_IMAGE_ROLES = {'prompt_engineer_1', 'prompt_engineer_2'}
+_IMAGE_KEYWORDS = ['profile picture', 'profile pic', 'portrait photo', 'headshot',
+                   'generate.*image', 'generate.*picture', 'generate.*photo',
+                   'create.*image', 'create.*portrait', 'ai.*profile',
+                   'produce.*image', 'design.*profile.*pic']
 
 def _is_image_task(assignee_key, title, description):
     """Detect if a task should trigger actual image generation."""
@@ -3544,9 +3982,13 @@ def _execute_individual_task(db, task, entity, assignee_type, assignee_key):
     )
     db.add(ai_msg)
 
-    # Mark task as done
+    # Mark task as done — also store deliverable on the task row for quick access
     task.status = 'done'
     task.completed_at = datetime.utcnow()
+    task.deliverable = reply[:5000] if reply else None
+
+    # ── Auto-create Content draft if task produces platform content ──
+    _maybe_create_content_from_task(db, task, reply, generated_images)
 
     notif_body = f'{reply[:150]}...' if len(reply) > 150 else reply
     if generated_images:
@@ -3561,6 +4003,139 @@ def _execute_individual_task(db, task, entity, assignee_type, assignee_key):
     db.commit()
     logging.info(f"[TaskExec] ✅ Task #{task.id} completed by {name} — {len(reply)} chars, {len(generated_images)} images")
     return reply
+
+
+def _maybe_create_content_from_task(db, task, deliverable, images=None):
+    """If a task is about creating social content for an agent, auto-create a Content draft."""
+    import re
+    from src.database.models import Content, Agent
+
+    if not deliverable:
+        return
+
+    title_lower = (task.title or '').lower()
+    desc_lower = (task.description or '').lower()
+    combined = f"{title_lower} {desc_lower}"
+
+    # Detect platform from task title/description
+    platform = None
+    for p in ['twitter', 'instagram', 'linkedin', 'tiktok']:
+        if p in combined:
+            platform = p
+            break
+    if 'tweet' in combined or ' x ' in combined:
+        platform = platform or 'twitter'
+
+    if not platform:
+        return  # Not a content-creation task
+
+    # Detect agent from task title/description
+    agent = None
+    # Try matching agent name in the title (e.g. "for David Chen")
+    agents = db.query(Agent).all()
+    for a in agents:
+        if a.name.lower() in combined:
+            agent = a
+            break
+    # Try extracting agent ID from description (e.g. "Agent ID: 2")
+    if not agent:
+        m = re.search(r'agent\s*(?:id)?[:\s#]*(\d+)', combined)
+        if m:
+            agent = db.query(Agent).filter(Agent.id == int(m.group(1))).first()
+
+    if not agent:
+        return  # Can't determine which agent this is for
+
+    # Extract the actual post content from the deliverable
+    body = _extract_post_body_from_deliverable(deliverable, platform)
+    if not body or len(body.strip()) < 10:
+        return
+
+    # Reject internal notes / operational content that isn't actual post copy
+    _internal_markers = [
+        'capacity note', 'note to victoria', 'note before we start',
+        "i'm executing", "i'm running this", 'briefing james', 'briefing elena',
+        "ryan's copy", "problem: i don't have", 'these are ready to go. a few notes',
+        'prepared by:', '**to:**', '**from:**', '**re:**', 'executive summary',
+        'before i can confirm', 'urgent flag', 'qa pass', 'standby',
+    ]
+    body_lower = body[:150].lower()
+    if any(m in body_lower for m in _internal_markers):
+        return  # Not actual post content
+
+    # Twitter: sanitize and enforce 260 char limit
+    if platform in ('twitter', 'x'):
+        platform = 'Twitter/X'
+        body = _sanitize_twitter_body(body)
+
+    media = [img['url'] for img in (images or []) if img.get('url')]
+
+    post = Content(
+        agent_id=agent.id,
+        title=body[:100],
+        body=body,
+        hashtags=[],
+        media_urls=media,
+        platform=platform,
+        status='draft',
+    )
+    db.add(post)
+    db.flush()
+    logging.info(f"[TaskExec] 📝 Auto-created {platform} draft #{post.id} for {agent.name} from task #{task.id}")
+
+
+def _extract_post_body_from_deliverable(text, platform):
+    """Extract the actual post/tweet text from an LLM deliverable.
+
+    Deliverables are often complex documents (executive summaries, briefs) that
+    contain the actual post text in blockquotes (> lines) or after variant headers.
+    """
+    import re
+
+    if not text:
+        return ''
+
+    # ── Strategy 1: Extract blockquoted content (most reliable for tweet deliverables) ──
+    # Pattern: "> line1\n> line2\n> line3" — the actual post is usually in blockquotes
+    blockquotes = re.findall(r'(?:^|\n)((?:>\s*[^\n]+\n?)+)', text)
+    if blockquotes:
+        # Take the first blockquote that has substantial content
+        for bq in blockquotes:
+            clean = re.sub(r'^>\s?', '', bq, flags=re.MULTILINE).strip()
+            if len(clean) > 20:
+                return clean
+
+    # ── Strategy 2: Find content after Variant A / Single Tweet headers ──
+    for pattern in [
+        r'(?:variant\s*a|single\s*tweet|tweet\s*1\s*(?:of|/)\s*\d+)[^\n]*\n+(.*?)(?:\n\s*(?:\*\*char|char\s*count|variant\s*b|---|\Z))',
+        r'(?:tweet\s*1|tweet\s*\d+\s*of\s*\d+)[:\s]*\n+(.*?)(?:\n\s*\n\s*(?:tweet|---|\Z))',
+        r'(?:post|caption)[:\s]*\n+(.*?)(?:\n\s*\n|\n\s*---|\Z)',
+    ]:
+        m = re.search(pattern, text, re.IGNORECASE | re.DOTALL)
+        if m:
+            candidate = m.group(1).strip()
+            candidate = re.sub(r'^>\s*', '', candidate, flags=re.MULTILINE).strip()
+            if len(candidate) > 20:
+                return candidate
+
+    # ── Strategy 3: If text starts directly with content (no headers/JSON) ──
+    lines = text.strip().split('\n')
+    first_line = lines[0].strip()
+    skip_starts = ['#', '**', '===', '---', 'task', 'deliverable', 'here', 'below',
+                   'running', 'brief', 'from:', 'to:', '{', '[', '```']
+    if not any(first_line.lower().startswith(h) for h in skip_starts):
+        para = []
+        for line in lines:
+            line = line.strip()
+            if not line and para:
+                break
+            if line:
+                para.append(line)
+        candidate = '\n'.join(para)
+        if 20 < len(candidate) < 500:
+            return candidate
+
+    return ''
 
 
 def _execute_cascade_task(db, parent_task, head_entity, direct_reports):
@@ -3727,8 +4302,11 @@ def _execute_cascade_task(db, parent_task, head_entity, direct_reports):
     # ── STEP 3: Execute sub-tasks in parallel (2 workers) ──
     from concurrent.futures import ThreadPoolExecutor, as_completed
 
-    def _run_sub(st):
-        sub_db = get_db()
+    def _run_sub(st, idx=0):
+        import time as _time
+        _time.sleep(idx * 0.5)  # stagger DB access slightly
+        from src.database.db import get_db as _get_db
+        sub_db = _get_db()
         try:
             from src.database.models import Task as _T, TeamMember as _TM
             sub_task = sub_db.query(_T).filter(_T.id == st.id).first()
@@ -3759,7 +4337,7 @@ def _execute_cascade_task(db, parent_task, head_entity, direct_reports):
 
     sub_results = []
     with ThreadPoolExecutor(max_workers=2, thread_name_prefix='sub-task') as pool:
-        futures = {pool.submit(_run_sub, st): st for st in sub_task_objects}
+        futures = {pool.submit(_run_sub, st, i): st for i, st in enumerate(sub_task_objects)}
         for future in as_completed(futures):
             sub_results.append(future.result())
 
@@ -3809,6 +4387,7 @@ def _execute_cascade_task(db, parent_task, head_entity, direct_reports):
     # Mark parent task done
     parent_task.status = 'done'
     parent_task.completed_at = datetime.utcnow()
+    parent_task.deliverable = (summary_reply or '')[:5000]
 
     # Success notification with summary
     db.add(Notification(
@@ -3836,6 +4415,282 @@ def reject_task(task_id):
     return jsonify({'ok': True}), 200
 
 
+@app.route('/api/task-stop/<int:task_id>', methods=['POST'])
+def stop_task(task_id):
+    """Force-stop a stuck in_progress task → marks it as 'blocked'."""
+    from flask import g
+    from src.database.models import Task
+    db = g.db
+    task = db.query(Task).filter(Task.id == task_id).first()
+    if not task:
+        return jsonify({'error': 'Task not found'}), 404
+    if task.status != 'in_progress':
+        return jsonify({'error': f'Task is {task.status}, not in_progress'}), 400
+    task.status = 'blocked'
+    task.deliverable = (task.deliverable or '') + '\n\n[STOPPED] Task was manually stopped by user.'
+    db.commit()
+    # Also stop any in-progress sub-tasks
+    sub_tasks = db.query(Task).filter(Task.parent_id == task_id, Task.status == 'in_progress').all()
+    for st in sub_tasks:
+        st.status = 'blocked'
+        st.deliverable = (st.deliverable or '') + '\n\n[STOPPED] Parent task was manually stopped.'
+    db.commit()
+    return jsonify({'ok': True, 'stopped_subtasks': len(sub_tasks)}), 200
+
+
+@app.route('/api/task-retry/<int:task_id>', methods=['POST'])
+def retry_task(task_id):
+    """Re-run a blocked/failed task from scratch."""
+    from flask import g
+    from src.database.models import Task
+    db = g.db
+    task = db.query(Task).filter(Task.id == task_id).first()
+    if not task:
+        return jsonify({'error': 'Task not found'}), 404
+    if task.status not in ('blocked', 'failed'):
+        return jsonify({'error': f'Task is {task.status}, only blocked/failed tasks can be retried'}), 400
+    # Reset task state — strip old error messages from description
+    import re as _re
+    task.status = 'in_progress'
+    task.deliverable = None
+    task.completed_at = None
+    task.approved_at = datetime.utcnow()
+    if task.description:
+        task.description = _re.sub(r'\n?\[(?:EXECUTION ERROR|ERROR|STOPPED):?[^\]]*\]', '', task.description).strip()
+    db.commit()
+    # Build snapshot and dispatch
+    snapshot = {
+        'id': task.id, 'title': task.title, 'description': task.description,
+        'assignee_type': task.assignee_type, 'assignee_key': task.assignee_key,
+        'assignee_name': task.assignee_name, 'priority': task.priority,
+    }
+    thread = threading.Thread(target=_execute_task_in_background, args=(snapshot,), name=f'task-retry-{task_id}', daemon=True)
+    thread.start()
+    return jsonify({'ok': True}), 200
+
+
+_DEPT_HEADS = {
+    'newsroom': 'eic',
+    'tech': 'cto',
+    'sales': 'vp_sales',
+    'leadership': 'general_manager',
+}
+
+
+@app.route('/api/task-review/<int:task_id>', methods=['GET'])
+def get_task_review_chat(task_id):
+    """Get review chat history for a task."""
+    from flask import g
+    from src.database.models import Task, InternalMessage
+    db = g.db
+    task = db.query(Task).filter(Task.id == task_id).first()
+    if not task:
+        return jsonify({'error': 'Task not found'}), 404
+    thread_id = f"task_review_{task_id}"
+    messages = db.query(InternalMessage).filter(
+        InternalMessage.thread_id == thread_id
+    ).order_by(InternalMessage.created_at.asc()).all()
+    return jsonify({
+        'messages': [{
+            'from_type': m.from_type, 'from_name': m.from_name,
+            'from_emoji': m.from_emoji or '', 'body': m.body,
+            'created_at': m.created_at.isoformat() if m.created_at else None,
+        } for m in messages]
+    }), 200
+
+
+@app.route('/api/task-review/<int:task_id>', methods=['POST'])
+def post_task_review_chat(task_id):
+    """Chat with the department head to review a task deliverable."""
+    from flask import g
+    from src.database.models import Task, TeamMember, InternalMessage
+    db = g.db
+    task = db.query(Task).filter(Task.id == task_id).first()
+    if not task:
+        return jsonify({'error': 'Task not found'}), 404
+
+    data = request.json or {}
+    user_msg = data.get('message', '').strip()
+    if not user_msg:
+        return jsonify({'error': 'message required'}), 400
+
+    # Determine department head for this task
+    dept = getattr(task, 'department', None) or _dept_from_assignee(task.assignee_key)
+    head_key = _DEPT_HEADS.get(dept, 'eic')
+    head = db.query(TeamMember).filter(TeamMember.role_key == head_key).first()
+    if not head:
+        return jsonify({'error': f'Department head {head_key} not found'}), 404
+
+    head_name = head.display_name
+    head_emoji = head.emoji or ''
+    thread_id = f"task_review_{task_id}"
+
+    # Save user message
+    user_row = InternalMessage(
+        from_type='user', from_key='supervisor', from_name='You', from_emoji='',
+        body=user_msg, msg_type='chat', thread_id=thread_id, is_read=True
+    )
+    db.add(user_row)
+    db.commit()
+
+    # Load conversation history
+    history = db.query(InternalMessage).filter(
+        InternalMessage.thread_id == thread_id
+    ).order_by(InternalMessage.created_at.desc()).limit(20).all()
+    history.reverse()
+
+    conv_lines = []
+    for h in history[:-1]:
+        role = 'Supervisor' if h.from_type == 'user' else head_name
+        conv_lines.append(f"{role}: {h.body[:500]}")
+    conv_context = '\n'.join(conv_lines)
+
+    # Build review-specific system prompt — get deliverable from task row or fall back to inbox
+    deliverable_preview = task.deliverable or ''
+    if not deliverable_preview:
+        # Fall back: look up the deliverable email from the assignee's thread
+        canonical_thread = f"chat_team_member_{task.assignee_key}"
+        deliv_msg = db.query(InternalMessage).filter(
+            InternalMessage.thread_id == canonical_thread,
+            InternalMessage.from_type == 'team_member',
+            InternalMessage.subject.ilike(f'%{task.title[:40]}%'),
+        ).order_by(InternalMessage.created_at.desc()).first()
+        if deliv_msg:
+            deliverable_preview = deliv_msg.body[:3000]
+        else:
+            deliverable_preview = 'No deliverable found yet.'
+    deliverable_preview = deliverable_preview[:3000]
+    review_prompt = (
+        f"You are {head_name}, {head.role_title}.\n"
+        f"{head.system_prompt or ''}\n\n"
+        f"=== TASK UNDER REVIEW ===\n"
+        f"Title: {task.title}\n"
+        f"Assigned to: {task.assignee_name}\n"
+        f"Status: {task.status}\n"
+        f"Description: {task.description or 'N/A'}\n\n"
+        f"=== DELIVERABLE ===\n{deliverable_preview}\n\n"
+        f"=== YOUR ROLE ===\n"
+        f"The Supervisor (your boss / the founder) is reviewing this task's output with you. "
+        f"You are the department head responsible for this work. "
+        f"Discuss the deliverable honestly — what's good, what could be improved. "
+        f"If the Supervisor asks you to send it back for rework, acknowledge it and say you'll brief the team member. "
+        f"If the Supervisor validates the work, confirm it's approved. "
+        f"Be concise, professional, and direct. Think like a senior creative/editorial director reviewing work."
+    )
+
+    prompt = f"{conv_context}\nSupervisor: {user_msg}\n{head_name}:" if conv_context else user_msg
+
+    try:
+        from src.api.llm_provider import LLMProvider
+        provider = head.llm_provider or 'anthropic'
+        model = head.llm_model or 'claude-sonnet-4-20250514'
+        temp = head.temperature if head.temperature is not None else 0.7
+        llm = LLMProvider(provider=provider, model=model)
+        reply = llm.generate_content(
+            prompt=prompt,
+            max_tokens=1500,
+            temperature=temp,
+            system_prompt=review_prompt
+        )
+        clean_reply = (reply or '').strip()
+
+        # Check if head signals rework
+        rework = False
+        rework_keywords = ['send it back', 'rework', 'redo', 'revise', "i'll brief", "i will brief", 'back to the team']
+        if any(kw in clean_reply.lower() for kw in rework_keywords):
+            rework = True
+
+        # Save AI reply
+        ai_row = InternalMessage(
+            from_type='team_member', from_key=head_key,
+            from_name=head_name, from_emoji=head_emoji,
+            body=clean_reply, msg_type='chat', thread_id=thread_id, is_read=False
+        )
+        db.add(ai_row)
+        db.commit()
+
+        return jsonify({
+            'ok': True,
+            'reply': clean_reply,
+            'head_name': head_name,
+            'head_emoji': head_emoji,
+            'head_key': head_key,
+            'rework_detected': rework,
+        }), 200
+
+    except Exception as e:
+        logging.error(f"[TaskReview] Chat error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/task-rework/<int:task_id>', methods=['POST'])
+def rework_task(task_id):
+    """Send a task back for rework with supervisor's feedback notes."""
+    from flask import g
+    from src.database.models import Task
+    db = g.db
+    task = db.query(Task).filter(Task.id == task_id).first()
+    if not task:
+        return jsonify({'error': 'Task not found'}), 404
+
+    data = request.json or {}
+    notes = data.get('notes', 'Rework requested by supervisor.')
+
+    # Reset task with rework context
+    original_deliverable = task.deliverable or ''
+    task.status = 'in_progress'
+    task.deliverable = None
+    task.completed_at = None
+    task.description = (task.description or '') + f"\n\n[REWORK] Supervisor feedback: {notes}\n\nPrevious deliverable for reference:\n{original_deliverable[:2000]}"
+    task.approved_at = datetime.utcnow()
+    db.commit()
+
+    # Re-dispatch
+    snapshot = {
+        'id': task.id, 'title': task.title, 'description': task.description,
+        'assignee_type': task.assignee_type, 'assignee_key': task.assignee_key,
+        'assignee_name': task.assignee_name, 'priority': task.priority,
+    }
+    thread = threading.Thread(target=_execute_task_in_background, args=(snapshot,), name=f'task-rework-{task_id}', daemon=True)
+    thread.start()
+    return jsonify({'ok': True}), 200
+
+
+@app.route('/api/tasks/retry_all_blocked', methods=['POST'])
+def retry_all_blocked():
+    """Retry all blocked tasks (including sub-tasks)."""
+    from flask import g
+    from src.database.models import Task
+    db = g.db
+    _not_archived = (Task.archived == False) | (Task.archived == None)
+    blocked = db.query(Task).filter(
+        Task.status == 'blocked', _not_archived
+    ).all()
+    import re as _re
+    snapshots = []
+    for t in blocked:
+        t.status = 'in_progress'
+        t.deliverable = None
+        t.completed_at = None
+        t.approved_at = datetime.utcnow()
+        if t.description:
+            t.description = _re.sub(r'\n?\[(?:EXECUTION ERROR|ERROR|STOPPED):?[^\]]*\]', '', t.description).strip()
+        snapshots.append({
+            'id': t.id, 'title': t.title, 'description': t.description,
+            'assignee_type': t.assignee_type, 'assignee_key': t.assignee_key,
+            'assignee_name': t.assignee_name, 'priority': t.priority,
+        })
+    db.commit()
+
+    from concurrent.futures import ThreadPoolExecutor
+    def _run_all(snaps):
+        with ThreadPoolExecutor(max_workers=2, thread_name_prefix='retry-exec') as pool:
+            pool.map(_execute_task_in_background, snaps)
+    thread = threading.Thread(target=_run_all, args=(snapshots,), name='retry-all-blocked', daemon=True)
+    thread.start()
+    return jsonify({'ok': True, 'retried': len(snapshots)}), 200
+
+
 @app.route('/api/tasks/approve_all', methods=['POST'])
 def approve_all_tasks():
     """Approve all pending cofounder tasks at once and dispatch background execution."""
@@ -3861,7 +4716,7 @@ def approve_all_tasks():
     # Dispatch in parallel batches (3 concurrent workers to respect rate limits)
     from concurrent.futures import ThreadPoolExecutor
     def _run_all_parallel(snaps):
-        with ThreadPoolExecutor(max_workers=3, thread_name_prefix='task-exec') as pool:
+        with ThreadPoolExecutor(max_workers=2, thread_name_prefix='task-exec') as pool:
             pool.map(_execute_task_in_background, snaps)
     thread = threading.Thread(target=_run_all_parallel, args=(snapshots,), name='task-exec-all', daemon=True)
     thread.start()
@@ -3876,11 +4731,12 @@ def get_tasks_progress():
     from src.database.models import Task
     db = g.db
     _not_archived = (Task.archived == False) | (Task.archived == None)
-    pending = db.query(Task).filter(Task.requires_approval == True, Task.approved_at == None, Task.status != 'rejected', _not_archived).count()
-    in_progress = db.query(Task).filter(Task.status == 'in_progress', _not_archived).count()
-    done = db.query(Task).filter(Task.status == 'done', _not_archived).count()
-    blocked = db.query(Task).filter(Task.status == 'blocked', _not_archived).count()
-    recent_done = db.query(Task).filter(Task.status == 'done', _not_archived).order_by(Task.completed_at.desc()).limit(5).all()
+    _top_level = Task.parent_id == None
+    pending = db.query(Task).filter(Task.requires_approval == True, Task.approved_at == None, Task.status != 'rejected', _not_archived, _top_level).count()
+    in_progress = db.query(Task).filter(Task.status == 'in_progress', _not_archived, _top_level).count()
+    done = db.query(Task).filter(Task.status == 'done', _not_archived, _top_level).count()
+    blocked = db.query(Task).filter(Task.status == 'blocked', _not_archived, _top_level).count()
+    recent_done = db.query(Task).filter(Task.status == 'done', _not_archived, _top_level).order_by(Task.completed_at.desc()).limit(5).all()
     return jsonify({
         'pending_approval': pending,
         'in_progress': in_progress,

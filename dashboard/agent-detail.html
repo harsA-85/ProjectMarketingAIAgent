@@ -1383,19 +1383,19 @@
 <div id="publishProgress">
     <div class="pp-card">
         <div class="pp-title">Publishing post…</div>
-        <div class="pp-sub" id="pp-platform-label">Uploading to Instagram</div>
+        <div class="pp-sub" id="pp-platform-label">Uploading to platform</div>
         <div class="pp-steps">
             <div class="pp-step" id="pp-step-0">
                 <div class="pp-step-icon">1</div>
-                <span>Uploading images to CDN</span>
+                <span>Preparing content</span>
             </div>
             <div class="pp-step" id="pp-step-1">
                 <div class="pp-step-icon">2</div>
-                <span>Creating media container</span>
+                <span>Connecting to platform</span>
             </div>
             <div class="pp-step" id="pp-step-2">
                 <div class="pp-step-icon">3</div>
-                <span>Instagram processing…</span>
+                <span id="pp-step-2-label">Processing…</span>
             </div>
             <div class="pp-step" id="pp-step-3">
                 <div class="pp-step-icon">4</div>
@@ -1977,18 +1977,53 @@ function initCarouselSwipe(carouselId) {
 // ── Preview builders ──
 function createSocialPreview(post) {
     let card = '';
-    if (post.platform === 'instagram') card = createIgPreview(post);
-    else if (post.platform === 'twitter') card = createTwPreview(post);
-    else if (post.platform === 'tiktok')  card = createTtPreview(post);
+    const plat = (post.platform || '').toLowerCase();
+    if (plat === 'instagram') card = createIgPreview(post);
+    else if (plat === 'twitter' || plat === 'twitter/x' || plat === 'x') card = createTwPreview(post);
+    else if (plat === 'tiktok')  card = createTtPreview(post);
+    else card = createGenericPreview(post);
     return `<div class="post-wrapper">${card}${createPostActionBar(post)}</div>`;
 }
 
+function createGenericPreview(post) {
+    const platformIcons = { linkedin:'💼', facebook:'📘', blog:'📝', email:'📧', newsletter:'📩' };
+    const icon = platformIcons[(post.platform||'').toLowerCase()] || '📄';
+    const plat = post.platform || 'Post';
+    const body = cleanBody(post.body || '');
+    const username = getUsername();
+    return `<div class="li-card" style="background:#fff;border:1px solid #e0e0e0;border-radius:12px;overflow:hidden;font-family:-apple-system,system-ui,sans-serif;max-width:520px">
+        <div style="padding:14px 16px;display:flex;align-items:center;gap:10px;border-bottom:1px solid #f0f0f0">
+            <div style="width:40px;height:40px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:16px">${getAvatarLetter()}</div>
+            <div>
+                <div style="font-weight:700;font-size:13px;color:#000">${agentData?.agent_name || 'Agent'}</div>
+                <div style="font-size:11px;color:#666">${icon} ${plat}</div>
+            </div>
+        </div>
+        <div style="padding:14px 16px;font-size:13px;line-height:1.65;color:#1a1a1a;white-space:pre-wrap;max-height:300px;overflow-y:auto">${body}</div>
+    </div>`;
+}
+
 function createPostActionBar(post) {
+    const plat = (post.platform || '').toLowerCase().replace('/', '').replace(' ', '');
+    const isTwitter = plat.includes('twitter') || plat === 'x';
+    const isInsta   = plat.includes('instagram') || plat === 'ig';
+    const platLabel = isTwitter ? 'X / Twitter' : isInsta ? 'Instagram' : (post.platform || 'Platform');
+
     const scheduledLabel = post.scheduled_at
         ? `Scheduled: ${new Date(post.scheduled_at).toLocaleString([], {month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})}`
         : post.status === 'published'
             ? `Published: ${post.published_at ? new Date(post.published_at).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}) : ''}`
             : 'Draft — not scheduled';
+
+    // Build "View on platform" link for published posts
+    let viewLink = '';
+    if (post.post_id && post.status === 'published') {
+        if (isTwitter) {
+            viewLink = `<a class="pa-btn pa-publish" href="https://x.com/i/status/${post.post_id}" target="_blank" style="text-decoration:none">𝕏 View Tweet</a>`;
+        } else if (isInsta) {
+            viewLink = `<a class="pa-btn pa-publish" href="https://www.instagram.com/p/${post.post_id}/" target="_blank" style="text-decoration:none">📸 View Post</a>`;
+        }
+    }
 
     const editBtn      = `<button class="pa-btn pa-edit"    onclick="openEditPostModal(${post.id}, this)">✏️ Edit</button>`;
     const hashtagBtn   = `<button class="pa-btn pa-edit"    onclick="smartHashtags(${post.id}, this)" title="AI generates optimal hashtags">#️⃣</button>`;
@@ -1997,7 +2032,7 @@ function createPostActionBar(post) {
         draft: `
             ${editBtn}${hashtagBtn}
             <button class="pa-btn pa-schedule" onclick="openScheduleModal(${post.id}, this)">📅 Schedule</button>
-            <button class="pa-btn pa-publish"  onclick="publishNow(${post.id})">🚀 Instagram</button>
+            <button class="pa-btn pa-publish"  onclick="publishNow(${post.id})">🚀 ${platLabel}</button>
             ${publishAllBtn}
             <button class="pa-btn pa-delete"   onclick="deletePost(${post.id})">🗑 Delete</button>`,
         scheduled: `
@@ -2005,6 +2040,7 @@ function createPostActionBar(post) {
             <button class="pa-btn pa-cancel"   onclick="cancelSchedule(${post.id})">✕ Unschedule</button>
             <button class="pa-btn pa-publish"  onclick="publishNow(${post.id})">🚀 Publish Now</button>`,
         published: `
+            ${viewLink}
             <button class="pa-btn pa-cancel"   onclick="cancelSchedule(${post.id})">↩ Revert to Draft</button>
             <button class="pa-btn pa-delete"   onclick="deletePost(${post.id})">🗑 Delete</button>`
     };
@@ -2031,9 +2067,18 @@ function cleanBody(raw) {
     if (!raw) return '';
     let text = raw;
     const trimmed = raw.trim();
+    // Handle JSON array — join elements into readable text
+    if (trimmed.startsWith('[')) {
+        try {
+            const arr = JSON.parse(trimmed);
+            if (Array.isArray(arr)) text = arr.join('\n\n');
+        } catch(e) {
+            // Strip leading [" and trailing "] if malformed
+            text = trimmed.replace(/^\["?/, '').replace(/"?\]$/, '');
+        }
+    }
     if (trimmed.startsWith('{')) {
         try {
-            // Fix escaped single quotes that break JSON.parse
             const fixed = trimmed.replace(/\\'/g, "'");
             const parsed = JSON.parse(fixed);
             text = parsed.caption || parsed.body || raw;
@@ -2054,12 +2099,16 @@ function cleanBody(raw) {
 
 // Extract hashtags from body if stored as JSON and post.hashtags is empty
 function getHashtags(post) {
-    if (post.hashtags && post.hashtags.length > 0) return post.hashtags;
+    let tags = post.hashtags;
+    if (tags && typeof tags === 'string') {
+        try { tags = JSON.parse(tags); } catch(e) { tags = tags.split(/[,;\n]+/).map(h => h.trim().replace(/^#/, '')).filter(Boolean); }
+    }
+    if (Array.isArray(tags) && tags.length > 0) return tags;
     const trimmed = (post.body || '').trim();
     if (trimmed.startsWith('{')) {
         try {
             const parsed = JSON.parse(trimmed);
-            return parsed.hashtags || [];
+            return _ensureArray(parsed.hashtags);
         } catch (e) { return []; }
     }
     return [];
@@ -2069,9 +2118,16 @@ function getStatusBadge(status) {
     return `<span class="badge badge-${status}">${status.toUpperCase()}</span>`;
 }
 
+function _ensureArray(v) {
+    if (!v) return [];
+    if (Array.isArray(v)) return v;
+    if (typeof v === 'string') { try { const p = JSON.parse(v); return Array.isArray(p) ? p : []; } catch(e) { return []; } }
+    return [];
+}
+
 function createIgPreview(post) {
     const username = getUsername();
-    const images   = post.media_urls || [];
+    const images   = _ensureArray(post.media_urls);
     const dateStr  = post.created_at ? new Date(post.created_at).toLocaleDateString('en-US',{month:'short',day:'numeric'}).toUpperCase() : '';
 
     return `
@@ -2107,7 +2163,7 @@ function createIgPreview(post) {
 
 function createTwPreview(post) {
     const username = getUsername();
-    const images   = post.media_urls || [];
+    const images   = _ensureArray(post.media_urls);
     const dt = post.created_at ? new Date(post.created_at) : new Date();
     const timeStr  = dt.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
     const dateStr  = dt.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
@@ -2135,12 +2191,13 @@ function createTwPreview(post) {
             <span class="tw-act">♡ Like</span>
             <span class="tw-act">📊 Views</span>
         </div>
+        ${post.post_id && post.status === 'published' ? `<div style="padding:8px 16px;border-top:1px solid #e6ecf0;text-align:center"><a href="https://x.com/i/status/${post.post_id}" target="_blank" style="color:#1d9bf0;font-size:13px;font-weight:600;text-decoration:none">View on 𝕏 ↗</a></div>` : ''}
     </div>`;
 }
 
 function createTtPreview(post) {
     const username = getUsername();
-    const images   = post.media_urls || [];
+    const images   = _ensureArray(post.media_urls);
 
     return `
     <div class="tt-card fade-up">
@@ -2207,6 +2264,8 @@ async function loadPosts() {
             return;
         }
 
+        window._postsCache = data.posts;
+
         document.getElementById('posts-content').innerHTML = `
             <div class="posts-grid">
                 ${data.posts.map(p => createSocialPreview(p)).join('')}
@@ -2240,7 +2299,7 @@ function _openPostDetailModal(post) {
     const pubDate   = post.published_at  ? new Date(post.published_at).toLocaleString('en-US',{weekday:'short',month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})  : null;
     const statusColors = { published:'rgba(48,209,88,0.15)', scheduled:'rgba(0,122,255,0.12)', draft:'rgba(255,149,0,0.12)', failed:'rgba(255,69,58,0.12)' };
     const statusText   = { published:'var(--success)', scheduled:'var(--accent)', draft:'var(--warning)', failed:'var(--danger)' };
-    const images = post.media_urls || [];
+    const images = _ensureArray(post.media_urls);
 
     const overlay = document.createElement('div');
     overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.55);backdrop-filter:blur(4px);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
@@ -2269,6 +2328,12 @@ function _openPostDetailModal(post) {
             <div style="font-size:13px;line-height:1.65;color:var(--text-1);white-space:pre-wrap;background:var(--surface-2);border-radius:var(--r-sm);padding:14px;margin-bottom:12px">${cleanBody(post.body||'')}</div>
 
             ${tagsHtml ? `<div style="margin-bottom:14px">${tagsHtml}</div>` : ''}
+
+            ${post.post_id && post.status === 'published' ? `
+            <div style="margin-bottom:14px;padding:10px 14px;background:rgba(29,155,240,0.08);border-radius:var(--r-sm);display:flex;align-items:center;gap:8px">
+                <span style="font-size:18px">𝕏</span>
+                <a href="https://x.com/i/status/${post.post_id}" target="_blank" style="color:#1d9bf0;font-size:13px;font-weight:600;text-decoration:none">View live post on X ↗</a>
+            </div>` : ''}
 
             <div style="display:flex;gap:8px;flex-wrap:wrap">
                 ${post.status === 'draft' ? `<button onclick="publishNow(${post.id});this.closest('[style*=fixed]').remove()" style="padding:7px 16px;background:var(--accent);color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer">🚀 Publish Now</button>` : ''}
@@ -2606,6 +2671,9 @@ function cleanBodyPlain(raw) {
     if (!raw) return '';
     let text = raw;
     const trimmed = raw.trim();
+    if (trimmed.startsWith('[')) {
+        try { const arr = JSON.parse(trimmed); if (Array.isArray(arr)) text = arr.join('\n\n'); } catch(e) { text = trimmed.replace(/^\["?/, '').replace(/"?\]$/, ''); }
+    }
     if (trimmed.startsWith('{')) {
         try {
             const fixed = trimmed.replace(/\\'/g, "'");
@@ -3147,13 +3215,19 @@ function closePublishProgress() {
 }
 
 async function publishNow(postId) {
-    openPublishProgress();
-    ppStep(0); // uploading images
+    // Find the post to get platform info
+    const post = (window._postsCache || []).find(p => p.id === postId);
+    const platform = (post?.platform || 'twitter').toLowerCase().replace('/', '').replace(' ', '');
+    const platLabel = platform.includes('twitter') || platform === 'x' ? 'X / Twitter'
+                    : platform.includes('instagram') ? 'Instagram'
+                    : platform.charAt(0).toUpperCase() + platform.slice(1);
 
-    // Simulate step advancement while the request runs
+    openPublishProgress(platLabel);
+    ppStep(0);
+
     const stepTimer = [
-        setTimeout(() => ppStep(1), 3000),   // creating container
-        setTimeout(() => ppStep(2), 6000),   // processing
+        setTimeout(() => ppStep(1), 1500),
+        setTimeout(() => ppStep(2), 3000),
     ];
 
     try {
@@ -3166,25 +3240,32 @@ async function publishNow(postId) {
         const res = await r.json();
 
         stepTimer.forEach(clearTimeout);
-        ppStep(3); // publishing
-        await new Promise(r => setTimeout(r, 600)); // brief pause on last step
+        ppStep(3);
+        await new Promise(r => setTimeout(r, 600));
 
         closePublishProgress();
 
         if (!r.ok) { toast('Error: ' + (res.error || 'Failed'), 'error'); return; }
 
         if (res.platform_post_id) {
-            toast(`🎉 Published! Instagram Post ID: ${res.platform_post_id}`, 'success');
+            const pid = res.platform_post_id;
+            if (platform.includes('twitter') || platform === 'x') {
+                toast(`Published to ${platLabel}! <a href="https://x.com/i/status/${pid}" target="_blank" style="color:#1d9bf0;text-decoration:underline">View tweet</a>`, 'success');
+            } else if (platform.includes('instagram')) {
+                toast(`Published to ${platLabel}! Post ID: ${pid}`, 'success');
+            } else {
+                toast(`Published to ${platLabel}!`, 'success');
+            }
             loadPosts();
         } else if (res.warning) {
             if (res.warning.toLowerCase().includes('no connected account') || res.warning.toLowerCase().includes('no access token')) {
-                toast('⚠️ No API token. Connect an account first.', 'error');
+                toast('No API token — connect an account first.', 'error');
             } else {
                 console.error('Publish error:', res.warning);
-                toast('❌ ' + res.warning, 'error');
+                toast(res.warning, 'error');
             }
         } else {
-            toast('Post published!', 'success');
+            toast(`Published to ${platLabel}!`, 'success');
             loadPosts();
         }
     } catch (err) {

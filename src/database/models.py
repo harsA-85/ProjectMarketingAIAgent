@@ -233,6 +233,8 @@ class Task(Base):
     department     = Column(String(30), default='newsroom')
     # Archiving — hide completed/blocked tasks from active views
     archived       = Column(Boolean, default=False)
+    # Deliverable — stores the final output text for quick access
+    deliverable    = Column(Text, nullable=True)
     # Context
     thread_id      = Column(String(100), nullable=True)        # chat thread that spawned this
     created_at     = Column(DateTime, default=datetime.utcnow)

@@ -1225,6 +1225,7 @@
                     </div>
                     <div style="flex:1"></div>
                     <button onclick="_archiveBatch('done')" style="padding:5px 12px;font-size:11px;font-weight:600;border:1px solid rgba(48,209,88,0.3);border-radius:6px;background:rgba(48,209,88,0.08);color:var(--success);cursor:pointer;transition:all 0.15s" title="Archive all completed tasks">📦 Archive Done</button>
+                    <button onclick="_retryAllBlocked(this)" style="padding:5px 12px;font-size:11px;font-weight:600;border:1px solid rgba(0,122,255,0.3);border-radius:6px;background:rgba(0,122,255,0.08);color:var(--accent);cursor:pointer;transition:all 0.15s" title="Retry all blocked tasks">🔄 Retry Blocked</button>
                     <button onclick="_archiveBatch('blocked')" style="padding:5px 12px;font-size:11px;font-weight:600;border:1px solid rgba(255,69,58,0.3);border-radius:6px;background:rgba(255,69,58,0.08);color:var(--danger);cursor:pointer;transition:all 0.15s" title="Archive all blocked tasks">📦 Archive Blocked</button>
                     <label style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text-2);cursor:pointer;user-select:none">
                         <input type="checkbox" id="gm-show-archived" onchange="_toggleShowArchived()" style="accent-color:var(--accent)">
@@ -2404,6 +2405,540 @@ async function loadGMTasks() {
 
 function _esc(s) { const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
 
+function _formatDeliverable(raw) {
+    let text = String(raw || '');
+
+    // Extract JSON from code blocks (handles unclosed code blocks from truncation)
+    const codeBlock = text.match(/```(?:json)?\s*([\s\S]*?)(?:```|$)/);
+    const jsonCandidate = codeBlock && /^\s*[\{\[]/.test(codeBlock[1]) ? codeBlock[1].trim() : null;
+    const remainder = codeBlock && jsonCandidate ? text.replace(codeBlock[0], '').trim() : '';
+
+    // Also check if the whole text is JSON-like (starts with { or [)
+    const fullJsonCandidate = !jsonCandidate && /^\s*[\{\[]/.test(text) ? text.trim() : null;
+
+    const candidates = [jsonCandidate, fullJsonCandidate].filter(Boolean);
+    for (const candidate of candidates) {
+        // Try parsing directly
+        try {
+            const obj = JSON.parse(candidate);
+            if (typeof obj === 'object' && obj !== null) return _renderJsonDeliverable(obj, remainder);
+        } catch(e) {}
+
+        // Try fixing truncated JSON by closing brackets
+        try {
+            let fixed = candidate;
+            // Remove trailing comma
+            fixed = fixed.replace(/,\s*$/, '');
+            // Count unclosed braces/brackets
+            let braces = 0, brackets = 0;
+            for (const ch of fixed) {
+                if (ch === '{') braces++;
+                else if (ch === '}') braces--;
+                else if (ch === '[') brackets++;
+                else if (ch === ']') brackets--;
+            }
+            // Close them
+            while (brackets > 0) { fixed += ']'; brackets--; }
+            while (braces > 0) { fixed += '}'; braces--; }
+            // Try to fix incomplete string values (truncated mid-string)
+            const lastQuote = fixed.lastIndexOf('"');
+            const afterLast = fixed.substring(lastQuote + 1);
+            if (lastQuote > 0 && !afterLast.match(/^\s*[,:\}\]]/)) {
+                fixed = fixed.substring(0, lastQuote + 1);
+                // Re-close brackets
+                braces = 0; brackets = 0;
+                for (const ch of fixed) {
+                    if (ch === '{') braces++;
+                    else if (ch === '}') braces--;
+                    else if (ch === '[') brackets++;
+                    else if (ch === ']') brackets--;
+                }
+                while (brackets > 0) { fixed += ']'; brackets--; }
+                while (braces > 0) { fixed += '}'; braces--; }
+            }
+            const obj = JSON.parse(fixed);
+            if (typeof obj === 'object' && obj !== null) return _renderJsonDeliverable(obj, remainder);
+        } catch(e) {}
+
+        // Last resort: regex-extract key-value pairs from JSON-like text
+        return _renderJsonAsText(candidate, remainder);
+    }
+
+    // No JSON found — render as markdown
+    text = text.replace(/```[\w_]*\s*[\s\S]*?```/g, '').trim();
+    text = text.replace(/\/static\/media\/[^\s\n"']+\.(?:jpg|png|jpeg|webp)/g, '').trim();
+    return _renderMarkdown(text);
+}
+
+function _renderJsonAsText(jsonText, extra) {
+    // Render JSON-like text as formatted key-value display (when JSON.parse fails)
+    const esc = s => { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; };
+    let html = '';
+
+    // Extract "key": "value" pairs
+    const kvRegex = /"(\w[\w_]*)"\s*:\s*"((?:[^"\\]|\\.)*)"/g;
+    const arrRegex = /"(\w[\w_]*)"\s*:\s*\[([\s\S]*?)\]/g;
+    const numRegex = /"(\w[\w_]*)"\s*:\s*(\d+(?:\.\d+)?)/g;
+
+    const seen = new Set();
+    const sections = [];
+
+    // Collect string values
+    let m;
+    while ((m = kvRegex.exec(jsonText)) !== null) {
+        const key = m[1], val = m[2].replace(/\\n/g, '\n').replace(/\\"/g, '"');
+        if (seen.has(key)) continue;
+        seen.add(key);
+        sections.push({ key, val, type: 'string' });
+    }
+    // Collect arrays
+    while ((m = arrRegex.exec(jsonText)) !== null) {
+        const key = m[1], rawArr = m[2];
+        if (seen.has(key)) continue;
+        seen.add(key);
+        const items = [];
+        const itemRegex = /"((?:[^"\\]|\\.)*)"/g;
+        let im;
+        while ((im = itemRegex.exec(rawArr)) !== null) {
+            items.push(im[1].replace(/\\n/g, '\n').replace(/\\"/g, '"'));
+        }
+        if (items.length > 0) sections.push({ key, items, type: 'array' });
+    }
+    // Collect numbers
+    while ((m = numRegex.exec(jsonText)) !== null) {
+        const key = m[1];
+        if (seen.has(key)) continue;
+        seen.add(key);
+        sections.push({ key, val: m[2], type: 'number' });
+    }
+
+    // Render
+    const labelMap = {
+        headline: 'Headline', body: 'Content', social_body: 'Social Copy', caption: 'Caption',
+        key_points: 'Key Points', validation_notes: 'QA Checks', data_points: 'Data Points',
+        topic: 'Topic', summary: 'Summary', content_angle_suggestion: 'Content Angle',
+        agent: 'Agent', task: 'Task', qa_officer: 'QA Officer', platform: 'Platform',
+        format_flag: 'Format Flag', format_note: 'Format Note', validation_status: 'Validation',
+        word_count: 'Words', character_count_body: 'Characters', relevance_score: 'Relevance',
+        anchor_points: 'Anchor Points', thread_version: 'Thread', hooks: 'Hooks',
+    };
+
+    for (const s of sections) {
+        const label = labelMap[s.key] || s.key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+
+        if (s.type === 'string') {
+            if (['headline', 'topic'].includes(s.key)) {
+                html += `<div style="font-size:15px;font-weight:800;color:var(--text-1);margin:12px 0 6px;line-height:1.3">${esc(s.val)}</div>`;
+            } else if (['body', 'social_body', 'caption', 'content', 'summary'].includes(s.key)) {
+                const bodyHtml = esc(s.val).replace(/\n/g, '<br>');
+                html += `<div style="font-size:11px;font-weight:600;color:var(--text-3);text-transform:uppercase;letter-spacing:0.5px;margin:8px 0 4px">${label}</div>`;
+                html += `<div style="font-size:13px;line-height:1.7;color:var(--text-1);background:var(--surface-2);border-radius:10px;padding:14px;margin-bottom:10px">${bodyHtml}</div>`;
+            } else if (['content_angle_suggestion'].includes(s.key)) {
+                html += `<div style="font-size:11px;font-weight:600;color:var(--text-3);text-transform:uppercase;letter-spacing:0.5px;margin:8px 0 4px">${label}</div>`;
+                html += `<div style="font-size:12px;color:var(--text-2);margin-bottom:8px;line-height:1.5">${esc(s.val)}</div>`;
+            } else if (['format_flag', 'validation_status'].includes(s.key)) {
+                const color = s.val.includes('RED') || s.val === 'fail' ? 'var(--danger)' : s.val.includes('YELLOW') || s.val === 'warn' ? 'var(--warning)' : 'var(--success)';
+                html += `<span style="display:inline-block;padding:3px 10px;border-radius:6px;background:${color}15;color:${color};font-size:11px;font-weight:700;margin:4px 4px 4px 0">${esc(s.val)}</span>`;
+            } else if (!['agent', 'task', 'qa_officer', 'timestamp'].includes(s.key)) {
+                html += `<div style="font-size:12px;color:var(--text-2);margin:3px 0"><strong>${label}:</strong> ${esc(s.val)}</div>`;
+            }
+        } else if (s.type === 'array') {
+            html += `<div style="font-size:11px;font-weight:600;color:var(--text-3);text-transform:uppercase;letter-spacing:0.5px;margin:10px 0 4px">${label}</div>`;
+            if (['validation_notes'].includes(s.key)) {
+                s.items.forEach(n => {
+                    const isPass = n.includes('GREEN'); const isWarn = n.includes('YELLOW'); const isFail = n.includes('RED');
+                    const icon = isPass ? '✅' : isWarn ? '⚠️' : isFail ? '❌' : '•';
+                    const color = isPass ? 'var(--success)' : isWarn ? 'var(--warning)' : isFail ? 'var(--danger)' : 'var(--text-2)';
+                    const clean = n.replace(/\[(GREEN|YELLOW|RED)\s*—?\s*\w*\]\s*/i, '');
+                    html += `<div style="display:flex;gap:6px;align-items:flex-start;margin:3px 0;font-size:12px;line-height:1.5"><span style="flex-shrink:0">${icon}</span><span style="color:${color}">${esc(clean)}</span></div>`;
+                });
+            } else {
+                html += '<ul style="margin:4px 0 10px 16px;padding:0">';
+                s.items.forEach(item => { html += `<li style="font-size:12px;margin:3px 0;color:var(--text-2);line-height:1.5">${esc(item)}</li>`; });
+                html += '</ul>';
+            }
+        } else if (s.type === 'number') {
+            if (!['relevance_score'].includes(s.key) || parseInt(s.val) > 0) {
+                html += `<div style="font-size:12px;color:var(--text-2);margin:3px 0;display:inline-block;margin-right:12px"><strong>${label}:</strong> ${esc(s.val)}</div>`;
+            }
+        }
+    }
+
+    if (extra) html += '<div style="margin-top:12px">' + _renderMarkdown(extra) + '</div>';
+    return html || _renderMarkdown(jsonText);
+}
+
+function _renderJsonDeliverable(obj, extraText) {
+    const esc = s => { const d = document.createElement('div'); d.textContent = String(s); return d.innerHTML; };
+
+    // Pretty label for a JSON key
+    const _label = k => {
+        const map = {
+            headline:'Headline', body:'Content', social_body:'Social Copy', caption:'Caption',
+            key_points:'Key Points', validation_notes:'QA Checks', data_points:'Data Points',
+            topic:'Topic', summary:'Summary', content_angle_suggestion:'Content Angle',
+            anchor_points:'Anchor Points', relevance_score:'Relevance', platform:'Platform',
+            format_flag:'Format Flag', format_note:'Format Note', validation_status:'Validation',
+            word_count:'Words', character_count_body:'Characters', hooks:'Hooks',
+            thread_version:'Thread', content:'Content', narrative_hook:'Hook',
+            emotional_arc:'Arc', target_audience:'Audience', tone_notes:'Tone',
+        };
+        return map[k] || k.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+    };
+
+    // Recursive renderer — turns any JSON value into clean HTML
+    function _renderValue(val, key, depth) {
+        if (val === null || val === undefined) return '';
+        depth = depth || 0;
+
+        // ── String ──
+        if (typeof val === 'string') {
+            const v = val.replace(/\\n/g, '\n');
+            // Headline-like keys get big bold
+            if (['headline', 'topic'].includes(key) && depth < 2) {
+                return `<div style="font-size:${depth === 0 ? 16 : 14}px;font-weight:700;color:var(--text-1);margin:${depth === 0 ? '0 0 8px' : '8px 0 4px'};line-height:1.3">${esc(v)}</div>`;
+            }
+            // Body/content keys get a card
+            if (['body', 'social_body', 'caption', 'content', 'summary', 'content_angle_suggestion', 'narrative_hook'].includes(key)) {
+                return `<div style="font-size:13px;line-height:1.7;color:var(--text-1);background:var(--surface-2);border-radius:8px;padding:12px;margin:4px 0 8px;white-space:pre-wrap">${esc(v).replace(/\n/g,'<br>')}</div>`;
+            }
+            // Status/flag badges
+            if (['format_flag', 'validation_status'].includes(key)) {
+                const c = v.includes('RED') || v === 'fail' ? 'var(--danger)' : v.includes('YELLOW') || v === 'warn' ? 'var(--warning)' : 'var(--success)';
+                return `<span style="display:inline-block;padding:3px 10px;border-radius:6px;background:${c}15;color:${c};font-size:11px;font-weight:700;margin:2px 4px 2px 0">${esc(v)}</span>`;
+            }
+            // Default: label: value
+            return `<div style="font-size:12px;color:var(--text-2);margin:3px 0;line-height:1.5"><strong style="color:var(--text-3)">${_label(key)}:</strong> ${esc(v)}</div>`;
+        }
+
+        // ── Number / Boolean ──
+        if (typeof val === 'number' || typeof val === 'boolean') {
+            return `<div style="font-size:12px;color:var(--text-2);margin:3px 0"><strong style="color:var(--text-3)">${_label(key)}:</strong> ${val}</div>`;
+        }
+
+        // ── Array ──
+        if (Array.isArray(val)) {
+            if (val.length === 0) return '';
+            let h = `<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-3);margin:10px 0 4px">${_label(key)}</div>`;
+            // Array of strings → bullet list
+            if (typeof val[0] === 'string') {
+                // QA check style
+                if (key === 'validation_notes') {
+                    val.forEach(n => {
+                        const pass = n.includes('GREEN'), warn = n.includes('YELLOW'), fail = n.includes('RED');
+                        const icon = pass ? '✅' : warn ? '⚠️' : fail ? '❌' : '•';
+                        const col = pass ? 'var(--success)' : warn ? 'var(--warning)' : fail ? 'var(--danger)' : 'var(--text-2)';
+                        const clean = n.replace(/\[(GREEN|YELLOW|RED)\s*[—\-]?\s*\w*\]\s*/i, '');
+                        h += `<div style="display:flex;gap:6px;align-items:flex-start;margin:3px 0;font-size:12px;line-height:1.5"><span>${icon}</span><span style="color:${col}">${esc(clean)}</span></div>`;
+                    });
+                } else {
+                    h += '<ul style="margin:2px 0 8px 16px;padding:0">';
+                    val.forEach(item => { h += `<li style="font-size:12px;margin:3px 0;color:var(--text-2);line-height:1.5">${esc(item)}</li>`; });
+                    h += '</ul>';
+                }
+                return h;
+            }
+            // Array of objects → render each as a card
+            val.forEach((item, idx) => {
+                if (typeof item === 'object' && item !== null) {
+                    h += `<div style="background:var(--surface-2);border-radius:10px;padding:12px 14px;margin:6px 0;border-left:3px solid var(--accent)">`;
+                    for (const [k, v] of Object.entries(item)) {
+                        h += _renderValue(v, k, depth + 1);
+                    }
+                    h += '</div>';
+                } else {
+                    h += `<div style="font-size:12px;color:var(--text-2);margin:2px 0">${esc(String(item))}</div>`;
+                }
+            });
+            return h;
+        }
+
+        // ── Object ──
+        if (typeof val === 'object') {
+            let h = '';
+            if (key) h += `<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-3);margin:10px 0 4px">${_label(key)}</div>`;
+            h += `<div style="padding:${key ? '8px 12px' : '0'};${key ? 'background:var(--surface-2);border-radius:8px;margin-bottom:8px' : ''}">`;
+            for (const [k, v] of Object.entries(val)) {
+                h += _renderValue(v, k, depth + 1);
+            }
+            h += '</div>';
+            return h;
+        }
+
+        return '';
+    }
+
+    // Render the top-level object
+    let html = '';
+    // Skip meta keys that aren't interesting to display
+    const skipKeys = new Set(['agent', 'task', 'qa_officer', 'timestamp', 'angle', 'emotional_arc', 'tone_notes']);
+    for (const [k, v] of Object.entries(obj)) {
+        if (skipKeys.has(k) && typeof v === 'string' && v.length < 100) continue;
+        html += _renderValue(v, k, 0);
+    }
+
+    if (extraText) html += '<div style="margin-top:12px">' + _renderMarkdown(extraText) + '</div>';
+    return html || '<span style="color:var(--text-3)">No content</span>';
+}
+
+function _renderMarkdown(text) {
+    if (!text) return '';
+    text = text.replace(/\/static\/media\/[^\s\n"']+\.(?:jpg|png|jpeg|webp)/g, '').trim();
+    function inline(s) {
+        const d = document.createElement('div');
+        d.textContent = s;
+        let h = d.innerHTML;
+        h = h.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+        h = h.replace(/\*([^*\n]+?)\*/g, '<em>$1</em>');
+        h = h.replace(/`([^`]+)`/g, '<code style="background:var(--surface-2);padding:1px 4px;border-radius:3px;font-size:0.9em">$1</code>');
+        return h;
+    }
+    const lines = text.split('\n');
+    let html = '';
+    let inList = false;
+    let inTable = false;
+    let tableRows = [];
+
+    function flushTable() {
+        if (!inTable || tableRows.length === 0) return;
+        inTable = false;
+        // Filter out separator rows (|---|---|)
+        const dataRows = tableRows.filter(r => !/^\|[\s\-:]+\|$/.test(r.trim()));
+        if (dataRows.length === 0) { tableRows = []; return; }
+        html += '<table style="width:100%;border-collapse:collapse;font-size:12px;margin:8px 0;border:1px solid var(--border);border-radius:8px;overflow:hidden">';
+        dataRows.forEach((row, i) => {
+            const cells = row.split('|').filter(c => c.trim() !== '');
+            const tag = i === 0 ? 'th' : 'td';
+            const bg = i === 0 ? 'background:var(--surface-2);font-weight:700;' : '';
+            html += '<tr>';
+            cells.forEach(c => {
+                const cellText = inline(c.trim());
+                html += `<${tag} style="${bg}padding:6px 10px;border-bottom:1px solid var(--border);text-align:left">${cellText}</${tag}>`;
+            });
+            html += '</tr>';
+        });
+        html += '</table>';
+        tableRows = [];
+    }
+
+    for (const line of lines) {
+        const trimmed = line.trim();
+        const isTableRow = trimmed.startsWith('|') && trimmed.endsWith('|');
+
+        if (isTableRow) {
+            if (inList) { html += '</ul>'; inList = false; }
+            inTable = true;
+            tableRows.push(trimmed);
+            continue;
+        } else if (inTable) {
+            flushTable();
+        }
+
+        const bullet = trimmed.match(/^[-*•]\s+(.*)/);
+        const numbered = trimmed.match(/^(\d+)\.\s+(.*)/);
+        const h2 = trimmed.match(/^##\s+(.*)/);
+        const h3 = trimmed.match(/^###\s+(.*)/);
+        const blockquote = trimmed.match(/^>\s*(.*)/);
+        const hr = /^---+$/.test(trimmed);
+
+        if (bullet || numbered) {
+            if (!inList) { html += '<ul style="margin:4px 0 4px 16px;padding:0">'; inList = true; }
+            html += `<li style="margin:3px 0;line-height:1.5">${inline(bullet ? bullet[1] : numbered[2])}</li>`;
+        } else {
+            if (inList) { html += '</ul>'; inList = false; }
+            if (hr) {
+                html += '<hr style="border:none;border-top:1px solid var(--border);margin:10px 0">';
+            } else if (trimmed === '') {
+                html += '<br>';
+            } else if (h3) {
+                html += `<div style="font-weight:700;font-size:13px;margin:10px 0 4px;color:var(--text-1)">${inline(h3[1])}</div>`;
+            } else if (h2) {
+                html += `<div style="font-weight:700;font-size:15px;margin:12px 0 6px;color:var(--text-1)">${inline(h2[1])}</div>`;
+            } else if (blockquote) {
+                html += `<div style="border-left:3px solid var(--accent);padding:6px 12px;margin:6px 0;color:var(--text-2);font-style:italic;background:rgba(0,122,255,0.04);border-radius:0 6px 6px 0">${inline(blockquote[1])}</div>`;
+            } else {
+                html += inline(trimmed) + '<br>';
+            }
+        }
+    }
+    if (inTable) flushTable();
+    if (inList) html += '</ul>';
+    html = html.replace(/(<br>)+$/, '');
+    if (!html.trim()) html = '<span style="color:var(--text-3)">No text content — see images above</span>';
+    return html;
+}
+
+async function _stopTask(taskId) {
+    if (!confirm('Stop this task? It will be marked as blocked.')) return;
+    try {
+        const r = await fetch(`/api/task-stop/${taskId}`, { method: 'POST' });
+        const data = await r.json();
+        if (data.ok) {
+            // Refresh the modal
+            viewTaskResult(taskId);
+            setTimeout(loadGMTasks, 500);
+        } else {
+            alert(data.error || 'Failed to stop task');
+        }
+    } catch(e) { alert('Error stopping task: ' + e.message); }
+}
+
+async function _retryTask(taskId) {
+    if (!confirm('Retry this task? It will be re-executed from scratch.')) return;
+    try {
+        const r = await fetch(`/api/task-retry/${taskId}`, { method: 'POST' });
+        const data = await r.json();
+        if (data.ok) {
+            viewTaskResult(taskId);
+            setTimeout(loadGMTasks, 500);
+        } else {
+            alert(data.error || 'Failed to retry task');
+        }
+    } catch(e) { alert('Error retrying task: ' + e.message); }
+}
+
+async function _retryAllBlocked(btn) {
+    if (!confirm('Retry ALL blocked tasks? They will be re-executed from scratch.')) return;
+    btn.disabled = true; btn.textContent = '⏳ Retrying...';
+    try {
+        const r = await fetch('/api/tasks/retry_all_blocked', { method: 'POST' });
+        const data = await r.json();
+        btn.textContent = `✅ ${data.retried} retried`;
+        setTimeout(() => { btn.textContent = '🔄 Retry Blocked'; btn.disabled = false; }, 3000);
+        setTimeout(loadGMTasks, 1000);
+    } catch(e) {
+        btn.textContent = '✕ Error'; btn.disabled = false;
+    }
+}
+
+async function _archiveAndClose(taskId) {
+    try {
+        await fetch(`/api/tasks/${taskId}/archive`, { method: 'POST' });
+        const overlay = document.getElementById('task-result-overlay');
+        if (overlay) overlay.style.display = 'none';
+        setTimeout(loadGMTasks, 300);
+    } catch(e) { console.error(e); }
+}
+
+// --- Review Chat with Department Head ---
+async function _loadReviewChat(taskId) {
+    const container = document.getElementById(`review-chat-${taskId}`);
+    if (!container) return;
+    try {
+        const r = await fetch(`/api/task-review/${taskId}`);
+        const data = await r.json();
+        if (data.messages && data.messages.length > 0) {
+            container.innerHTML = data.messages.map(m => _renderReviewMsg(m)).join('');
+            container.scrollTop = container.scrollHeight;
+        } else {
+            container.innerHTML = '<div style="text-align:center;color:var(--text-3);font-size:11px;padding:8px">No review conversation yet. Share your feedback below.</div>';
+        }
+    } catch(e) { console.error('loadReviewChat:', e); }
+}
+
+function _renderReviewMsg(m) {
+    const isUser = m.from_type === 'user';
+    const align = isUser ? 'flex-end' : 'flex-start';
+    const bg = isUser ? 'var(--accent)' : 'var(--surface-2)';
+    const color = isUser ? '#fff' : 'var(--text-1)';
+    const name = isUser ? '' : `<div style="font-size:10px;font-weight:700;color:var(--text-3);margin-bottom:3px">${m.from_emoji || ''} ${_esc(m.from_name)}</div>`;
+    const time = m.created_at ? new Date(m.created_at).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}) : '';
+    return `<div style="display:flex;flex-direction:column;align-items:${align};max-width:85%">
+        ${name}
+        <div style="padding:8px 14px;border-radius:12px;background:${bg};color:${color};font-size:13px;line-height:1.5">${_formatDeliverable(m.body)}</div>
+        <div style="font-size:9px;color:var(--text-3);margin-top:2px">${time}</div>
+    </div>`;
+}
+
+async function _sendReview(taskId) {
+    const input = document.getElementById(`review-input-${taskId}`);
+    if (!input || !input.value.trim()) return;
+    const msg = input.value.trim();
+    input.value = '';
+    input.disabled = true;
+
+    // Optimistic: show user message immediately
+    const container = document.getElementById(`review-chat-${taskId}`);
+    const placeholder = container.querySelector('div[style*="text-align:center"]');
+    if (placeholder) placeholder.remove();
+    container.innerHTML += _renderReviewMsg({ from_type: 'user', from_name: 'You', body: msg, created_at: new Date().toISOString() });
+    // Show typing indicator
+    container.innerHTML += '<div id="review-typing" style="display:flex;align-items:center;gap:6px;padding:4px 0"><div style="width:6px;height:6px;border-radius:50%;background:var(--accent);animation:pulse-dot 1s infinite"></div><span style="font-size:11px;color:var(--text-3)">Thinking...</span></div>';
+    container.scrollTop = container.scrollHeight;
+
+    try {
+        const r = await fetch(`/api/task-review/${taskId}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message: msg })
+        });
+        const data = await r.json();
+        // Remove typing indicator
+        document.getElementById('review-typing')?.remove();
+        if (data.ok) {
+            container.innerHTML += _renderReviewMsg({
+                from_type: 'team_member', from_name: data.head_name,
+                from_emoji: data.head_emoji, body: data.reply,
+                created_at: new Date().toISOString()
+            });
+            container.scrollTop = container.scrollHeight;
+        } else {
+            container.innerHTML += '<div style="color:var(--danger);font-size:11px;padding:4px">Error: ' + _esc(data.error) + '</div>';
+        }
+    } catch(e) {
+        document.getElementById('review-typing')?.remove();
+        container.innerHTML += '<div style="color:var(--danger);font-size:11px;padding:4px">Network error</div>';
+    }
+    input.disabled = false;
+    input.focus();
+}
+
+async function _validateTask(taskId) {
+    if (!confirm('Mark this task as validated? It will be archived.')) return;
+    // Send a validation note to the review thread
+    await fetch(`/api/task-review/${taskId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: 'I validate this work. Well done, let\'s move on.' })
+    });
+    // Archive it
+    await fetch(`/api/tasks/${taskId}/archive`, { method: 'POST' });
+    const overlay = document.getElementById('task-result-overlay');
+    if (overlay) overlay.style.display = 'none';
+    setTimeout(loadGMTasks, 300);
+}
+
+async function _requestRework(taskId) {
+    // Gather notes from the review chat or prompt
+    const input = document.getElementById(`review-input-${taskId}`);
+    let notes = input?.value?.trim() || '';
+    if (!notes) {
+        notes = prompt('What should be improved? (Enter your rework notes)');
+        if (!notes) return;
+    }
+    if (!confirm(`Send this task back for rework?\n\nNotes: "${notes}"`)) return;
+
+    // Tell the head about the rework
+    await fetch(`/api/task-review/${taskId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: `I want this reworked. Here's my feedback: ${notes}` })
+    });
+    // Dispatch rework
+    const r = await fetch(`/api/task-rework/${taskId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ notes })
+    });
+    const data = await r.json();
+    if (data.ok) {
+        viewTaskResult(taskId); // refresh modal to show in_progress
+        setTimeout(loadGMTasks, 500);
+    } else {
+        alert(data.error || 'Failed to rework task');
+    }
+}
+
 async function _approveSingleGM(id, btn) {
     btn.disabled = true; btn.textContent = '⏳';
     try {
@@ -2471,6 +3006,9 @@ async function viewTaskResult(taskId) {
                 </div>
                 <div style="font-size:12px;color:var(--text-2);line-height:1.5">${bannerSub}</div>
                 ${timing.approved_at ? '<div style="font-size:10px;color:var(--text-3);margin-top:6px">Approved: ' + new Date(timing.approved_at).toLocaleString() + '</div>' : ''}
+                <div style="display:flex;gap:10px;margin-top:12px">
+                    <button onclick="_stopTask(${t.id})" style="padding:8px 18px;border-radius:8px;border:none;background:var(--danger);color:#fff;font-weight:700;font-size:12px;cursor:pointer;display:flex;align-items:center;gap:6px">🛑 Stop Task</button>
+                </div>
             </div>`;
         } else if (t.status === 'blocked') {
             const errMsg = timing.error || 'Unknown error — check server logs';
@@ -2481,10 +3019,14 @@ async function viewTaskResult(taskId) {
                 </div>
                 <div style="font-size:12px;color:var(--text-2);line-height:1.5;margin-bottom:8px">${_esc(errMsg)}</div>
                 <div style="font-size:10px;color:var(--text-3)">Created: ${timing.created_at ? new Date(timing.created_at).toLocaleString() : 'Unknown'} · Elapsed: ${timing.elapsed_label || '?'}</div>
+                <div style="display:flex;gap:10px;margin-top:12px">
+                    <button onclick="_retryTask(${t.id})" style="padding:8px 18px;border-radius:8px;border:none;background:var(--accent);color:#fff;font-weight:700;font-size:12px;cursor:pointer;display:flex;align-items:center;gap:6px">🔄 Retry Task</button>
+                    <button onclick="_archiveAndClose(${t.id})" style="padding:8px 18px;border-radius:8px;border:none;background:var(--surface-2);color:var(--text-2);font-weight:600;font-size:12px;cursor:pointer;border:1px solid var(--border)">🗑️ Archive</button>
+                </div>
             </div>`;
         }
 
-        // Images (if any)
+        // Images — only show for actual image generation tasks (profile pics etc)
         if (data.images && data.images.length > 0) {
             content += `<div style="padding:16px 24px;border-bottom:1px solid var(--border);background:linear-gradient(135deg,rgba(0,122,255,0.03),rgba(88,86,214,0.03))">
                 <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:var(--accent);margin-bottom:12px">🖼️ Generated Images (${data.images.length})</div>
@@ -2497,35 +3039,132 @@ async function viewTaskResult(taskId) {
             </div>`;
         }
 
-        // Main deliverable
-        if (data.deliverable) {
-            content += `<div style="padding:16px 24px;border-bottom:1px solid var(--border)">
-                <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:var(--success);margin-bottom:8px">${_esc(data.deliverable_subject || 'Deliverable')}</div>
-                <div style="font-size:13px;line-height:1.7;color:var(--text-1);white-space:pre-wrap;font-family:-apple-system,system-ui,sans-serif">${_esc(data.deliverable)}</div>
+        // ── PUBLISHED POSTS: Show "View on X" buttons if posts were published ──
+        if (data.published_posts && data.published_posts.length > 0) {
+            content += `<div style="padding:16px 24px;border-bottom:1px solid var(--border);background:linear-gradient(135deg,rgba(29,155,240,0.06),rgba(29,155,240,0.02))">
+                <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:#1d9bf0;margin-bottom:10px">Published Posts</div>
+                ${data.published_posts.map(p => {
+                    const icon = (p.platform||'').toLowerCase().includes('twitter') || (p.platform||'').toLowerCase() === 'x' ? '𝕏' : '📸';
+                    const label = (p.platform||'').toLowerCase().includes('twitter') || (p.platform||'').toLowerCase() === 'x' ? 'View on X' : 'View on ' + (p.platform || 'Platform');
+                    const pubDate = p.published_at ? new Date(p.published_at).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}) : '';
+                    return p.url ? `<a href="${p.url}" target="_blank" style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:white;border-radius:10px;border:1px solid rgba(29,155,240,0.2);margin-bottom:6px;text-decoration:none;transition:box-shadow 0.15s" onmouseover="this.style.boxShadow='0 2px 8px rgba(29,155,240,0.15)'" onmouseout="this.style.boxShadow='none'">
+                        <span style="font-size:22px">${icon}</span>
+                        <div style="flex:1">
+                            <div style="font-size:13px;font-weight:700;color:#1d9bf0">${label} ↗</div>
+                            <div style="font-size:11px;color:var(--text-3);margin-top:2px">${_esc(p.title)} · ${pubDate}</div>
+                        </div>
+                    </a>` : '';
+                }).join('')}
             </div>`;
-        } else {
-            content += `<div style="padding:16px 24px;text-align:center;color:var(--text-3);font-size:12px">No deliverable found — check the inbox thread</div>`;
         }
 
-        // Subtask results
-        if (data.subtasks && data.subtasks.length > 0) {
-            content += `<div style="padding:12px 24px;border-top:1px solid var(--border);background:var(--surface-2)">
-                <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:var(--text-3);margin-bottom:8px">Sub-task Results (${data.subtasks.length})</div>`;
-            for (const st of data.subtasks) {
-                const stColor = st.status === 'done' ? 'var(--success)' : st.status === 'blocked' ? 'var(--danger)' : 'var(--accent)';
-                content += `<div style="margin-bottom:10px;background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden">
-                    <div style="padding:10px 14px;display:flex;align-items:center;gap:8px;cursor:pointer" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'block':'none'">
-                        <span style="color:${stColor};font-size:12px">${st.status === 'done' ? '✅' : st.status === 'blocked' ? '🚫' : '⚡'}</span>
-                        <div style="flex:1;min-width:0">
-                            <div style="font-size:12px;font-weight:600;color:var(--text-1)">${_esc(st.title)}</div>
-                            <div style="font-size:10px;color:var(--text-3)">${_esc(st.assignee_name)}</div>
-                        </div>
-                        <span style="font-size:10px;color:var(--accent)">expand ▾</span>
+        // Determine if this is a cascade task (has subtasks with deliverables)
+        const doneSubsWithContent = (data.subtasks || []).filter(st => st.status === 'done' && st.deliverable);
+        const isCascade = data.subtasks && data.subtasks.length > 0;
+
+        if (isCascade && doneSubsWithContent.length > 0) {
+            // ── CASCADE TASK: Show full output first, summary collapsible ──
+
+            // Executive summary (collapsible — not the main content)
+            if (data.deliverable) {
+                content += `<div style="padding:12px 24px;border-bottom:1px solid var(--border);background:var(--surface-2)">
+                    <div style="display:flex;align-items:center;gap:8px;cursor:pointer" onclick="const el=document.getElementById('exec-summary-${taskId}');el.style.display=el.style.display==='none'?'block':'none';this.querySelector('.toggle-arrow').textContent=el.style.display==='none'?'▸':'▾'">
+                        <span class="toggle-arrow" style="font-size:10px;color:var(--text-3)">▸</span>
+                        <span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:var(--text-3)">📋 Executive Summary</span>
+                        <span style="font-size:10px;color:var(--text-3);margin-left:auto">from ${_esc(t.assignee_name)}</span>
                     </div>
-                    <div style="display:none;padding:10px 14px;border-top:1px solid var(--border);font-size:12px;line-height:1.6;color:var(--text-2);white-space:pre-wrap;max-height:300px;overflow-y:auto">${st.deliverable ? _esc(st.deliverable) : '<em style="color:var(--text-3)">No deliverable saved</em>'}</div>
+                    <div id="exec-summary-${taskId}" style="display:none;margin-top:10px;font-size:12px;line-height:1.6;color:var(--text-2);max-height:300px;overflow-y:auto">${_formatDeliverable(data.deliverable)}</div>
                 </div>`;
             }
-            content += `</div>`;
+
+            // ── FULL OUTPUT: All completed sub-task deliverables in one document ──
+            content += `<div style="padding:16px 24px;border-bottom:1px solid var(--border)">
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+                    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:var(--success)">📄 Full Output — ${doneSubsWithContent.length} deliverables</div>
+                    <button onclick="_copyFullOutput(${taskId})" style="font-size:10px;padding:4px 10px;border:1px solid var(--border);border-radius:6px;background:var(--surface-2);color:var(--text-2);cursor:pointer;font-weight:600">📋 Copy All</button>
+                </div>
+                <div id="full-output-${taskId}" style="font-size:13px;line-height:1.7;color:var(--text-1);font-family:-apple-system,system-ui,sans-serif">`;
+            for (const st of doneSubsWithContent) {
+                content += `<div style="margin-bottom:20px;padding-bottom:16px;border-bottom:1px dashed var(--border)">
+                    <div style="font-size:11px;font-weight:700;color:var(--accent);margin-bottom:6px">${_esc(st.assignee_name)} — ${_esc(st.title)}</div>
+                    <div>${_formatDeliverable(st.deliverable)}</div>
+                </div>`;
+            }
+            content += `</div></div>`;
+
+            // Sub-task progress summary (compact)
+            const totalSubs = data.subtasks.length;
+            const doneSubs = data.subtasks.filter(s => s.status === 'done').length;
+            const inProgSubs = data.subtasks.filter(s => s.status === 'in_progress').length;
+            const blockedSubs = data.subtasks.filter(s => s.status === 'blocked').length;
+            content += `<div style="padding:10px 24px;border-bottom:1px solid var(--border);background:var(--surface-2)">
+                <div style="display:flex;align-items:center;gap:8px;cursor:pointer" onclick="const el=document.getElementById('subtask-list-${taskId}');el.style.display=el.style.display==='none'?'block':'none';this.querySelector('.toggle-arrow').textContent=el.style.display==='none'?'▸':'▾'">
+                    <span class="toggle-arrow" style="font-size:10px;color:var(--text-3)">▸</span>
+                    <span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:var(--text-3)">Sub-tasks (${totalSubs})</span>
+                    <span style="font-size:10px;color:var(--success)">${doneSubs} done</span>
+                    ${inProgSubs ? '<span style="font-size:10px;color:var(--accent)">' + inProgSubs + ' running</span>' : ''}
+                    ${blockedSubs ? '<span style="font-size:10px;color:var(--danger)">' + blockedSubs + ' blocked</span>' : ''}
+                </div>
+                <div id="subtask-list-${taskId}" style="display:none;margin-top:8px">`;
+            for (const st of data.subtasks) {
+                const stColor = st.status === 'done' ? 'var(--success)' : st.status === 'blocked' ? 'var(--danger)' : 'var(--accent)';
+                const stIcon = st.status === 'done' ? '✅' : st.status === 'blocked' ? '🚫' : '⚡';
+                content += `<div style="display:flex;align-items:center;gap:6px;padding:4px 0;font-size:11px">
+                    <span style="color:${stColor}">${stIcon}</span>
+                    <span style="color:var(--text-1);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${_esc(st.title)}</span>
+                    <span style="color:var(--text-3);flex-shrink:0">${_esc(st.assignee_name)}</span>
+                </div>`;
+            }
+            content += `</div></div>`;
+
+        } else {
+            // ── SIMPLE TASK (no subtasks or no completed deliverables): Original layout ──
+
+            // Main deliverable
+            if (data.deliverable) {
+                content += `<div style="padding:16px 24px;border-bottom:1px solid var(--border)">
+                    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:var(--success);margin-bottom:8px">${_esc(data.deliverable_subject || 'Deliverable')}</div>
+                    <div style="font-size:13px;line-height:1.7;color:var(--text-1);font-family:-apple-system,system-ui,sans-serif">${_formatDeliverable(data.deliverable)}</div>
+                </div>`;
+            } else {
+                content += `<div style="padding:16px 24px;text-align:center;color:var(--text-3);font-size:12px">No deliverable found — check the inbox thread</div>`;
+            }
+
+            // Subtask results (if any without content)
+            if (data.subtasks && data.subtasks.length > 0) {
+                content += `<div style="padding:12px 24px;border-top:1px solid var(--border);background:var(--surface-2)">
+                    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:var(--text-3);margin-bottom:8px">Sub-task Results (${data.subtasks.length})</div>`;
+                for (const st of data.subtasks) {
+                    const stColor = st.status === 'done' ? 'var(--success)' : st.status === 'blocked' ? 'var(--danger)' : 'var(--accent)';
+                    content += `<div style="margin-bottom:10px;background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden">
+                        <div style="padding:10px 14px;display:flex;align-items:center;gap:8px;cursor:pointer" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'block':'none'">
+                            <span style="color:${stColor};font-size:12px">${st.status === 'done' ? '✅' : st.status === 'blocked' ? '🚫' : '⚡'}</span>
+                            <div style="flex:1;min-width:0">
+                                <div style="font-size:12px;font-weight:600;color:var(--text-1)">${_esc(st.title)}</div>
+                                <div style="font-size:10px;color:var(--text-3)">${_esc(st.assignee_name)}</div>
+                            </div>
+                            <span style="font-size:10px;color:var(--accent)">expand ▾</span>
+                        </div>
+                        <div style="display:none;padding:10px 14px;border-top:1px solid var(--border);font-size:12px;line-height:1.6;color:var(--text-2);max-height:300px;overflow-y:auto">${st.deliverable ? _formatDeliverable(st.deliverable) : '<em style="color:var(--text-3)">No deliverable saved</em>'}</div>
+                    </div>`;
+                }
+                content += `</div>`;
+            }
+        }
+
+        // Review chat for done tasks (talk with dept head)
+        if (t.status === 'done' || t.status === 'in_progress') {
+            const deptHeadNames = { newsroom: 'Victoria Crane', tech: 'Lior Katz', sales: 'Jordan Blake', leadership: 'Alexander Voss' };
+            const headName = deptHeadNames[t.department] || 'Department Head';
+            content += `<div style="padding:16px 24px;border-top:1px solid var(--border);background:linear-gradient(135deg,rgba(88,86,214,0.03),rgba(0,122,255,0.03))">
+                <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:var(--text-3);margin-bottom:10px">💬 Review with ${_esc(headName)}</div>
+                <div id="review-chat-${taskId}" style="max-height:250px;overflow-y:auto;margin-bottom:10px;display:flex;flex-direction:column;gap:8px"></div>
+                <div style="display:flex;gap:8px;align-items:flex-end">
+                    <textarea id="review-input-${taskId}" rows="2" placeholder="Share feedback, ask questions, or request rework..." style="flex:1;resize:none;padding:10px 14px;border:1px solid var(--border);border-radius:10px;font-size:13px;font-family:inherit;background:var(--surface);color:var(--text-1);outline:none;transition:border-color 0.15s" onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border)'" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();_sendReview(${taskId})}"></textarea>
+                    <button onclick="_sendReview(${taskId})" style="padding:10px 18px;border-radius:10px;border:none;background:var(--accent);color:#fff;font-weight:700;font-size:12px;cursor:pointer;white-space:nowrap;flex-shrink:0">Send ↑</button>
+                </div>
+                ${t.status === 'done' ? '<div style="margin-top:10px;display:flex;gap:8px"><button onclick="_validateTask(' + taskId + ')" style="padding:7px 16px;border-radius:8px;border:1px solid var(--success);background:rgba(48,209,88,0.08);color:var(--success);font-weight:700;font-size:11px;cursor:pointer">✅ Validate & Close</button><button onclick="_requestRework(' + taskId + ')" style="padding:7px 16px;border-radius:8px;border:1px solid var(--warning);background:rgba(255,159,10,0.08);color:var(--warning);font-weight:700;font-size:11px;cursor:pointer">🔄 Send Back for Rework</button></div>' : ''}
+            </div>`;
         }
 
         const statusIcon = t.status === 'done' ? '✅' : t.status === 'in_progress' ? '⚡' : t.status === 'blocked' ? '🚫' : '⏳';
@@ -2548,6 +3187,10 @@ async function viewTaskResult(taskId) {
                 ${content}
             </div>
         </div>`;
+        // Load review chat history if present
+        if (t.status === 'done' || t.status === 'in_progress') {
+            setTimeout(() => _loadReviewChat(taskId), 100);
+        }
     } catch(e) {
         overlay.innerHTML = `<div style="background:var(--surface);border-radius:16px;padding:40px;text-align:center;color:var(--danger)">Error loading result: ${e.message}<br><button onclick="document.getElementById('task-result-overlay').style.display='none'" style="margin-top:12px;padding:6px 16px;border:1px solid var(--border);border-radius:6px;background:none;cursor:pointer">Close</button></div>`;
     }
@@ -3298,7 +3941,7 @@ function renderAtomizationReview(items) {
         const format = item.format || item.type || 'post';
         html += `
             <div class="atom-card" id="atom-${i}">
-                <input type="checkbox" class="atom-checkbox" value="${i}" onchange="updateAtomSelection()" checked>
+                <input type="checkbox" class="atom-checkbox" value="${item.id || i}" onchange="updateAtomSelection()" checked>
                 <div class="atom-header">
                     <span class="atom-platform">${icon}</span>
                     <span class="atom-format">${esc(format)}</span>

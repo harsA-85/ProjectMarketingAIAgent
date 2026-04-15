@@ -1,14 +1,12 @@
 import os
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, event, text
 from sqlalchemy.orm import sessionmaker, Session
-from sqlalchemy.pool import NullPool
+from sqlalchemy.pool import QueuePool
 from .models import Base
 
 # Use absolute path for persistent database (project root)
-# Force to C:\Users\harsa\OneDrive\Desktop\axelunfiltered\ProjectMarketingAIAgent\marketing_ai.db
 PROJECT_ROOT = r'C:\Users\harsa\OneDrive\Desktop\axelunfiltered\ProjectMarketingAIAgent'
 DB_PATH = os.path.join(PROJECT_ROOT, 'marketing_ai.db')
-# Convert backslashes to forward slashes for SQLite URL
 DB_PATH_NORMALIZED = DB_PATH.replace('\\', '/')
 DATABASE_URL = os.getenv(
     'DATABASE_URL',
@@ -17,9 +15,23 @@ DATABASE_URL = os.getenv(
 
 engine = create_engine(
     DATABASE_URL,
-    connect_args={'check_same_thread': False} if 'sqlite' in DATABASE_URL else {},
-    poolclass=NullPool
+    connect_args={'check_same_thread': False, 'timeout': 30} if 'sqlite' in DATABASE_URL else {},
+    poolclass=QueuePool,
+    pool_size=10,
+    max_overflow=20,
+    pool_timeout=30,
+    pool_pre_ping=True,
 )
+
+# Enable WAL mode for SQLite — allows concurrent reads + writes without locking
+@event.listens_for(engine, 'connect')
+def _set_sqlite_pragma(dbapi_conn, connection_record):
+    cursor = dbapi_conn.cursor()
+    cursor.execute('PRAGMA journal_mode=WAL')
+    cursor.execute('PRAGMA busy_timeout=10000')   # wait up to 10s if locked
+    cursor.execute('PRAGMA synchronous=NORMAL')    # faster writes, still safe with WAL
+    cursor.close()
+
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
@@ -40,6 +52,7 @@ def _run_migrations():
         "ALTER TABLE workflow_runs ADD COLUMN department VARCHAR(30) DEFAULT 'newsroom'",
         "ALTER TABLE tasks ADD COLUMN department VARCHAR(30) DEFAULT 'newsroom'",
         "ALTER TABLE tasks ADD COLUMN archived BOOLEAN DEFAULT 0",
+        "ALTER TABLE tasks ADD COLUMN deliverable TEXT",
     ]
     with engine.connect() as conn:
         for sql in migrations:
@@ -355,7 +368,8 @@ def seed_editorial_team():
                     "You know every platform's algorithm: Twitter rewards controversy + threads, "
                     "Instagram rewards saves + shares (educational carousels), LinkedIn rewards long-form expertise, TikTok rewards pattern interrupts. "
                     "Respond in JSON with keys: hooks (array of 3 alternative opening hooks), social_body (punchy version, max 300 words), "
-                    "thread_version (array of tweet-sized chunks), carousel_slides (array of 5-7 slide texts for IG carousel)."
+                    "thread_version (array of tweet-sized chunks — each chunk MUST be under 260 characters, aim for 240 max, emojis count as 2 chars), "
+                    "carousel_slides (array of 5-7 slide texts for IG carousel)."
                 ),
             },
             {
@@ -375,7 +389,7 @@ def seed_editorial_team():
                     "Formats you produce per agent: "
                     "1. ig_post — Instagram caption (max 2200 chars) with hashtags "
                     "2. ig_carousel — 5-7 slide carousel text for Instagram "
-                    "3. twitter_thread — 4-6 tweet thread "
+                    "3. twitter_thread — 4-6 tweet thread (each tweet MUST be under 260 characters, aim for 240 max, emojis count as 2 chars) "
                     "4. linkedin_post — Professional long-form (600-1000 words) "
                     "5. tiktok_script — 30-60 second video script with hooks "
                     "You MUST adapt the tone and voice to match each specific agent's persona — not generic. "

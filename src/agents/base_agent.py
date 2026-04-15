@@ -75,9 +75,17 @@ Always stay true to the brand voice and persona. Create authentic, valuable cont
         """Build content generation prompt"""
         audience_context = f"for {target_audience}" if target_audience else ""
 
+        twitter_warning = ""
+        if platform.lower() in ('twitter', 'x', 'twitter/x'):
+            twitter_warning = (
+                "\n\nCRITICAL: Twitter/X has a STRICT 260 character limit. "
+                "The caption MUST be under 260 characters including emojis (emojis count as 2 chars). "
+                "Aim for 230-250 characters max. Do NOT exceed this. No hashtags in caption — put them in the hashtags array only."
+            )
+
         return f"""Create a {content_type} post for {platform} {audience_context}.
 Topic: {topic}
-Max length: {max_length} characters
+Max length: {max_length} characters{twitter_warning}
 
 Respond with ONLY a valid JSON object, no markdown, no code blocks, no explanation. Use this exact format:
 {{"caption": "the post text here", "hashtags": ["tag1", "tag2"], "emojis": ["🔥", "💡"], "engagement_tips": "tip here"}}
@@ -269,10 +277,10 @@ Format as JSON list with fields: "action", "description", "difficulty", "expecte
         """Get platform-specific configuration"""
         configs = {
             'instagram': {'max_length': 2200, 'supports_video': True},
-            'twitter': {'max_length': 280, 'supports_video': True},
+            'twitter': {'max_length': 260, 'supports_video': True},
             'tiktok': {'max_length': 150, 'supports_video': True}
         }
-        return configs.get(platform, {'max_length': 280})
+        return configs.get(platform, {'max_length': 260})
 
     def get_analytics(self) -> Dict[str, Any]:
         """Get agent analytics summary"""

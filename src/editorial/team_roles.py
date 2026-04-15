@@ -206,7 +206,8 @@ class SeniorCopywriterSocial(TeamRole):
             "Create social-first versions:\n"
             "1. hooks — 3 alternative opening hooks (controversial but data-backed)\n"
             "2. social_body — punchy version, max 300 words\n"
-            "3. thread_version — array of tweet-sized chunks for a Twitter/X thread\n"
+            "3. thread_version — array of tweet-sized chunks for a Twitter/X thread. "
+            "CRITICAL: Each tweet chunk MUST be under 260 characters (emojis count as 2). Aim for 240 chars max per tweet.\n"
             "4. carousel_slides — 5-7 slide texts for an Instagram carousel\n\n"
             "Respond in JSON."
         )
@@ -290,10 +291,13 @@ class DistributionSpecialist(TeamRole):
             f"Fields: {json.dumps(agent_info.get('fields', []))}\n\n"
             "Atomize this content into platform-specific formats FOR THIS AGENT's voice:\n"
             "1. ig_post — Instagram caption (max 2200 chars) with 20-30 hashtags\n"
-            "2. twitter_thread — 4-6 tweet thread\n"
+            "2. twitter_post — ONE single standalone tweet. MUST be under 260 characters total "
+            "(emojis count as 2 chars each). Aim for 230-250 chars max. "
+            "Do NOT write a thread. Do NOT use 1/, 2/ numbering. Just ONE punchy tweet.\n"
             "3. linkedin_post — Professional (600-1000 words)\n"
             "4. tiktok_script — 30-60 second video script\n\n"
-            "CRITICAL: Adapt the tone/voice to match this specific agent's persona.\n\n"
+            "CRITICAL: Adapt the tone/voice to match this specific agent's persona.\n"
+            "CRITICAL: The twitter_post body field MUST be a single tweet under 260 characters. Not a thread.\n\n"
             "Respond in JSON: {agent_name: '...', formats: [{format_type, platform, body, hashtags}, ...]}"
         )
         return self.call_llm_json(prompt, max_tokens=4000)

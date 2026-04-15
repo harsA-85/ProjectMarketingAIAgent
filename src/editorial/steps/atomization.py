@@ -1,9 +1,10 @@
 """Step 5: ATOMIZATION — Distribution Specialist splits master content per agent/platform."""
 import json
 import logging
+import re
 import time
 from datetime import datetime
-from src.database.models import Agent, AtomizedContent, WorkflowStepLog
+from src.database.models import Agent, AtomizedContent, Content, WorkflowStepLog
 from src.editorial.team_roles import get_role
 
 log = logging.getLogger(__name__)
@@ -92,17 +93,68 @@ def run_atomization(db, workflow_run, master_content):
                         return json.dumps(v)
                     return v
 
+                platform = fmt.get('platform', 'instagram')
+                body_text = str(fmt.get('body', ''))
+                hashtags_val = _safe(fmt.get('hashtags', []))
+                media_val = _safe(master_content.visual_assets or [])
+
+                # ── Twitter/X: extract first tweet from thread, enforce 280 char limit ──
+                if platform.lower() in ('twitter', 'x', 'twitter/x'):
+                    # Split thread markers like "1/ ...\n\n2/ ..."
+                    parts = re.split(r'\n+\s*\d+[/\.]\s+', body_text)
+                    if len(parts) > 1:
+                        first = re.sub(r'^\d+[/\.]\s+', '', parts[0] if parts[0].strip() else parts[1])
+                        body_text = first.strip()
+                    # Weighted char count (emojis > 0xFFFF count as 2)
+                    def _tw_len(s):
+                        return sum(2 if ord(c) > 0xFFFF else 1 for c in s)
+                    if _tw_len(body_text) > 260:
+                        while _tw_len(body_text) > 257:
+                            body_text = body_text[:-1]
+                        body_text = body_text.rstrip() + '...'
+
                 atom = AtomizedContent(
                     workflow_run_id=workflow_run.id,
                     agent_id=agent.id,
                     format_type=fmt.get('format_type', 'ig_post'),
-                    platform=fmt.get('platform', 'instagram'),
-                    body=str(fmt.get('body', '')),
-                    hashtags=_safe(fmt.get('hashtags', [])),
-                    media_urls=_safe(master_content.visual_assets or []),
+                    platform=platform,
+                    body=body_text,
+                    hashtags=hashtags_val,
+                    media_urls=media_val,
                     status='draft',
                 )
                 db.add(atom)
+                db.flush()  # get atom.id
+
+                # ── Auto-create Content draft so it appears in agent Posts tab ──
+                headline = master_content.headline or ''
+                title = headline[:100] if headline else body_text[:100]
+
+                # Content.hashtags/media_urls are JSON columns — need real lists
+                def _to_list(v):
+                    if isinstance(v, list):
+                        return v
+                    if isinstance(v, str):
+                        try:
+                            parsed = json.loads(v)
+                            return parsed if isinstance(parsed, list) else []
+                        except (json.JSONDecodeError, ValueError):
+                            return []
+                    return []
+
+                post = Content(
+                    agent_id=agent.id,
+                    title=title,
+                    body=body_text,
+                    hashtags=_to_list(hashtags_val),
+                    media_urls=_to_list(media_val),
+                    platform=platform,
+                    status='draft',
+                )
+                db.add(post)
+                db.flush()
+                atom.content_id = post.id
+
                 all_atomized.append(atom)
 
             step_log.status = 'completed'
