@@ -41,6 +41,28 @@
     }
     .marc-prompt-send:hover { background: rgba(255,149,0,0.35); }
     .marc-prompt-send:disabled { opacity: 0.38; cursor: default; }
+    .marc-prompt-attach {
+        width: 28px; height: 28px; border-radius: 7px; border: none; flex-shrink: 0;
+        background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.6); cursor: pointer;
+        font-size: 14px; display: flex; align-items: center; justify-content: center;
+        transition: background 0.15s, color 0.15s;
+    }
+    .marc-prompt-attach:hover { background: rgba(255,255,255,0.15); color: #fff; }
+    .marc-attach-chips {
+        display: flex; flex-wrap: wrap; gap: 6px; padding: 4px 8px 0 34px;
+    }
+    .marc-attach-chip {
+        display: inline-flex; align-items: center; gap: 5px;
+        background: rgba(255,149,0,0.12); border: 1px solid rgba(255,149,0,0.3);
+        color: #ffb85c; border-radius: 6px; padding: 3px 7px; font-size: 10px; font-weight: 600;
+        max-width: 220px;
+    }
+    .marc-attach-chip-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .marc-attach-chip-x {
+        background: none; border: none; color: rgba(255,184,92,0.7); cursor: pointer;
+        padding: 0; font-size: 12px; line-height: 1; font-weight: 700;
+    }
+    .marc-attach-chip-x:hover { color: #fff; }
     .marc-prompt-actions { display: flex; align-items: center; gap: 10px; padding-left: 34px; flex-wrap: wrap; }
     .marc-action-btn {
         font-size: 10px; font-weight: 600; color: rgba(255,255,255,0.42);
@@ -237,8 +259,11 @@
         <div class="marc-prompt-top">
             <div class="marc-prompt-avatar">🚀</div>
             <input class="marc-prompt-input" id="marc-input" placeholder="Ask Marc Andreessen..." autocomplete="off" />
+            <button class="marc-prompt-attach" id="marc-attach-btn" title="Attach images or PDFs" onclick="document.getElementById('marc-file-input').click()">📎</button>
+            <input type="file" id="marc-file-input" style="display:none" multiple accept="image/*,application/pdf" />
             <button class="marc-prompt-send" id="marc-send-btn" onclick="marcSend()">↑</button>
         </div>
+        <div class="marc-attach-chips" id="marc-attach-chips"></div>
         <div class="marc-prompt-actions" id="marc-actions-bar">
             <button class="marc-action-btn" onclick="marcProposePlan()">📋 Dispatch Plan</button>
             <span style="color:rgba(255,255,255,0.15)">·</span>
@@ -266,6 +291,51 @@
     // ── State ─────────────────────────────────────────────────────────────────
     let _marcOpen = false;
     let _marcMinimized = false;
+    let _marcAttachments = []; // [{name, mime, data (b64), size}]
+    const MARC_MAX_FILE_MB = 10;
+
+    function _marcReadFileB64(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => {
+                const s = reader.result || '';
+                const b64 = String(s).split(',')[1] || '';
+                resolve(b64);
+            };
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+        });
+    }
+    function _renderAttachChips() {
+        const box = document.getElementById('marc-attach-chips');
+        if (!box) return;
+        box.innerHTML = _marcAttachments.map((a, i) => `
+            <span class="marc-attach-chip" title="${a.name}">
+                <span>${a.mime.startsWith('image/') ? '🖼️' : '📄'}</span>
+                <span class="marc-attach-chip-name">${a.name}</span>
+                <button class="marc-attach-chip-x" onclick="marcRemoveAttachment(${i})" title="Remove">×</button>
+            </span>
+        `).join('');
+    }
+    window.marcRemoveAttachment = function(idx) {
+        _marcAttachments.splice(idx, 1);
+        _renderAttachChips();
+    };
+    document.getElementById('marc-file-input').addEventListener('change', async (e) => {
+        const files = Array.from(e.target.files || []);
+        for (const f of files) {
+            if (f.size > MARC_MAX_FILE_MB * 1024 * 1024) {
+                alert(`${f.name} is larger than ${MARC_MAX_FILE_MB}MB — skipped.`);
+                continue;
+            }
+            try {
+                const b64 = await _marcReadFileB64(f);
+                _marcAttachments.push({ name: f.name, mime: f.type || 'application/octet-stream', data: b64, size: f.size });
+            } catch (err) { console.error('file read failed', err); }
+        }
+        e.target.value = '';
+        _renderAttachChips();
+    });
 
     function marcToggle() {
         if (_marcMinimized) { marcRestore(); return; }
@@ -373,8 +443,11 @@
     async function marcSend() {
         const input = document.getElementById('marc-input');
         const msg = input.value.trim();
-        if (!msg) return;
+        if (!msg && _marcAttachments.length === 0) return;
         input.value = '';
+        const sendAttachments = _marcAttachments.slice();
+        _marcAttachments = [];
+        _renderAttachChips();
 
         // Check if user wants to hide Marc
         const hidePatterns = /\b(hide|minimize|go away|close|shut up|dismiss|later|bye|disappear|get out|leave me|step back)\b/i;
@@ -386,7 +459,10 @@
         }
 
         if (!_marcOpen) marcToggle();
-        marcAppend('user', msg);
+        const userDisplay = sendAttachments.length
+            ? `${msg}${msg ? '\n' : ''}📎 ${sendAttachments.map(a => a.name).join(', ')}`
+            : msg;
+        marcAppend('user', userDisplay);
 
         const btn = document.getElementById('marc-send-btn');
         btn.disabled = true;
@@ -402,7 +478,12 @@
             const r = await fetch('/api/inbox/chat', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ message: msg, entity_type: 'team_member', entity_key: 'cofounder' })
+                body: JSON.stringify({
+                    message: msg,
+                    entity_type: 'team_member',
+                    entity_key: 'cofounder',
+                    attachments: sendAttachments.map(a => ({ name: a.name, mime: a.mime, data: a.data }))
+                })
             });
             const data = await r.json();
             typing.remove();

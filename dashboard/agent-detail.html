@@ -1913,6 +1913,12 @@ async function loadAgentData() {
 }
 
 // ── Carousel helpers ──
+function imgSrc(img) {
+    if (!img) return '';
+    if (img.startsWith('data:') || img.startsWith('http')) return img;
+    if (img.startsWith('/static/') || img.startsWith('/media/')) return img;
+    return 'data:image/jpeg;base64,' + img;
+}
 function getCarouselHtml(images) {
     if (!images || images.length === 0) return '';
     const id = 'c' + Math.random().toString(36).substr(2,8);
@@ -1920,7 +1926,7 @@ function getCarouselHtml(images) {
         <div class="carousel" id="${id}">
             ${images.map((img,i) => `
                 <div class="carousel-slide ${i===0?'active':''}">
-                    <img src="data:image/png;base64,${img}" alt="">
+                    <img src="${imgSrc(img)}" alt="">
                 </div>`).join('')}
             ${images.length > 1 ? `
                 <button class="carousel-nav prev" onclick="changeSlide('${id}',-1)">&#8249;</button>
@@ -2180,7 +2186,7 @@ function createTwPreview(post) {
         </div>
         <div class="tw-body">${cleanBody(post.body)}</div>
         ${getHashtags(post).length ? `<div class="tw-tags">${getHashtags(post).slice(0,3).map(h=>`#${h}`).join(' ')}</div>` : ''}
-        ${images.length > 0 ? `<div class="tw-images">${images.slice(0,4).map(img=>`<img src="data:image/png;base64,${img}" alt="">`).join('')}</div>` : ''}
+        ${images.length > 0 ? `<div class="tw-images">${images.slice(0,4).map(img=>`<img src="${imgSrc(img)}" alt="">`).join('')}</div>` : ''}
         <div class="tw-meta">
             <span>${timeStr} · ${dateStr}</span>
             ${getStatusBadge(post.status)}
@@ -2201,7 +2207,7 @@ function createTtPreview(post) {
 
     return `
     <div class="tt-card fade-up">
-        ${images.length > 0 ? `<div class="tt-bg-img"><img src="data:image/png;base64,${images[0]}" alt=""></div>` : `<div class="tt-bg-solid"></div>`}
+        ${images.length > 0 ? `<div class="tt-bg-img"><img src="${imgSrc(images[0])}" alt=""></div>` : `<div class="tt-bg-solid"></div>`}
         <div class="tt-overlay">
             <div class="tt-topbar">
                 <div class="tt-tabs">
@@ -2322,7 +2328,7 @@ function _openPostDetailModal(post) {
 
             ${images.length > 0 ? `
             <div style="display:grid;grid-template-columns:repeat(${Math.min(images.length,3)},1fr);gap:8px;margin-bottom:16px;border-radius:var(--r-sm);overflow:hidden">
-                ${images.slice(0,3).map(img => `<img src="${img.startsWith('data:')?img:'data:image/png;base64,'+img}" style="width:100%;height:160px;object-fit:cover">`).join('')}
+                ${images.slice(0,3).map(img => `<img src="${imgSrc(img)}" style="width:100%;height:160px;object-fit:cover">`).join('')}
             </div>` : ''}
 
             <div style="font-size:13px;line-height:1.65;color:var(--text-1);white-space:pre-wrap;background:var(--surface-2);border-radius:var(--r-sm);padding:14px;margin-bottom:12px">${cleanBody(post.body||'')}</div>

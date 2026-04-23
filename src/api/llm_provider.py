@@ -1,8 +1,39 @@
 import os
+import time
+import logging
 from anthropic import Anthropic
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Callable
 from src.database.db import get_db
 from src.database.models import APIConfiguration
+
+
+def _retry_on_transient(fn: Callable, max_attempts: int = 3, base_delay: float = 2.0):
+    """Retry fn() on transient network/API errors with exponential backoff.
+    Retries on: connection errors, timeouts, 429, 5xx, overloaded.
+    """
+    last_exc = None
+    for attempt in range(max_attempts):
+        try:
+            return fn()
+        except Exception as e:
+            msg = str(e).lower()
+            transient = any(k in msg for k in [
+                'connection error', 'timeout', 'timed out', 'overloaded',
+                'rate limit', 'too many requests', '429',
+                '500', '502', '503', '504', 'service unavailable',
+                'read timeout', 'connection reset', 'connection aborted',
+            ])
+            if not transient or attempt == max_attempts - 1:
+                raise
+            delay = base_delay * (3 ** attempt)
+            logging.warning(
+                f"[LLMProvider] Transient error (attempt {attempt + 1}/{max_attempts}): "
+                f"{type(e).__name__}: {str(e)[:120]} — retrying in {delay:.1f}s"
+            )
+            last_exc = e
+            time.sleep(delay)
+    if last_exc:
+        raise last_exc
 
 
 class LLMProvider:
@@ -84,13 +115,13 @@ class LLMProvider:
             }
         ]
 
-        response = self.client.messages.create(
+        response = _retry_on_transient(lambda: self.client.messages.create(
             model=self.model or "claude-sonnet-4-6",
             max_tokens=max_tokens,
             temperature=temperature,
             system=system_prompt or "You are a helpful social media content creator.",
             messages=messages
-        )
+        ))
 
         return response.content[0].text
 
@@ -158,13 +189,13 @@ class LLMProvider:
                     {"type": "text", "text": prompt or "Please analyse this image."}
                 ]
             }]
-            response = self.client.messages.create(
+            response = _retry_on_transient(lambda: self.client.messages.create(
                 model=self.model or "claude-sonnet-4-6",
                 max_tokens=max_tokens,
                 temperature=temperature,
                 system=system_prompt or "You are a helpful assistant.",
                 messages=messages
-            )
+            ))
             return response.content[0].text
 
         elif self.provider == 'gemini':
@@ -190,6 +221,42 @@ class LLMProvider:
         else:
             # Fallback for providers without vision: treat as text-only
             return self.generate_content(prompt, max_tokens, temperature, system_prompt)
+
+    def generate_content_with_images(
+        self,
+        prompt: str,
+        images: list,  # [{'data': b64, 'mime': 'image/png'}, ...]
+        max_tokens: int = 1000,
+        temperature: float = 0.7,
+        system_prompt: Optional[str] = None
+    ) -> str:
+        """Generate content with multiple images. Claude only (falls back to single-image for others)."""
+        if not images:
+            return self.generate_content(prompt, max_tokens, temperature, system_prompt)
+        if len(images) == 1:
+            return self.generate_content_with_image(
+                prompt, images[0]['data'], images[0].get('mime', 'image/png'),
+                max_tokens, temperature, system_prompt
+            )
+        if self.provider == 'claude':
+            content = [
+                {"type": "image", "source": {"type": "base64", "media_type": img.get('mime', 'image/png'), "data": img['data']}}
+                for img in images
+            ]
+            content.append({"type": "text", "text": prompt or "Please analyse these images."})
+            response = _retry_on_transient(lambda: self.client.messages.create(
+                model=self.model or "claude-sonnet-4-6",
+                max_tokens=max_tokens,
+                temperature=temperature,
+                system=system_prompt or "You are a helpful assistant.",
+                messages=[{"role": "user", "content": content}]
+            ))
+            return response.content[0].text
+        # Non-Claude fallback: use the first image only
+        return self.generate_content_with_image(
+            prompt, images[0]['data'], images[0].get('mime', 'image/png'),
+            max_tokens, temperature, system_prompt
+        )
 
     def generate_with_search(
         self,

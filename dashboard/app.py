@@ -1095,7 +1095,10 @@ def publish_content_now(content_id):
 
         # --- Helper: save base64 images to disk and return public URLs ---
         def upload_to_catbox(filepath):
-            """Upload image to catbox.moe — free, anonymous, permanent CDN. Returns public URL."""
+            """Upload image to litterbox.catbox.moe (72h expiry — plenty for IG fetch).
+            Catbox.moe permanent host now rejects anonymous uploads (412 Invalid uploader),
+            so we use the litterbox temp endpoint which accepts the same multipart shape.
+            """
             boundary = uuid.uuid4().hex
             with open(filepath, 'rb') as f:
                 file_data = f.read()
@@ -1104,35 +1107,58 @@ def publish_content_now(content_id):
                 f'--{boundary}\r\n'
                 f'Content-Disposition: form-data; name="reqtype"\r\n\r\nfileupload\r\n'
                 f'--{boundary}\r\n'
+                f'Content-Disposition: form-data; name="time"\r\n\r\n72h\r\n'
+                f'--{boundary}\r\n'
                 f'Content-Disposition: form-data; name="fileToUpload"; filename="{filename}"\r\n'
                 f'Content-Type: image/jpeg\r\n\r\n'
             ).encode() + file_data + f'\r\n--{boundary}--\r\n'.encode()
-            req = urllib.request.Request('https://catbox.moe/user/api.php', data=body)
+            req = urllib.request.Request(
+                'https://litterbox.catbox.moe/resources/internals/api.php',
+                data=body,
+            )
             req.add_header('Content-Type', f'multipart/form-data; boundary={boundary}')
-            with urllib.request.urlopen(req, timeout=30) as r:
+            req.add_header('User-Agent', 'Mozilla/5.0')
+            with urllib.request.urlopen(req, timeout=60) as r:
                 url = r.read().decode().strip()
             if not url.startswith('https://'):
-                raise RuntimeError(f"catbox.moe upload failed: {url}")
+                raise RuntimeError(f"litterbox upload failed: {url}")
             return url
 
         def save_images_to_disk(media_urls):
             saved = []
             media_dir = os.path.join(os.path.dirname(__file__), 'static', 'media')
             os.makedirs(media_dir, exist_ok=True)
-            for b64 in media_urls:
-                if b64.startswith('data:'):
-                    header, data = b64.split(',', 1)
+            import logging
+            for item in media_urls:
+                if not item:
+                    continue
+                # Case A: already-saved local file path (/static/media/xxx.jpg)
+                if item.startswith('/static/') or item.startswith('/media/'):
+                    rel = item.lstrip('/')
+                    fpath = os.path.join(os.path.dirname(__file__), rel)
+                    if not os.path.exists(fpath):
+                        logging.warning(f"[PUBLISH] Missing local media file: {fpath}")
+                        continue
+                    public_url = upload_to_catbox(fpath)
+                    logging.warning(f"[PUBLISH] Uploaded local file to CDN: {public_url}")
+                    saved.append(public_url)
+                    continue
+                # Case B: already a public URL
+                if item.startswith('http://') or item.startswith('https://'):
+                    saved.append(item)
+                    continue
+                # Case C: data URI or raw base64
+                if item.startswith('data:'):
+                    header, data = item.split(',', 1)
                     ext = 'jpg' if 'jpeg' in header or 'jpg' in header else 'png'
                 else:
-                    data = b64
+                    data = item
                     ext = 'jpg'
                 fname = f"{uuid.uuid4().hex}.{ext}"
                 fpath = os.path.join(media_dir, fname)
                 with open(fpath, 'wb') as f:
                     f.write(base64.b64decode(data))
-                # Upload to catbox.moe for a reliable public CDN URL (bypasses ngrok/localhost issues)
                 public_url = upload_to_catbox(fpath)
-                import logging
                 logging.warning(f"[PUBLISH] Uploaded image to CDN: {public_url}")
                 saved.append(public_url)
             return saved
@@ -2820,13 +2846,46 @@ def _extract_and_create_tasks(db, reply_text, thread_id, entity_type, entity_key
             used_pattern = pat
             break
 
+    # Fallback: truncated reply — opening ```tasks / ```json but no closing fence.
+    # Grab everything from the opening fence to end-of-text, then try to auto-close JSON.
+    truncated_opener = None
     if not raw_json:
-        return reply_text, []
+        trunc_match = re.search(r'```(tasks|json)\s*\n?([\s\S]*)$', reply_text)
+        if trunc_match and '[' in trunc_match.group(2):
+            tail = trunc_match.group(2)
+            # Cut at last valid-ish comma/brace and try to balance
+            body = tail[tail.index('['):]
+            # Naive balance: count unmatched { and [ and close them
+            opens_sq = body.count('[') - body.count(']')
+            opens_cr = body.count('{') - body.count('}')
+            # Strip trailing partial object after last closed }
+            last_close = max(body.rfind('}'), body.rfind(']'))
+            if last_close > 0:
+                candidate = body[:last_close+1]
+                opens_sq = candidate.count('[') - candidate.count(']')
+                if opens_sq > 0:
+                    candidate = candidate + (']' * opens_sq)
+                try:
+                    json.loads(candidate)
+                    raw_json = candidate
+                    truncated_opener = trunc_match.group(0)
+                    logging.info(f"Task extraction: recovered {candidate.count('title')} tasks from truncated reply")
+                except Exception:
+                    pass
+
+    if not raw_json:
+        # Still no valid JSON — but strip any unclosed ```tasks fragment so user doesn't see garbage
+        clean = re.sub(r'```(tasks|json)[\s\S]*$', '', reply_text).strip()
+        return clean, []
 
     # Strip ALL task/json code blocks from the reply
     clean_text = reply_text
     for pat in [pattern_tasks, pattern_json, pattern_any]:
         clean_text = re.sub(pat, '', clean_text, flags=re.DOTALL)
+    # Also strip truncated opener if we recovered from one
+    if truncated_opener:
+        clean_text = clean_text.replace(truncated_opener, '')
+        clean_text = re.sub(r'```(tasks|json)[\s\S]*$', '', clean_text)
     clean_text = clean_text.strip()
 
     created = []
@@ -3138,9 +3197,30 @@ def inbox_chat():
     entity_key = data.get('entity_key', '')       # role_key or agent id
     user_msg = data.get('message', '').strip()
     thread_id = data.get('thread_id', '')
-    attachment = data.get('attachment')  # {data: base64str, mime: str, name: str} or None
+    attachment = data.get('attachment')  # legacy single: {data, mime, name}
+    attachments = data.get('attachments') or ([attachment] if attachment else [])
+    # Split attachments into images (for vision) and PDFs (for text extraction)
+    images = []
+    pdf_texts = []  # list of (name, extracted_text)
+    for att in attachments:
+        if not att or not att.get('data'):
+            continue
+        mime = (att.get('mime') or '').lower()
+        name = att.get('name') or 'file'
+        if mime.startswith('image/'):
+            images.append({'data': att['data'], 'mime': mime, 'name': name})
+        elif mime == 'application/pdf' or name.lower().endswith('.pdf'):
+            try:
+                import base64, io
+                from pypdf import PdfReader
+                reader = PdfReader(io.BytesIO(base64.b64decode(att['data'])))
+                text = '\n'.join((p.extract_text() or '') for p in reader.pages).strip()
+                if text:
+                    pdf_texts.append((name, text[:20000]))  # cap 20k chars/file
+            except Exception as ex:
+                pdf_texts.append((name, f'[PDF extraction failed: {ex}]'))
 
-    if (not user_msg and not attachment) or not entity_type or not entity_key:
+    if (not user_msg and not attachments) or not entity_type or not entity_key:
         return jsonify({'error': 'message or attachment required, plus entity_type and entity_key'}), 400
 
     # Load entity
@@ -3173,10 +3253,11 @@ def inbox_chat():
         thread_id = canonical_thread
     # If caller passed a legacy UUID thread, honour it but also alias canonical
 
-    # Save user message (include attachment name as note if present)
+    # Save user message (include attachment names as note if present)
     saved_body = user_msg
-    if attachment and attachment.get('name'):
-        saved_body = f"[📎 {attachment['name']}]\n{user_msg}".strip()
+    if attachments:
+        names = [a.get('name', 'file') for a in attachments if a]
+        saved_body = f"[📎 {', '.join(names)}]\n{user_msg}".strip()
     user_row = InternalMessage(
         from_type='user', from_key='supervisor', from_name='You', from_emoji='',
         body=saved_body, msg_type='chat', thread_id=thread_id, is_read=True
@@ -3213,24 +3294,31 @@ def inbox_chat():
         )
         sys_prompt = (sys_prompt or '') + memory_note
 
-    prompt = f"{conv_context}\nUser: {user_msg}\n{name}:" if conv_context else (user_msg or "")
+    # Inject extracted PDF text into the user turn so Marc can read it
+    pdf_block = ''
+    if pdf_texts:
+        parts = [f"=== {nm} ===\n{txt}" for nm, txt in pdf_texts]
+        pdf_block = "\n\n[Attached PDF content]\n" + "\n\n".join(parts) + "\n\n"
+    effective_user_msg = (pdf_block + (user_msg or '')).strip()
+    prompt = f"{conv_context}\nUser: {effective_user_msg}\n{name}:" if conv_context else (effective_user_msg or "")
 
     try:
         from src.api.llm_provider import LLMProvider
         llm = LLMProvider(provider=provider, model=model)
-        if attachment and attachment.get('data'):
-            reply = llm.generate_content_with_image(
+        # Larger budget when dispatching (cofounder tends to create multi-task plans)
+        max_tok = 6000 if entity_key == 'cofounder' else 3000
+        if images:
+            reply = llm.generate_content_with_images(
                 prompt=prompt,
-                image_b64=attachment['data'],
-                image_mime=attachment.get('mime', 'image/png'),
-                max_tokens=800,
+                images=images,
+                max_tokens=max_tok,
                 temperature=temp,
                 system_prompt=sys_prompt
             )
         else:
             reply = llm.generate_content(
                 prompt=prompt,
-                max_tokens=2000,
+                max_tokens=max_tok,
                 temperature=temp,
                 system_prompt=sys_prompt
             )
@@ -3834,6 +3922,85 @@ def _is_image_task(assignee_key, title, description):
                 return True
     return False
 
+
+def _is_carousel_task(title, description):
+    """Detect Instagram carousel / multi-slide visual tasks (any assignee)."""
+    text = (title + ' ' + (description or '')).lower()
+    if 'carousel' in text:
+        return True
+    if 'instagram' in text and any(k in text for k in ['slide', 'visual', 'image', 'post']):
+        return True
+    return False
+
+
+def _extract_slide_texts(deliverable: str, max_slides: int = 8) -> list[str]:
+    """Parse slide text from a carousel deliverable. Returns list of short on-image texts."""
+    import re
+    if not deliverable:
+        return []
+    slides = []
+    pat = re.compile(
+        r'(?:^|\n)\s*(?:#{1,4}\s*)?\*{0,2}\s*SLIDE\s*(\d+)[^\n]*\*{0,2}\s*\n+(.+?)'
+        r'(?=\n\s*(?:#{1,4}\s*)?\*{0,2}\s*SLIDE\s*\d+|\n---|\n\s*\*{0,2}(?:CAPTION|HASHTAG|CTA|NOTES)|\Z)',
+        re.IGNORECASE | re.DOTALL,
+    )
+    for m in pat.finditer(deliverable):
+        block = m.group(2).strip()
+        block = re.sub(r'\*{1,2}', '', block)
+        block = re.sub(r'\(visual[^)]*\)', '', block, flags=re.IGNORECASE)
+        lines = [ln.strip('>-•* \t') for ln in block.split('\n') if ln.strip()]
+        text = ' '.join(lines)[:140].strip()
+        if text and len(text) > 5:
+            slides.append(text)
+        if len(slides) >= max_slides:
+            break
+    return slides
+
+
+def _generate_carousel_images(title: str, description: str, deliverable: str, brand_hint: str = '') -> list[dict]:
+    """Generate one image per carousel slide with slide text baked on. Returns [{url, prompt}]."""
+    import os, uuid, base64
+    results = []
+    try:
+        from src.api.image_generator import GeminiImageGenerator
+        gen = GeminiImageGenerator()
+
+        slide_texts = _extract_slide_texts(deliverable)
+        if not slide_texts:
+            desc = (description or title)[:200]
+            slide_texts = [f'Hook: {desc[:60]}', desc[60:140] or desc, 'Swipe →']
+        slide_texts = slide_texts[:6]
+
+        media_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'media')
+        os.makedirs(media_dir, exist_ok=True)
+
+        theme = (description or title)[:200]
+        for i, slide_text in enumerate(slide_texts):
+            prompt = (
+                f"Instagram carousel slide {i+1}/{len(slide_texts)}. Square 1:1 format. "
+                f"Modern editorial design, clean typography, high-contrast color palette. "
+                f"Theme: {theme}. {brand_hint}\n\n"
+                f"Render this exact text, large and legible, as the main visual focus of the image "
+                f'(use clean sans-serif font, centered or left-aligned, white or high-contrast color): '
+                f'"{slide_text}"\n\n'
+                f"Aesthetic: premium real-estate / fintech content. Photographic or graphic background "
+                f"that supports the text. No other text, no watermarks, no logos, no UI elements."
+            )
+            logging.info(f"[CarouselGen] Slide {i+1}/{len(slide_texts)}: {slide_text[:60]}")
+            b64_img = gen.generate_image(prompt)
+            if b64_img:
+                fname = f"carousel_{uuid.uuid4().hex[:12]}.jpg"
+                fpath = os.path.join(media_dir, fname)
+                with open(fpath, 'wb') as f:
+                    f.write(base64.b64decode(b64_img))
+                results.append({'url': f"/static/media/{fname}", 'prompt': slide_text[:100]})
+                logging.info(f"[CarouselGen] ✅ Slide {i+1} saved: {fpath}")
+            else:
+                logging.warning(f"[CarouselGen] ❌ Slide {i+1} failed")
+    except Exception as e:
+        logging.error(f"[CarouselGen] Carousel generation failed: {e}", exc_info=True)
+    return results
+
 def _generate_task_images(title, description, reply_text):
     """Generate actual images for a task. Returns list of {url, prompt} dicts."""
     import re, uuid, base64
@@ -3960,13 +4127,17 @@ def _execute_individual_task(db, task, entity, assignee_type, assignee_key):
     if is_image:
         logging.info(f"[TaskExec] 🎨 Image task detected — generating images for: {title[:50]}")
         generated_images = _generate_task_images(title, description, reply)
-        if generated_images:
-            # Append image URLs to the reply
-            img_section = "\n\n---\n🖼️ **GENERATED IMAGES:**\n"
-            for i, img in enumerate(generated_images):
-                img_section += f"\n**Image {i+1}:** {img['url']}\n"
-            reply += img_section
-            logging.info(f"[TaskExec] 🎨 Generated {len(generated_images)} images for task #{task.id}")
+    elif _is_carousel_task(title, description):
+        logging.info(f"[TaskExec] 🎠 Carousel task detected — generating slide images for: {title[:50]}")
+        brand_hint = f"Agent persona: {name}." if assignee_type == 'agent' else ''
+        generated_images = _generate_carousel_images(title, description, reply, brand_hint=brand_hint)
+
+    if generated_images:
+        img_section = "\n\n---\n🖼️ **GENERATED IMAGES:**\n"
+        for i, img in enumerate(generated_images):
+            img_section += f"\n**Image {i+1}:** {img['url']}\n"
+        reply += img_section
+        logging.info(f"[TaskExec] 🎨 Generated {len(generated_images)} images for task #{task.id}")
 
     # Save deliverable as an email (not chat blabber) — clean, professional
     subject = f'✅ Deliverable: {title[:80]}'
@@ -4094,6 +4265,18 @@ def _extract_post_body_from_deliverable(text, platform):
 
     if not text:
         return ''
+
+    # ── Strategy 0: Labeled CAPTION / MAIN CAPTION / POST COPY block (Instagram carousels) ──
+    cap_m = re.search(
+        r'\*{0,2}\s*(?:MAIN\s+CAPTION|FINAL\s+CAPTION|CAPTION|POST\s+COPY|FINAL\s+COPY)'
+        r'[^\n:]*:?\*{0,2}\s*\n+(.+?)(?=\n\s*(?:\*{0,2}(?:HASHTAG|CTA|NOTES|SLIDE|TWEET|---))|\Z)',
+        text, re.IGNORECASE | re.DOTALL,
+    )
+    if cap_m:
+        body = cap_m.group(1).strip()
+        body = re.sub(r'^\*+|\*+$', '', body).strip()
+        if len(body) > 40:
+            return body
 
     # ── Strategy 1: Extract blockquoted content (most reliable for tweet deliverables) ──
     # Pattern: "> line1\n> line2\n> line3" — the actual post is usually in blockquotes
@@ -4318,20 +4501,24 @@ def _execute_cascade_task(db, parent_task, head_entity, direct_reports):
             else:
                 if sub_task:
                     sub_task.status = 'blocked'
+                    sub_task.description = (sub_task.description or '') + f'\n[EXECUTION ERROR: Team member "{st.assignee_key}" not found]'
                     sub_db.commit()
                 return {'task_id': st.id, 'title': st.title, 'assignee': st.assignee_name,
                         'result': '[Member not found]', 'status': 'blocked'}
         except Exception as e:
-            logging.error(f"[Cascade] Sub-task #{st.id} failed: {e}")
+            import traceback
+            tb = traceback.format_exc()
+            logging.error(f"[Cascade] Sub-task #{st.id} failed: {e}\n{tb}")
             try:
                 sub_task = sub_db.query(Task).filter(Task.id == st.id).first()
                 if sub_task:
                     sub_task.status = 'blocked'
+                    sub_task.description = (sub_task.description or '') + f'\n[EXECUTION ERROR: {type(e).__name__}: {str(e)[:400]}]'
                     sub_db.commit()
             except Exception:
                 pass
             return {'task_id': st.id, 'title': st.title, 'assignee': st.assignee_name,
-                    'result': f'[Error: {str(e)[:100]}]', 'status': 'failed'}
+                    'result': f'[Error: {type(e).__name__}: {str(e)[:200]}]', 'status': 'failed'}
         finally:
             sub_db.close()
 

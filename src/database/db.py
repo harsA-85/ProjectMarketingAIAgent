@@ -5,7 +5,7 @@ from sqlalchemy.pool import QueuePool
 from .models import Base
 
 # Use absolute path for persistent database (project root)
-PROJECT_ROOT = r'C:\Users\harsa\OneDrive\Desktop\axelunfiltered\ProjectMarketingAIAgent'
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 DB_PATH = os.path.join(PROJECT_ROOT, 'marketing_ai.db')
 DB_PATH_NORMALIZED = DB_PATH.replace('\\', '/')
 DATABASE_URL = os.getenv(
