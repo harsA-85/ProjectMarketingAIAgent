@@ -639,8 +639,12 @@
             await marcLoadPending();
             if (d.approved > 0) {
                 marcAppend('ai', `🚀 All ${d.approved} task${d.approved>1?'s':''} approved and dispatched. Every team member is executing RIGHT NOW. Track progress in your [📥 Inbox](/inbox?tasks=1).`);
+            } else {
+                marcAppend('ai', `Nothing to approve right now — every pending task is already in progress or done. Check **Working Now** above, or the [📥 Inbox](/inbox?tasks=1) for full history.`);
             }
-        } catch(e) {}
+        } catch(e) {
+            marcAppend('ai', `❌ Approve failed — ${e.message || 'network error'}. Try again or open the [📥 Inbox](/inbox?tasks=1).`);
+        }
     }
 
     // ── Send approval email ───────────────────────────────────────────────────
