@@ -1329,9 +1329,29 @@ def publish_content_now(content_id):
                 return count
 
             if _tw_len(tweet_text) > 260:
-                while _tw_len(tweet_text) > 257:
-                    tweet_text = tweet_text[:-1]
-                tweet_text = tweet_text.rstrip() + '...'
+                # Ask the owning agent's LLM to rewrite to fit — never append "…"
+                # which would publish a mid-sentence truncation.
+                try:
+                    from src.database.models import Agent as _Agent
+                    _ag = orchestrator.db.query(_Agent).filter(_Agent.id == post.agent_id).first()
+                except Exception:
+                    _ag = None
+                rewritten = _rewrite_tweet_to_fit(tweet_text, _ag, limit=260) if _ag else tweet_text
+                if _tw_len(rewritten) <= 260 and not rewritten.rstrip().endswith(('…', '...')):
+                    tweet_text = rewritten
+                else:
+                    # Hard fallback: cut at last sentence/word boundary, no ellipsis
+                    while _tw_len(tweet_text) > 260:
+                        tweet_text = tweet_text[:-1]
+                    for end in ['. ', '.\n', '! ', '?\n', '? ', '.', '!', '?']:
+                        idx = tweet_text.rfind(end)
+                        if idx > 80:
+                            tweet_text = tweet_text[:idx + len(end)].rstrip()
+                            break
+                    else:
+                        sp = tweet_text.rfind(' ')
+                        if sp > 80:
+                            tweet_text = tweet_text[:sp].rstrip()
 
             logging.warning(f"[Twitter] Sending tweet text ({len(tweet_text)} chars): {repr(tweet_text[:100])}")
 
@@ -1569,7 +1589,7 @@ def _sanitize_twitter_body(text):
     # Enforce 260-char limit (emojis count as 2)
     tw = lambda s: sum(2 if ord(c) > 0xFFFF else 1 for c in s)
     if tw(text) > 260:
-        # Try to cut at a natural sentence/line break instead of mid-word
+        # Prefer cutting at line breaks
         lines = text.split('\n')
         trimmed = ''
         for line in lines:
@@ -1581,18 +1601,58 @@ def _sanitize_twitter_body(text):
         if trimmed and tw(trimmed) >= 60:
             text = trimmed
         else:
-            # Fallback: hard truncate at last full sentence within limit
-            while tw(text) > 257:
+            # Hard shrink to <=260, then back off to the last sentence/word boundary.
+            # Never append "..." — a truncated mid-word tweet is worse than a shorter complete one.
+            while tw(text) > 260:
                 text = text[:-1]
-            # Try to break at last sentence end
-            for end in ['. ', '.\n', '! ', '?\n', '? ']:
+            for end in ['. ', '.\n', '! ', '?\n', '? ', '.', '!', '?']:
                 idx = text.rfind(end)
-                if idx > 60:
-                    text = text[:idx+1].rstrip()
+                if idx > 80:
+                    text = text[:idx + len(end)].rstrip()
                     break
             else:
-                text = text.rstrip() + '...'
+                # Last resort: cut at last whitespace so we don't split a word.
+                sp = text.rfind(' ')
+                if sp > 80:
+                    text = text[:sp].rstrip()
     return text
+
+
+def _rewrite_tweet_to_fit(text, agent, limit=270):
+    """Use the agent's own LLM to rewrite an over-long tweet into a ≤limit, complete
+    sentence in persona voice. Returns the rewrite, or the original if rewrite fails.
+    Never appends '…' — an incomplete tweet is unacceptable.
+    """
+    tw = lambda s: sum(2 if ord(c) > 0xFFFF else 1 for c in s)
+    if not text or tw(text) <= limit:
+        return text
+    try:
+        from src.api.llm_provider import LLMProvider
+        llm = LLMProvider(
+            provider=getattr(agent, 'llm_provider', None) or 'claude',
+            model=getattr(agent, 'llm_model', None) or 'claude-sonnet-4-6',
+        )
+        sys_prompt = (
+            f"You are {getattr(agent, 'name', 'the author')} "
+            f"({getattr(agent, 'brand', '')}). "
+            f"Persona: {getattr(agent, 'persona', '')}. "
+            f"Tone: {getattr(agent, 'tone_of_voice', '')}.\n\n"
+            f"Rewrite the tweet below so it fits in ≤{limit} characters, is a "
+            f"COMPLETE sentence, and ends with a period/!/? — never with '…'. "
+            f"Preserve the core point and persona voice. Output ONLY the tweet."
+        )
+        for _ in range(2):
+            out = (llm.generate_content(
+                f"---\n{text}\n---", max_tokens=300, temperature=0.5,
+                system_prompt=sys_prompt,
+            ) or '').strip()
+            if out.startswith('"') and out.endswith('"'):
+                out = out[1:-1].strip()
+            if out and tw(out) <= limit and not out.rstrip().endswith(('…', '...')):
+                return out
+    except Exception as e:
+        logging.warning(f"[TWEET-FIT] LLM rewrite failed ({e}); falling back to sanitizer")
+    return _sanitize_twitter_body(text)
 
 
 @app.route('/api/content/<int:content_id>/edit', methods=['PUT'])
@@ -4250,10 +4310,14 @@ def _maybe_create_content_from_task(db, task, deliverable, images=None):
     if any(m in body_lower for m in _internal_markers):
         return  # Not actual post content
 
-    # Twitter: sanitize and enforce 260 char limit
+    # Twitter: sanitize, then LLM-rewrite if still over limit so we never save
+    # a mid-sentence truncated tweet ("The of…" etc.).
     if platform in ('twitter', 'x'):
         platform = 'Twitter/X'
         body = _sanitize_twitter_body(body)
+        _tw_len = sum(2 if ord(c) > 0xFFFF else 1 for c in body)
+        if _tw_len > 270 or body.rstrip().endswith(('…', '...')):
+            body = _rewrite_tweet_to_fit(body, agent, limit=270)
 
     media = [img['url'] for img in (images or []) if img.get('url')]
 
