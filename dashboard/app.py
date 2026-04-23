@@ -1256,7 +1256,23 @@ def publish_content_now(content_id):
                 'creation_id': container_id,
                 'access_token': token
             }).encode())
-            return True, result.get('id', 'published')
+            media_id = result.get('id', 'published')
+            # Resolve permalink shortcode so the "View Post" link works
+            # (/p/<id>/ URLs require the shortcode, not the numeric media id).
+            try:
+                import re as _re
+                meta = ig_api_call(
+                    f"https://graph.instagram.com/v19.0/{media_id}?fields=permalink&access_token={token}"
+                )
+                permalink = meta.get('permalink') or ''
+                # permalink shape: https://www.instagram.com/p/<shortcode>/
+                m = _re.search(r'/(?:p|reel)/([A-Za-z0-9_-]+)', permalink)
+                if m:
+                    return True, m.group(1)
+            except Exception as e:
+                import logging
+                logging.warning(f"[PUBLISH] permalink lookup failed: {e}")
+            return True, media_id
 
         # --- Execute platform publish ---
         platform_result = None
