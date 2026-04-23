@@ -7,6 +7,24 @@ from src.database.db import get_db
 from src.database.models import APIConfiguration
 
 
+# Models that reject the `temperature` param (extended-thinking / reasoning models).
+_NO_TEMPERATURE_MODELS = ('claude-opus-4-7',)
+
+
+def _claude_kwargs(model: str, max_tokens: int, temperature: float, system: str, messages: list) -> dict:
+    """Build kwargs for Anthropic messages.create(), omitting `temperature` for
+    models that don't accept it (e.g. Opus 4.7 extended-thinking)."""
+    kwargs = {
+        'model': model,
+        'max_tokens': max_tokens,
+        'system': system,
+        'messages': messages,
+    }
+    if not any(tag in (model or '') for tag in _NO_TEMPERATURE_MODELS):
+        kwargs['temperature'] = temperature
+    return kwargs
+
+
 def _retry_on_transient(fn: Callable, max_attempts: int = 3, base_delay: float = 2.0):
     """Retry fn() on transient network/API errors with exponential backoff.
     Retries on: connection errors, timeouts, 429, 5xx, overloaded.
@@ -116,11 +134,13 @@ class LLMProvider:
         ]
 
         response = _retry_on_transient(lambda: self.client.messages.create(
-            model=self.model or "claude-sonnet-4-6",
-            max_tokens=max_tokens,
-            temperature=temperature,
-            system=system_prompt or "You are a helpful social media content creator.",
-            messages=messages
+            **_claude_kwargs(
+                model=self.model or "claude-sonnet-4-6",
+                max_tokens=max_tokens,
+                temperature=temperature,
+                system=system_prompt or "You are a helpful social media content creator.",
+                messages=messages,
+            )
         ))
 
         return response.content[0].text
@@ -190,11 +210,13 @@ class LLMProvider:
                 ]
             }]
             response = _retry_on_transient(lambda: self.client.messages.create(
-                model=self.model or "claude-sonnet-4-6",
-                max_tokens=max_tokens,
-                temperature=temperature,
-                system=system_prompt or "You are a helpful assistant.",
-                messages=messages
+                **_claude_kwargs(
+                    model=self.model or "claude-sonnet-4-6",
+                    max_tokens=max_tokens,
+                    temperature=temperature,
+                    system=system_prompt or "You are a helpful assistant.",
+                    messages=messages,
+                )
             ))
             return response.content[0].text
 
@@ -245,11 +267,13 @@ class LLMProvider:
             ]
             content.append({"type": "text", "text": prompt or "Please analyse these images."})
             response = _retry_on_transient(lambda: self.client.messages.create(
-                model=self.model or "claude-sonnet-4-6",
-                max_tokens=max_tokens,
-                temperature=temperature,
-                system=system_prompt or "You are a helpful assistant.",
-                messages=[{"role": "user", "content": content}]
+                **_claude_kwargs(
+                    model=self.model or "claude-sonnet-4-6",
+                    max_tokens=max_tokens,
+                    temperature=temperature,
+                    system=system_prompt or "You are a helpful assistant.",
+                    messages=[{"role": "user", "content": content}],
+                )
             ))
             return response.content[0].text
         # Non-Claude fallback: use the first image only
