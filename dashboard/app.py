@@ -6280,4 +6280,9 @@ if __name__ == '__main__':
     # Only auto-resume when running as the server (not when imported by scripts)
     _resume_orphaned_tasks()
     _start_scheduled_post_publisher()
+    try:
+        from src.automation.ting_pulse_autopilot import start_ting_pulse_autopilot
+        start_ting_pulse_autopilot()
+    except Exception as _e:
+        logging.warning(f'[TingPulse] failed to start autopilot: {_e}')
     app.run(debug=False, host='0.0.0.0', port=5000, threaded=True)
