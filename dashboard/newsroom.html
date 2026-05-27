@@ -1037,6 +1037,12 @@
         .chat-typing span:nth-child(3) { animation-delay: 0.4s; }
         @keyframes blink { 0%,80%,100% { opacity: 0.2; } 40% { opacity: 1; } }
 
+        @keyframes gm-indeterminate-slide {
+            0% { transform: translateX(-100%); }
+            100% { transform: translateX(350%); }
+        }
+        .gm-indeterminate { animation: gm-indeterminate-slide 1.6s ease-in-out infinite; }
+
         .chat-input-bar {
             padding: 12px; border-top: 1px solid var(--border);
             display: flex; gap: 8px; background: var(--surface);
@@ -1150,32 +1156,11 @@
 
             <!-- TAB BAR -->
             <div class="tab-bar" style="display:flex;align-items:center">
-                <button class="tab-btn" onclick="switchTab('pipeline', this)">▶ Pipeline</button>
                 <button class="tab-btn active" onclick="switchTab('tasks', this)">📋 Tasks <span id="gm-tasks-badge" style="display:none;background:var(--danger);color:#fff;font-size:10px;padding:1px 6px;border-radius:10px;margin-left:4px;font-weight:700">0</span></button>
                 <button class="tab-btn" onclick="switchTab('orgchart', this)">🏛 Org Chart</button>
                 <button class="tab-btn" onclick="switchTab('history', this)">📜 History</button>
                 <div style="flex:1"></div>
                 <button class="btn btn-ghost" style="font-size:12px;padding:5px 12px;margin-bottom:2px" onclick="chatWithHead('general_manager')">💬 Chat with GM</button>
-            </div>
-
-            <!-- TAB: PIPELINE -->
-            <div class="tab-pane" id="tab-pipeline">
-                <div class="pipeline-panel fade-up">
-                    <div class="section-header" style="margin-bottom:20px">
-                        <div class="section-title" style="flex:1">Pipeline</div>
-                        <div style="display:flex;align-items:center;gap:10px">
-                            <div id="pipeline-run-label" class="muted" style="font-size:12px;font-weight:500"></div>
-                            <button class="btn btn-ghost" id="btn-stop-wf" style="display:none;font-size:11px;padding:4px 10px;color:var(--danger);border:1px solid var(--danger)" onclick="stopWorkflow()">⬜ Stop</button>
-                        </div>
-                    </div>
-                    <div class="stepper" id="stepper"></div>
-                    <div class="artifact-preview" id="artifact-preview">
-                        <div class="artifact-empty">
-                            <div class="artifact-empty-icon">📄</div>
-                            Select a pipeline step to preview its output
-                        </div>
-                    </div>
-                </div>
             </div>
 
             <!-- TAB: TASKS COMMAND CENTER -->
@@ -1795,7 +1780,6 @@ async function _cancelWorkflowNotif(runId, notifId, btn) {
    INIT
 ───────────────────────────────────────────── */
 document.addEventListener('DOMContentLoaded', () => {
-    renderStepper();
     loadTeam();
     loadWorkflows();
     loadNotifications();
@@ -2081,7 +2065,6 @@ async function loadRoomWorkflows(tbodyId, dept) {
                     <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">${stepChips}</div>
                     <div style="display:flex;justify-content:space-between;align-items:center">
                         <span style="font-size:10px;color:var(--text-3)">Click a step to view details</span>
-                        <a href="#" onclick="event.preventDefault();switchRoom('gm',null);setTimeout(()=>{switchTab('pipeline',document.querySelectorAll('.tab-btn')[0]);viewWorkflow('${runId}')},200)" style="font-size:11px;color:var(--accent);text-decoration:none;font-weight:600">Open in Pipeline →</a>
                     </div>
                 </td>
             </tr>`;
@@ -2207,6 +2190,17 @@ function _relativeTime(isoStr) {
     return months[d.getMonth()] + ' ' + d.getDate();
 }
 
+function _elapsedSince(isoStr) {
+    if (!isoStr) return '';
+    const diffSec = Math.max(0, Math.floor((new Date() - new Date(isoStr)) / 1000));
+    if (diffSec < 60) return diffSec + 's';
+    const m = Math.floor(diffSec / 60);
+    const s = diffSec % 60;
+    if (m < 60) return `${m}m ${s}s`;
+    const h = Math.floor(m / 60);
+    return `${h}h ${m % 60}m`;
+}
+
 function _filterGMTasks(status) {
     // Toggle: clicking same filter again resets to 'all'
     _gmTaskFilter = (_gmTaskFilter === status) ? 'all' : status;
@@ -2257,9 +2251,14 @@ async function loadGMTasks() {
         let allDone = [];
         try { allDone = (await allR.json()).tasks || []; } catch(e) {}
 
-        // Update stat cards
+        // Update stat cards — running count shows top-level + (sub-tasks) if any
         document.getElementById('gm-stat-pending-num').textContent = prog.pending_approval || 0;
-        document.getElementById('gm-stat-running-num').textContent = prog.in_progress || 0;
+        const _top = prog.in_progress || 0;
+        const _all = prog.in_progress_all || _top;
+        const _subs = Math.max(0, _all - _top);
+        document.getElementById('gm-stat-running-num').innerHTML = _subs > 0
+            ? `${_top}<span style="font-size:14px;color:var(--text-3);font-weight:500"> +${_subs} sub</span>`
+            : _top;
         document.getElementById('gm-stat-done-num').textContent = prog.done || 0;
         document.getElementById('gm-stat-blocked-num').textContent = prog.blocked || 0;
 
@@ -2335,6 +2334,35 @@ async function loadGMTasks() {
                 else if (isDone) statusBadge = '<span style="font-size:10px;padding:2px 8px;border-radius:6px;background:rgba(48,209,88,0.12);color:var(--success);font-weight:600">✅ Done</span>';
                 else if (isBlocked) statusBadge = '<span style="font-size:10px;padding:2px 8px;border-radius:6px;background:rgba(255,69,58,0.12);color:var(--danger);font-weight:600">🚫 Blocked</span>';
 
+                // Progress bar for running tasks — determinate if parent has subs, indeterminate otherwise
+                let progressBlock = '';
+                if (isRunning) {
+                    const subTotal = t.subtask_count || 0;
+                    const subDone = t.subtasks_done || 0;
+                    const subRun = t.subtasks_running || 0;
+                    const subBlocked = t.subtasks_blocked || 0;
+                    const hasSubs = subTotal > 0;
+                    const pct = hasSubs ? Math.round((subDone / subTotal) * 100) : 0;
+                    const updated = t.updated_at || t.created_at;
+                    const elapsed = updated ? _elapsedSince(updated) : '';
+                    const barInner = hasSubs
+                        ? `<div style="height:100%;width:${pct}%;background:linear-gradient(90deg,var(--accent),#5ac8fa);transition:width 0.6s;border-radius:3px"></div>`
+                        : `<div class="gm-indeterminate" style="height:100%;width:40%;background:linear-gradient(90deg,transparent,var(--accent),transparent);border-radius:3px"></div>`;
+                    const leftLabel = hasSubs
+                        ? `${subDone}/${subTotal} sub-tasks · ${pct}%${subRun ? ' · ⚡' + subRun + ' running' : ''}${subBlocked ? ' · 🚫' + subBlocked : ''}`
+                        : `Running · ${elapsed}`;
+                    const rightLabel = t.running_subtask
+                        ? `▸ ${_esc(t.running_subtask)}${t.running_subtask_title && t.running_subtask_title !== t.running_subtask ? ': ' + _esc(t.running_subtask_title) : ''}`
+                        : (hasSubs ? elapsed : '');
+                    progressBlock = `<div style="margin-top:6px">
+                        <div style="height:5px;background:var(--border);border-radius:3px;overflow:hidden;position:relative">${barInner}</div>
+                        <div style="display:flex;justify-content:space-between;gap:8px;font-size:10px;color:var(--text-3);margin-top:3px">
+                            <span style="color:var(--accent);font-weight:600">${leftLabel}</span>
+                            <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:60%">${rightLabel}</span>
+                        </div>
+                    </div>`;
+                }
+
                 return `<div style="padding:12px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px;${isBlocked ? 'opacity:0.6' : ''}">
                     <div style="width:4px;align-self:stretch;border-radius:2px;background:${prioColor[t.priority] || '#aeaeb2'};flex-shrink:0"></div>
                     <div style="flex:1;min-width:0">
@@ -2349,7 +2377,8 @@ async function loadGMTasks() {
                             <span style="color:${prioColor[t.priority] || 'var(--text-3)'}">${t.priority}</span>
                             <span style="color:var(--text-3)">${_relativeTime(t.created_at)}</span>
                         </div>
-                        ${t.description ? '<div style="font-size:11px;color:var(--text-3);margin-top:4px;line-height:1.4;overflow:hidden;max-height:36px">' + _esc(t.description).substring(0, 150) + '</div>' : ''}
+                        ${progressBlock}
+                        ${t.description && !isRunning ? '<div style="font-size:11px;color:var(--text-3);margin-top:4px;line-height:1.4;overflow:hidden;max-height:36px">' + _esc(t.description).substring(0, 150) + '</div>' : ''}
                     </div>
                     <div style="display:flex;gap:6px;flex-shrink:0">
                         ${isPending ? `<button onclick="_approveSingleGM(${t.id},this)" style="padding:5px 14px;font-size:11px;font-weight:700;border:none;border-radius:6px;background:var(--success);color:#fff;cursor:pointer">✓ Approve</button>

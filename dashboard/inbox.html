@@ -441,12 +441,42 @@ function _clearAttachment(prefix) {
 /* ── HELPERS ── */
 function esc(s) { const d = document.createElement('div'); d.textContent = String(s || ''); return d.innerHTML; }
 
+function jsonToMarkdown(obj, depth = 0) {
+    // Recursive JSON → markdown converter for legacy deliverables.
+    const pad = '  '.repeat(depth);
+    if (obj === null || obj === undefined) return '';
+    if (typeof obj !== 'object') return String(obj);
+    if (Array.isArray(obj)) {
+        return obj.map((v, i) => {
+            if (v && typeof v === 'object') {
+                return `${pad}- **Item ${i + 1}**\n${jsonToMarkdown(v, depth + 1)}`;
+            }
+            return `${pad}- ${v}`;
+        }).join('\n');
+    }
+    return Object.entries(obj).map(([k, v]) => {
+        const label = k.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+        if (v && typeof v === 'object') {
+            return `${pad}- **${label}:**\n${jsonToMarkdown(v, depth + 1)}`;
+        }
+        return `${pad}- **${label}:** ${v}`;
+    }).join('\n');
+}
+
 function formatAI(raw) {
     // Extract image URLs before stripping code blocks
     let text = String(raw || '');
     const imgMatches = text.match(/\/static\/media\/[^\s\n"']+\.(?:jpg|png|jpeg|webp)/g) || [];
     // Strip command/data blocks the AI embeds (```vision, ```tasks, ```workflow, ```hire, etc.)
     text = text.replace(/```[\w_]*\s*[\s\S]*?```/g, '').trim();
+    // Legacy deliverables come back as raw JSON — convert them to markdown so the inbox stays readable.
+    const trimmed = text.trim();
+    if ((trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
+        try {
+            const parsed = JSON.parse(trimmed);
+            text = jsonToMarkdown(parsed);
+        } catch (_) { /* not valid JSON — fall through */ }
+    }
     // Helper: escape + inline markdown
     function inline(s) {
         const d = document.createElement('div');

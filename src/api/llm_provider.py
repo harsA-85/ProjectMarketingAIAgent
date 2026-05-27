@@ -87,7 +87,7 @@ class LLMProvider:
     def _initialize_client(self):
         """Initialize the appropriate LLM client"""
         if self.provider == 'claude':
-            return Anthropic(api_key=self.api_key)
+            return Anthropic(api_key=self.api_key, timeout=180.0, max_retries=2)
         elif self.provider == 'openai':
             try:
                 from openai import OpenAI

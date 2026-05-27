@@ -948,7 +948,7 @@
                 const c  = palette[ci];
                 const init  = (a.agent_name || '?')[0].toUpperCase();
                 const tags  = (a.fields || []).slice(0, 4);
-                const posts = a.analytics?.total_posts || 0;
+                const posts = a.published_posts ?? a.analytics?.total_posts ?? 0;
                 const drafts = a.draft_posts || 0;
                 const sched  = a.scheduled_posts || 0;
                 const isRunning = (a.ai_auto_status || '').toLowerCase().includes('running');

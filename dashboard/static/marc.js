@@ -196,11 +196,17 @@
     .marc-task-card-title { font-weight: 700; color: #1c1c1e; font-size: 12px; }
     .marc-task-card-meta { color: #636366; margin-top: 2px; }
     .marc-typing { align-self: flex-start; background: #fff; border-radius: 12px; border-bottom-left-radius: 3px; padding: 10px 14px;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.07); }
-    .marc-typing span { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: #c7c7cc; margin: 0 1px; animation: marc-blink 1.2s infinite; }
-    .marc-typing span:nth-child(2) { animation-delay: 0.2s; }
-    .marc-typing span:nth-child(3) { animation-delay: 0.4s; }
+        box-shadow: 0 1px 3px rgba(0,0,0,0.07); min-width: 160px; max-width: 260px; }
+    .marc-typing-dots { display: flex; align-items: center; gap: 2px; }
+    .marc-typing-dots span { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: #c7c7cc; margin: 0 1px; animation: marc-blink 1.2s infinite; }
+    .marc-typing-dots span:nth-child(2) { animation-delay: 0.2s; }
+    .marc-typing-dots span:nth-child(3) { animation-delay: 0.4s; }
     @keyframes marc-blink { 0%,80%,100% { opacity: 0.2; } 40% { opacity: 1; } }
+    .marc-typing-bar { margin-top: 8px; height: 3px; width: 100%; background: #eceef1; border-radius: 2px; overflow: hidden; position: relative; }
+    .marc-typing-bar::before { content: ''; position: absolute; top: 0; left: 0; height: 100%; width: 40%; background: linear-gradient(90deg, transparent, #ff6a00 50%, transparent); animation: marc-bar 1.6s ease-in-out infinite; border-radius: 2px; }
+    @keyframes marc-bar { 0% { transform: translateX(-100%); } 100% { transform: translateX(350%); } }
+    .marc-typing-meta { display: flex; justify-content: space-between; align-items: center; margin-top: 6px; font-size: 10.5px; color: #8e8e93; font-variant-numeric: tabular-nums; }
+    .marc-typing-hint { font-size: 10.5px; color: #8e8e93; margin-top: 4px; font-style: italic; }
     .marc-msg p { margin: 0 0 6px; } .marc-msg p:last-child { margin: 0; }
     .marc-msg ul { margin: 4px 0 4px 16px; padding: 0; }
     .marc-msg li { margin-bottom: 2px; }
@@ -385,7 +391,7 @@
         return '<p>' + s + '</p>';
     }
 
-    function marcAppend(role, text, tasksCreated, uiActions) {
+    function marcAppend(role, text, tasksCreated, uiActions, attachments) {
         const msgs = document.getElementById('marc-messages');
         const div = document.createElement('div');
         div.className = 'marc-msg ' + role;
@@ -434,7 +440,27 @@
             }
             div.innerHTML = html;
         } else {
-            div.textContent = text;
+            // User bubble — render text + image thumbnails for any attachments
+            const imgs = (attachments || []).filter(a => (a.mime || '').startsWith('image/'));
+            const docs = (attachments || []).filter(a => !(a.mime || '').startsWith('image/'));
+            let userHtml = '';
+            if (text) {
+                const esc = document.createElement('div');
+                esc.textContent = text;
+                userHtml += '<div style="white-space:pre-wrap">' + esc.innerHTML + '</div>';
+            }
+            if (imgs.length > 0) {
+                userHtml += '<div style="margin-top:' + (text ? '8px' : '0') + ';display:flex;flex-wrap:wrap;gap:6px">';
+                imgs.forEach(a => {
+                    const src = (a.data || '').startsWith('data:') ? a.data : ('data:' + (a.mime || 'image/png') + ';base64,' + (a.data || ''));
+                    userHtml += '<img src="' + src + '" alt="' + (a.name || '') + '" style="max-width:180px;max-height:180px;border-radius:8px;object-fit:cover;cursor:pointer;border:1px solid rgba(255,255,255,0.2)" onclick="window.open(this.src,\'_blank\')" />';
+                });
+                userHtml += '</div>';
+            }
+            if (docs.length > 0) {
+                userHtml += '<div style="margin-top:6px;font-size:11px;opacity:0.85">📎 ' + docs.map(a => a.name).join(', ') + '</div>';
+            }
+            div.innerHTML = userHtml || text || '';
         }
         msgs.appendChild(div);
         msgs.scrollTop = msgs.scrollHeight;
@@ -459,10 +485,7 @@
         }
 
         if (!_marcOpen) marcToggle();
-        const userDisplay = sendAttachments.length
-            ? `${msg}${msg ? '\n' : ''}📎 ${sendAttachments.map(a => a.name).join(', ')}`
-            : msg;
-        marcAppend('user', userDisplay);
+        marcAppend('user', msg, null, null, sendAttachments);
 
         const btn = document.getElementById('marc-send-btn');
         btn.disabled = true;
@@ -470,9 +493,43 @@
         const msgs = document.getElementById('marc-messages');
         const typing = document.createElement('div');
         typing.className = 'marc-typing';
-        typing.innerHTML = '<span></span><span></span><span></span>';
+        const hasImages = sendAttachments.some(a => (a.mime || '').startsWith('image/'));
+        typing.innerHTML = `
+            <div class="marc-typing-dots"><span></span><span></span><span></span></div>
+            <div class="marc-typing-bar"></div>
+            <div class="marc-typing-meta">
+                <span class="marc-typing-status">Marc is thinking…</span>
+                <span class="marc-typing-timer">0:00</span>
+            </div>
+            <div class="marc-typing-hint" style="display:none"></div>`;
         msgs.appendChild(typing);
         msgs.scrollTop = msgs.scrollHeight;
+
+        // Live timer + adaptive status hints (Marc runs on Opus 4.7 — can take minutes,
+        // especially with image attachments, and will retry on transient network errors).
+        const tStart = Date.now();
+        const statusEl = typing.querySelector('.marc-typing-status');
+        const timerEl  = typing.querySelector('.marc-typing-timer');
+        const hintEl   = typing.querySelector('.marc-typing-hint');
+        const tick = () => {
+            const s = Math.floor((Date.now() - tStart) / 1000);
+            const m = Math.floor(s / 60), r = s % 60;
+            timerEl.textContent = `${m}:${String(r).padStart(2, '0')}`;
+            if (s < 15)       statusEl.textContent = 'Marc is thinking…';
+            else if (s < 45)  statusEl.textContent = hasImages ? 'Analyzing images…' : 'Drafting response…';
+            else if (s < 120) statusEl.textContent = 'Working on dispatch plan…';
+            else              statusEl.textContent = 'Still working — retrying…';
+            if (s === 30 && hasImages) {
+                hintEl.style.display = 'block';
+                hintEl.textContent = 'Large payload — Opus 4.7 + images can take a few minutes.';
+            } else if (s === 90) {
+                hintEl.style.display = 'block';
+                hintEl.textContent = 'Connection may be retrying — safe to keep waiting or cancel.';
+            }
+        };
+        tick();
+        const timerId = setInterval(tick, 1000);
+        typing._timerId = timerId;
 
         try {
             const r = await fetch('/api/inbox/chat', {
@@ -486,6 +543,7 @@
                 })
             });
             const data = await r.json();
+            if (typing._timerId) clearInterval(typing._timerId);
             typing.remove();
             const tasks   = data.tasks_created || [];
             const actions = data.ui_actions    || [];
@@ -497,6 +555,7 @@
                 marcLoadPending();
             }
         } catch (e) {
+            if (typing._timerId) clearInterval(typing._timerId);
             typing.remove();
             marcAppend('ai', 'Connection error. Is the server running?');
         } finally {
@@ -699,9 +758,10 @@
         }
     }
 
-    // Pulse every 90 seconds — Marc is always working
-    let _pulseInterval = setInterval(marcPulse, 90000);
-    // Also refresh pending strip every 15s
+    // Auto-pulse disabled — was costing ~$0.18/fire on Opus 4.7 and cascading into sub-task storms.
+    // Marc stays reactive to user messages. Re-enable by uncommenting the setInterval below.
+    // let _pulseInterval = setInterval(marcPulse, 90000);
+    // Pending strip refresh kept — it's a cheap DB read, no LLM.
     setInterval(marcLoadPending, 15000);
 
     // ── Load history ──────────────────────────────────────────────────────────

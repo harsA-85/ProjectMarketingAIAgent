@@ -53,6 +53,8 @@ venv/
 
 # Database
 *.db
+*.db-shm
+*.db-wal
 *.sqlite
 *.sqlite3
 marketing_ai.db
@@ -89,3 +91,13 @@ secrets/
 # Generated files
 .cache/
 *.tmp
+
+# Generated media (AI image output — large + ephemeral, regenerated as needed)
+dashboard/static/media/*.jpg
+dashboard/static/media/*.jpeg
+dashboard/static/media/*.png
+dashboard/static/media/*.webp
+
+# Claude harness local state
+.claude/scheduled_tasks.lock
+.claude/settings.local.json

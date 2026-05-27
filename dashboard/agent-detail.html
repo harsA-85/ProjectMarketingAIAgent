@@ -426,6 +426,32 @@
             align-items: start;
         }
 
+        /* ── POSTS SECTIONS (Published / Drafts collapsible) ── */
+        .posts-section { margin-bottom: 28px; }
+        .posts-section-header {
+            display: flex; align-items: center; gap: 10px;
+            padding: 12px 16px; margin-bottom: 14px;
+            background: var(--surface-2); border: 1px solid var(--border);
+            border-radius: var(--r); cursor: pointer; user-select: none;
+            transition: background 0.15s;
+        }
+        .posts-section-header:hover { background: var(--surface-3, #f0f3f7); }
+        .posts-section-caret {
+            display: inline-block; transition: transform 0.2s; font-size: 12px; color: var(--text-3);
+        }
+        .posts-section.collapsed .posts-section-caret { transform: rotate(-90deg); }
+        .posts-section-title { font-size: 14px; font-weight: 700; color: var(--text-1); letter-spacing: -0.2px; }
+        .posts-section-count {
+            font-size: 12px; font-weight: 600; padding: 2px 10px; border-radius: 10px;
+            background: var(--bg-1, #fff); color: var(--text-2); border: 1px solid var(--border);
+        }
+        .posts-section.collapsed .posts-grid { display: none; }
+        .posts-section-dot {
+            width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+        }
+        .posts-section-dot.published { background: #30d158; }
+        .posts-section-dot.drafts    { background: #ff9500; }
+
         /* ── POST WRAPPER (card + action bar) ── */
         .post-wrapper { display: flex; flex-direction: column; gap: 0; }
 
@@ -2253,6 +2279,17 @@ function createTtPreview(post) {
 }
 
 // ── Load posts ──
+function togglePostsSection(key) {
+    const sec = document.querySelector(`.posts-section[data-section="${key}"]`);
+    if (!sec) return;
+    sec.classList.toggle('collapsed');
+    const lsKey = `postsSectionCollapsed:agent${agentId}`;
+    let state = {};
+    try { state = JSON.parse(localStorage.getItem(lsKey) || '{}'); } catch(e) {}
+    state[key] = sec.classList.contains('collapsed');
+    try { localStorage.setItem(lsKey, JSON.stringify(state)); } catch(e) {}
+}
+
 async function loadPosts() {
     document.getElementById('posts-content').innerHTML = '<div class="loading-state">Loading posts…</div>';
     try {
@@ -2273,19 +2310,71 @@ async function loadPosts() {
 
         window._postsCache = data.posts;
 
-        document.getElementById('posts-content').innerHTML = `
-            <div class="posts-grid">
-                ${data.posts.map(p => createSocialPreview(p)).join('')}
-            </div>
-        `;
+        // ── Split into Published vs Drafts (drafts = scheduled + draft + failed + anything else) ──
+        const published = data.posts.filter(p => p.status === 'published');
+        const drafts    = data.posts.filter(p => p.status !== 'published');
+
+        // Newest first inside each group (published_at for published, created_at otherwise)
+        const tsPub  = p => new Date(p.published_at || p.created_at || 0).getTime();
+        const tsDraft= p => new Date(p.scheduled_at || p.created_at || 0).getTime();
+        published.sort((a,b) => tsPub(b) - tsPub(a));
+        drafts.sort((a,b)    => tsDraft(b) - tsDraft(a));
+
+        // Persisted collapse state per agent
+        const lsKey = `postsSectionCollapsed:agent${agentId}`;
+        let collapseState = {};
+        try { collapseState = JSON.parse(localStorage.getItem(lsKey) || '{}'); } catch(e) {}
+
+        const renderSection = (key, label, dotClass, list) => {
+            const isCollapsed = !!collapseState[key];
+            return `
+              <div class="posts-section ${isCollapsed ? 'collapsed' : ''}" data-section="${key}">
+                <div class="posts-section-header" onclick="togglePostsSection('${key}')">
+                  <span class="posts-section-caret">▼</span>
+                  <span class="posts-section-dot ${dotClass}"></span>
+                  <span class="posts-section-title">${label}</span>
+                  <span class="posts-section-count">${list.length}</span>
+                </div>
+                <div class="posts-grid">
+                  ${list.length
+                     ? list.map(p => createSocialPreview(p)).join('')
+                     : `<div class="empty-state" style="grid-column:1/-1;padding:24px;color:var(--text-3);font-size:13px;text-align:center">— nothing here —</div>`}
+                </div>
+              </div>
+            `;
+        };
+
+        document.getElementById('posts-content').innerHTML =
+            renderSection('published', 'Published', 'published', published) +
+            renderSection('drafts',    'Drafts &amp; Queue', 'drafts', drafts);
 
         // Init swipe on all carousels
         document.querySelectorAll('.carousel').forEach(c => initCarouselSwipe(c.id));
 
-        // Make post cards clickable — preview modal
-        document.querySelectorAll('#posts-content .ig-card, #posts-content .tw-card, #posts-content .tt-card, #posts-content .li-card, #posts-content .post-card').forEach((card, idx) => {
-            const post = data.posts[idx];
-            if (!post) return;
+        // Card click → preview modal. Lookup post by id from cache so grouping doesn't break index alignment.
+        const postsById = Object.fromEntries(data.posts.map(p => [String(p.id), p]));
+        document.querySelectorAll('#posts-content .ig-card, #posts-content .tw-card, #posts-content .tt-card, #posts-content .li-card, #posts-content .post-card').forEach((card) => {
+            // Walk up to find a data-post-id, else fall back to a hidden marker if present
+            let pid = card.dataset.postId;
+            if (!pid) {
+                const inner = card.querySelector('[data-post-id]');
+                if (inner) pid = inner.dataset.postId;
+            }
+            const post = pid ? postsById[String(pid)] : null;
+            if (!post) {
+                // Fallback: positional within the section
+                const section = card.closest('.posts-section');
+                const list = section && section.dataset.section === 'published' ? published : drafts;
+                const idxInSection = Array.from(card.parentNode.children).indexOf(card);
+                const fallback = list[idxInSection];
+                if (!fallback) return;
+                card.style.cursor = 'pointer';
+                card.addEventListener('click', (e) => {
+                    if (e.target.closest('button, select, a')) return;
+                    _openPostDetailModal(fallback);
+                });
+                return;
+            }
             card.style.cursor = 'pointer';
             card.addEventListener('click', (e) => {
                 if (e.target.closest('button, select, a')) return;

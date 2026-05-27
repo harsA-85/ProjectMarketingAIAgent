@@ -269,6 +269,10 @@ class Orchestrator:
                 Content.agent_id == agent.id,
                 Content.status == 'scheduled'
             ).count(),
+            'published_posts': self.db.query(Content).filter(
+                Content.agent_id == agent.id,
+                Content.status == 'published'
+            ).count(),
             'pending_interactions': self.db.query(Interaction).filter(
                 Interaction.agent_id == agent.id,
                 Interaction.status == 'pending'

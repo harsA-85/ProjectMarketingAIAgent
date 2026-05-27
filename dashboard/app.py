@@ -1094,11 +1094,28 @@ def publish_content_now(content_id):
         ).first()
 
         # --- Helper: save base64 images to disk and return public URLs ---
-        def upload_to_catbox(filepath):
-            """Upload image to litterbox.catbox.moe (72h expiry — plenty for IG fetch).
-            Catbox.moe permanent host now rejects anonymous uploads (412 Invalid uploader),
-            so we use the litterbox temp endpoint which accepts the same multipart shape.
-            """
+        def _upload_uguu(filepath: str) -> str:
+            """Upload to uguu.se — IG-fetchable, primary CDN."""
+            boundary = uuid.uuid4().hex
+            with open(filepath, 'rb') as f:
+                file_data = f.read()
+            filename = os.path.basename(filepath)
+            body = (
+                f'--{boundary}\r\n'
+                f'Content-Disposition: form-data; name="files[]"; filename="{filename}"\r\n'
+                f'Content-Type: image/jpeg\r\n\r\n'
+            ).encode() + file_data + f'\r\n--{boundary}--\r\n'.encode()
+            req = urllib.request.Request('https://uguu.se/upload.php', data=body)
+            req.add_header('Content-Type', f'multipart/form-data; boundary={boundary}')
+            req.add_header('User-Agent', 'Mozilla/5.0')
+            with urllib.request.urlopen(req, timeout=60) as r:
+                resp = jsonlib.loads(r.read().decode().strip())
+            if not resp.get('success') or not resp.get('files'):
+                raise RuntimeError(f"uguu upload failed: {resp}")
+            return resp['files'][0]['url']
+
+        def _upload_litterbox(filepath: str) -> str:
+            """Fallback: litterbox.catbox.moe — Meta has been blocking this intermittently."""
             boundary = uuid.uuid4().hex
             with open(filepath, 'rb') as f:
                 file_data = f.read()
@@ -1119,7 +1136,19 @@ def publish_content_now(content_id):
             req.add_header('Content-Type', f'multipart/form-data; boundary={boundary}')
             req.add_header('User-Agent', 'Mozilla/5.0')
             with urllib.request.urlopen(req, timeout=60) as r:
-                url = r.read().decode().strip()
+                return r.read().decode().strip()
+
+        def upload_to_catbox(filepath):
+            """Public-CDN upload for IG fetch. Tries uguu.se first (IG-fetchable);
+            falls back to litterbox if uguu is down."""
+            import logging as _lg
+            try:
+                url = _upload_uguu(filepath)
+                _lg.warning(f"[PUBLISH] uguu OK: {url}")
+                return url
+            except Exception as e:
+                _lg.warning(f"[PUBLISH] uguu failed ({e}); falling back to litterbox")
+                url = _upload_litterbox(filepath)
             if not url.startswith('https://'):
                 raise RuntimeError(f"litterbox upload failed: {url}")
             return url
@@ -1147,42 +1176,81 @@ def publish_content_now(content_id):
                 if item.startswith('http://') or item.startswith('https://'):
                     saved.append(item)
                     continue
-                # Case C: data URI or raw base64
+                # Case C: data URI or raw base64 — always re-encode to JPEG (IG-safe, dodges error 9004)
                 if item.startswith('data:'):
-                    header, data = item.split(',', 1)
-                    ext = 'jpg' if 'jpeg' in header or 'jpg' in header else 'png'
+                    _, data = item.split(',', 1)
                 else:
                     data = item
-                    ext = 'jpg'
-                fname = f"{uuid.uuid4().hex}.{ext}"
-                fpath = os.path.join(media_dir, fname)
-                with open(fpath, 'wb') as f:
-                    f.write(base64.b64decode(data))
+                try:
+                    raw_bytes = base64.b64decode(data)
+                    from PIL import Image as _PILImage
+                    import io as _io
+                    img = _PILImage.open(_io.BytesIO(raw_bytes))
+                    # Flatten alpha onto white so PNG-with-transparency doesn't crash JPEG encode
+                    if img.mode in ('RGBA', 'LA') or (img.mode == 'P' and 'transparency' in img.info):
+                        bg = _PILImage.new('RGB', img.size, (255, 255, 255))
+                        bg.paste(img.convert('RGBA'), mask=img.convert('RGBA').split()[-1])
+                        img = bg
+                    elif img.mode != 'RGB':
+                        img = img.convert('RGB')
+                    fname = f"{uuid.uuid4().hex}.jpg"
+                    fpath = os.path.join(media_dir, fname)
+                    img.save(fpath, format='JPEG', quality=92)
+                except Exception as _e:
+                    logging.warning(f"[PUBLISH] PIL re-encode failed ({_e}); falling back to raw write")
+                    fname = f"{uuid.uuid4().hex}.jpg"
+                    fpath = os.path.join(media_dir, fname)
+                    with open(fpath, 'wb') as f:
+                        f.write(base64.b64decode(data))
                 public_url = upload_to_catbox(fpath)
                 logging.warning(f"[PUBLISH] Uploaded image to CDN: {public_url}")
                 saved.append(public_url)
             return saved
 
         # --- Instagram publishing ---
-        def ig_api_call(url, data=None):
-            """Make an Instagram Graph API call, raising with the full error body on failure"""
-            import urllib.error
-            try:
-                if data:
-                    req = urllib.request.Request(url, data=data, method='POST')
-                else:
-                    req = urllib.request.Request(url)
-                with urllib.request.urlopen(req, timeout=15) as r:
-                    return jsonlib.loads(r.read())
-            except urllib.error.HTTPError as e:
-                body = e.read().decode('utf-8', errors='replace')
+        def ig_api_call(url, data=None, _retries=2):
+            """Make an Instagram Graph API call, raising with the full error body on failure.
+            Retries on read timeouts / transient connection errors."""
+            import urllib.error, socket, logging as _lg, time as _time
+            last_err = None
+            for attempt in range(_retries + 1):
                 try:
-                    err_json = jsonlib.loads(body)
-                    msg = err_json.get('error', {}).get('message', body)
-                    code = err_json.get('error', {}).get('code', e.code)
-                    raise RuntimeError(f"Instagram API error {code}: {msg}")
-                except (jsonlib.JSONDecodeError, KeyError):
-                    raise RuntimeError(f"Instagram API HTTP {e.code}: {body[:300]}")
+                    if data:
+                        req = urllib.request.Request(url, data=data, method='POST')
+                    else:
+                        req = urllib.request.Request(url)
+                    with urllib.request.urlopen(req, timeout=60) as r:
+                        return jsonlib.loads(r.read())
+                except urllib.error.HTTPError as e:
+                    # HTTP error — handled below (no retry, IG returned a real response)
+                    body = e.read().decode('utf-8', errors='replace')
+                    _lg.warning(f"[IG-ERR] HTTP {e.code} on {url.split('?')[0]} :: body={body[:1000]}")
+                    try:
+                        err_json = jsonlib.loads(body)
+                        err = err_json.get('error', {}) if isinstance(err_json, dict) else {}
+                        msg = err.get('message') or body
+                        code = err.get('code', e.code)
+                        sub = err.get('error_subcode')
+                        user_msg = err.get('error_user_msg')
+                        trace = err.get('fbtrace_id')
+                        extras = []
+                        if sub: extras.append(f"subcode={sub}")
+                        if user_msg: extras.append(f"user_msg={user_msg}")
+                        if trace: extras.append(f"trace={trace}")
+                        extra_str = (" [" + ", ".join(extras) + "]") if extras else ""
+                        raise RuntimeError(f"Instagram API error {code}: {msg}{extra_str}")
+                    except (jsonlib.JSONDecodeError, KeyError):
+                        raise RuntimeError(f"Instagram API HTTP {e.code}: {body[:300]}")
+                except (socket.timeout, urllib.error.URLError, ConnectionError) as e:
+                    last_err = e
+                    _lg.warning(f"[IG-ERR] transient on {url.split('?')[0]} attempt {attempt+1}/{_retries+1}: {type(e).__name__}: {e}")
+                    if attempt < _retries:
+                        _time.sleep(2 * (attempt + 1))
+                        continue
+                    raise RuntimeError(f"Instagram API network error after {_retries+1} attempts: {type(e).__name__}: {e}")
+            # Unreachable
+            raise RuntimeError(f"Instagram API failed: {last_err}")
+
 
         def publish_instagram(post, token):
             # Get IG Business Account ID
@@ -1552,8 +1620,12 @@ def _sanitize_twitter_body(text):
     # Reject internal operational notes that aren't real tweets
     _skip = ['capacity note', 'note to victoria', "i'm executing", "i'm running this",
              'briefing james', 'briefing elena', "problem: i don't have",
-             'these are ready to go. a few notes', 'prepared by:', 'executive summary']
-    if any(s in text[:150].lower() for s in _skip):
+             'these are ready to go. a few notes', 'prepared by:', 'executive summary',
+             'production note', "marcus webb's intel", 'intel brief has not', 'tweet copy doc',
+             'validation summary', 'ready for scheduling', 'ready for scheduling.',
+             'for: nadia flux', 'production manager:', 'flag me — i', 'flag me - i',
+             "when webb's brief lands", 'revision pass before publish']
+    if any(s in text[:200].lower() for s in _skip):
         return ''
     # Strip JSON array wrappers
     if text.strip().startswith('['):
@@ -2545,8 +2617,7 @@ def team_chat():
         pending_atomized = 0
 
     system_prompt = f"""You are Victoria Crane, Editor-in-Chief of the editorial team at this AI marketing agency.
-You lead a team of 9 AI specialists who produce premium content through a 5-step pipeline:
-Signal → Angle → Co-Creation → Fact-Check → Atomization.
+You lead a team of 9 AI specialists who produce premium content by dispatching tasks to copywriters, prompt engineers, fact-checkers, and distribution specialists.
 
 Your personality: Sharp, decisive, visionary. You speak with authority but warmth. You use concise, professional language.
 You know everything about the current state of operations.
@@ -2722,15 +2793,6 @@ When the conversation involves work to be done, you can create tasks. Include a 
 ```
 You can assign tasks to yourself, to your subordinates, or to agents. Use role_keys for team (eic, creative_director, head_intelligence, production_manager, prompt_engineer_1, prompt_engineer_2, copywriter_1, copywriter_2, distribution_specialist) or agent IDs (1-11) for agents.
 Only create tasks when the user asks you to do something, or when you proactively break down work. Always explain what tasks you're creating.
-
-WORKFLOW LAUNCH:
-You can launch the full editorial pipeline (Signal > Angle > Co-Creation > Fact-Check > Atomization) by including:
-```workflow
-{"topics": ["topic 1", "topic 2"], "target_agents": [1, 2, 3]}
-```
-- topics: list of content themes/topics to explore
-- target_agents: list of agent IDs (1-11) who will receive the atomized content. Use all 11 if not specified.
-- The pipeline runs autonomously: Head of Intelligence gathers signals, you set the angle, copywriters + prompt engineers co-create, fact-checkers validate, distribution specialist atomizes for each agent.
 
 HOW TO INTERACT WITH THE SUPERVISOR:
 - When the supervisor asks about content ideas, propose 2-3 specific topics with brief reasoning
@@ -3590,6 +3652,7 @@ def get_tasks():
 
     def task_dict(t):
         subtasks = db.query(Task).filter(Task.parent_id == t.id).all()
+        running_sub = next((s for s in subtasks if s.status == 'in_progress'), None)
         return {
             'id': t.id, 'title': t.title, 'description': t.description,
             'status': t.status, 'priority': t.priority,
@@ -3605,9 +3668,14 @@ def get_tasks():
             'completed_at': t.completed_at.isoformat() if t.completed_at else None,
             'thread_id': t.thread_id,
             'created_at': t.created_at.isoformat() if t.created_at else None,
+            'updated_at': t.updated_at.isoformat() if getattr(t, 'updated_at', None) else None,
             'archived': bool(getattr(t, 'archived', False)),
             'subtask_count': len(subtasks),
             'subtasks_done': sum(1 for s in subtasks if s.status == 'done'),
+            'subtasks_running': sum(1 for s in subtasks if s.status == 'in_progress'),
+            'subtasks_blocked': sum(1 for s in subtasks if s.status == 'blocked'),
+            'running_subtask': (running_sub.assignee_name or running_sub.title[:40]) if running_sub else None,
+            'running_subtask_title': (running_sub.title[:60]) if running_sub else None,
         }
     return jsonify({'tasks': [task_dict(t) for t in tasks]}), 200
 
@@ -3918,6 +3986,13 @@ def _execute_task_in_background(task_snapshot):
             logging.error(f"[TaskExec] Task #{task_id} not found in DB")
             return
 
+        # Cancellation guard — if the task has been archived after being queued, abort before spending LLM tokens.
+        if getattr(task, 'archived', False):
+            logging.info(f"[TaskExec] Task #{task_id} archived — skipping to avoid token burn")
+            task.status = 'blocked'
+            db.commit()
+            return
+
         # Resolve entity
         if assignee_type == 'team_member':
             entity = db.query(TeamMember).filter(TeamMember.role_key == assignee_key).first()
@@ -4010,10 +4085,26 @@ def _is_carousel_task(title, description):
 
 
 def _extract_slide_texts(deliverable: str, max_slides: int = 8) -> list[str]:
-    """Parse slide text from a carousel deliverable. Returns list of short on-image texts."""
+    """Parse slide text from a carousel deliverable. Returns list of short on-image texts.
+
+    Strips production directions (`[Visual: ...]`, `[Texte sur image, fond rouge sang]`,
+    `(7 mots. Curiosity gap)`), blockquote markers, markdown headings, and bold syntax
+    so ONLY the actual on-image copy ends up in the image.
+    """
     import re
     if not deliverable:
         return []
+
+    # Keywords that mark a bracketed/parenthesized block as a production direction
+    # (not actual copy) — matches FR + EN terms the LLM uses for art direction.
+    DIRECTION_KW = (
+        r'(?:visual|visuel|texte\s+sur\s+image|fond|typo|font|image|photo|'
+        r'background|police|couleur|color|style|subtext|design|'
+        r'layout|overlay|caption|mots?|curiosity\s*gap|hook|call[-\s]*to[-\s]*action|cta|'
+        r'ic[oô]ne?|icon|emoji|embl[eè]me|pictogramme|illustration|graphique|graphic|'
+        r'animation|transition|split[-\s]*screen|tableau)'
+    )
+
     slides = []
     pat = re.compile(
         r'(?:^|\n)\s*(?:#{1,4}\s*)?\*{0,2}\s*SLIDE\s*(\d+)[^\n]*\*{0,2}\s*\n+(.+?)'
@@ -4022,19 +4113,217 @@ def _extract_slide_texts(deliverable: str, max_slides: int = 8) -> list[str]:
     )
     for m in pat.finditer(deliverable):
         block = m.group(2).strip()
-        block = re.sub(r'\*{1,2}', '', block)
-        block = re.sub(r'\(visual[^)]*\)', '', block, flags=re.IGNORECASE)
-        lines = [ln.strip('>-•* \t') for ln in block.split('\n') if ln.strip()]
-        text = ' '.join(lines)[:140].strip()
-        if text and len(text) > 5:
+
+        # 1. Strip bracketed direction blocks: [Visual: ...], [Texte sur image, fond…], etc.
+        block = re.sub(rf'\[[^\[\]]*{DIRECTION_KW}[^\[\]]*\]', '', block, flags=re.IGNORECASE)
+        # 2. Strip parenthetical meta-notes: (7 mots), (visual cue), (curiosity gap maximal)
+        block = re.sub(rf'\([^()]*{DIRECTION_KW}[^()]*\)', '', block, flags=re.IGNORECASE)
+        # 3. Strip remaining empty square brackets or parens leftover
+        block = re.sub(r'\[\s*\]|\(\s*\)', '', block)
+        # 4. Strip bold/italic syntax
+        block = re.sub(r'\*{1,3}', '', block)
+        block = re.sub(r'_{2,}', '', block)
+        # 5. Strip markdown headings at line starts
+        block = re.sub(r'^#{1,6}\s*', '', block, flags=re.MULTILINE)
+        # 6. Strip leading blockquote/list/arrow markers
+        lines = [ln.strip('>-•*#►▸▶→➜✓✗❌✅❓⚠\t ') for ln in block.split('\n') if ln.strip()]
+        # 7. Drop lines that are pure art direction even after cleaning
+        lines = [ln for ln in lines if not re.match(rf'^\s*{DIRECTION_KW}\s*[:\-]', ln, re.IGNORECASE)]
+        # 7b. Strip label prefixes that label the copy rather than being the copy
+        #     ("Titre :", "Title:", "Headline:", "Texte :", "Hook:", etc.)
+        LABEL_PREFIX = re.compile(
+            r'^\s*(?:titre|title|headline|texte|text|hook|accroche|slide\s*\d*|slogan|message)\s*[:\-–—]\s*',
+            re.IGNORECASE,
+        )
+        lines = [LABEL_PREFIX.sub('', ln).strip() for ln in lines]
+        lines = [ln for ln in lines if ln]
+
+        # 8. Strip code fences / backticks — they're not on-image copy
+        block_nocode = re.sub(r'```[\s\S]*?```', '', block)
+        block_nocode = re.sub(r'`[^`\n]*`', '', block_nocode)
+        lines_nocode = [ln.strip('>-•*#`►▸▶→➜✓✗❌✅❓⚠\t ') for ln in block_nocode.split('\n') if ln.strip()]
+        lines_nocode = [ln for ln in lines_nocode
+                        if not re.match(rf'^\s*{DIRECTION_KW}\s*[:\-]', ln, re.IGNORECASE)]
+        lines_nocode = [LABEL_PREFIX.sub('', ln).strip() for ln in lines_nocode]
+        lines_nocode = [ln for ln in lines_nocode if ln]
+
+        # Prefer quoted copy if it's substantial (>=20 chars) — usually the headline.
+        # Ignore short quoted examples like "coup de cœur" that are inside explanatory text.
+        quoted = re.findall(r'[""«"]([^""«""\n]{20,120})["""»"]', block_nocode)
+        if quoted:
+            text = quoted[0].strip()
+        else:
+            # Prefer the FIRST substantive line (>= 15 chars) — avoids trailing examples.
+            first_line = next((ln for ln in lines_nocode if len(ln) >= 15), '')
+            text = first_line or ' '.join(lines_nocode).strip()
+
+        # Normalise whitespace, strip leading quotes that survived
+        text = re.sub(r'\s+', ' ', text).strip(' "«»""''')
+
+        # Hard cap — Gemini image generation loses legibility past ~80 chars
+        if len(text) > 80:
+            text = text[:80]
+            if ' ' in text:
+                text = text.rsplit(' ', 1)[0]
+            text = text.rstrip(',;:—–-')
+
+        if text and len(text) > 10:
             slides.append(text)
         if len(slides) >= max_slides:
             break
     return slides
 
 
+def _strip_emoji(text: str) -> str:
+    """Remove emoji / pictographs — PIL's default fonts don't render them correctly,
+    and Gemini-generated text with emoji tends to produce misspellings."""
+    import re
+    if not text:
+        return ''
+    # Broad emoji / symbol ranges
+    pattern = re.compile(
+        "["
+        "\U0001F600-\U0001F64F"
+        "\U0001F300-\U0001F5FF"
+        "\U0001F680-\U0001F6FF"
+        "\U0001F700-\U0001F77F"
+        "\U0001F780-\U0001F7FF"
+        "\U0001F800-\U0001F8FF"
+        "\U0001F900-\U0001F9FF"
+        "\U0001FA00-\U0001FAFF"
+        "\U00002600-\U000027BF"
+        "\U0001F1E0-\U0001F1FF"
+        "]+",
+        flags=re.UNICODE,
+    )
+    return re.sub(r'\s+', ' ', pattern.sub('', text)).strip()
+
+
+def _render_slide_text_on_image(bg_path: str, slide_text: str, slide_num: int, total: int) -> None:
+    """Overlay slide_text on the image at bg_path using PIL (in-place save).
+    Guarantees clean, perfectly-spelled typography regardless of the underlying image.
+    """
+    from PIL import Image, ImageDraw, ImageFont, ImageFilter
+    import os, textwrap
+
+    FONT_BOLD = 'C:/Windows/Fonts/seguibl.ttf'   # Segoe UI Black
+    FONT_REG = 'C:/Windows/Fonts/seguisb.ttf'    # Segoe UI Semibold
+    if not os.path.exists(FONT_BOLD):
+        FONT_BOLD = 'C:/Windows/Fonts/arialbd.ttf'
+    if not os.path.exists(FONT_REG):
+        FONT_REG = 'C:/Windows/Fonts/arial.ttf'
+
+    text = _strip_emoji(slide_text).strip(' "«»""''')
+    if not text:
+        return
+
+    img = Image.open(bg_path).convert('RGB')
+    # Auto-crop solid-color matte/frame borders that Gemini sometimes adds
+    def _autocrop_border(im):
+        w, h = im.size
+        px = im.load()
+        corner = px[5, 5]
+        def near(c): return all(abs(c[k] - corner[k]) < 12 for k in range(3))
+        # Only treat as border if all 4 corners match
+        if not (near(px[w - 6, 5]) and near(px[5, h - 6]) and near(px[w - 6, h - 6])):
+            return im
+        # Scan from top for first non-border row
+        def scan_row(y):
+            return all(near(px[x, y]) for x in range(0, w, max(1, w // 40)))
+        def scan_col(x):
+            return all(near(px[x, y]) for y in range(0, h, max(1, h // 40)))
+        top = 0
+        while top < h // 2 and scan_row(top): top += 1
+        bot = h - 1
+        while bot > h // 2 and scan_row(bot): bot -= 1
+        left = 0
+        while left < w // 2 and scan_col(left): left += 1
+        right = w - 1
+        while right > w // 2 and scan_col(right): right -= 1
+        if right - left > w * 0.4 and bot - top > h * 0.4:
+            return im.crop((left, top, right + 1, bot + 1))
+        return im
+
+    img = _autocrop_border(img)
+    # Force square 1080x1080 for Instagram — fill the full frame
+    target = 1080
+    w, h = img.size
+    side = min(w, h)
+    left = (w - side) // 2
+    top = (h - side) // 2
+    img = img.crop((left, top, left + side, top + side)).resize((target, target), Image.LANCZOS)
+
+    # Darken bottom 60% with a gradient for legibility
+    overlay = Image.new('RGBA', (target, target), (0, 0, 0, 0))
+    odraw = ImageDraw.Draw(overlay)
+    # Gradient: transparent top -> dark bottom
+    for y in range(target):
+        if y < target * 0.35:
+            a = 0
+        else:
+            frac = (y - target * 0.35) / (target * 0.65)
+            a = int(180 * frac)  # max 180/255 darkness
+        odraw.line([(0, y), (target, y)], fill=(0, 0, 0, a))
+    img = Image.alpha_composite(img.convert('RGBA'), overlay).convert('RGB')
+
+    draw = ImageDraw.Draw(img)
+
+    # Wrap text — pick font size + wrap width to fit nicely
+    MARGIN = 80
+    MAX_W = target - 2 * MARGIN
+
+    def build_layout(font_size):
+        font = ImageFont.truetype(FONT_BOLD, font_size)
+        # Estimate chars per line from font size
+        avg_char_w = font.getlength('Ma') / 2
+        chars_per_line = max(10, int(MAX_W / max(avg_char_w, 1)))
+        wrapped = textwrap.wrap(text, width=chars_per_line, break_long_words=False)
+        # Measure real width, reduce chars if any line overflows
+        while wrapped and max(font.getlength(ln) for ln in wrapped) > MAX_W and chars_per_line > 6:
+            chars_per_line -= 1
+            wrapped = textwrap.wrap(text, width=chars_per_line, break_long_words=False)
+        line_h = font_size * 1.15
+        total_h = line_h * len(wrapped)
+        return font, wrapped, line_h, total_h
+
+    font_size = 96
+    font, wrapped, line_h, total_h = build_layout(font_size)
+    while (total_h > target * 0.55 or len(wrapped) > 6) and font_size > 40:
+        font_size -= 6
+        font, wrapped, line_h, total_h = build_layout(font_size)
+
+    # Position text block in the lower-middle
+    y_start = int(target * 0.95 - total_h)
+    for idx, line in enumerate(wrapped):
+        line_w = font.getlength(line)
+        x = (target - line_w) / 2
+        y = y_start + idx * line_h
+        # Soft shadow for extra contrast
+        for dx, dy in [(-2, 2), (2, 2), (0, 3)]:
+            draw.text((x + dx, y + dy), line, font=font, fill=(0, 0, 0, 180))
+        draw.text((x, y), line, font=font, fill=(255, 255, 255))
+
+    # Slide counter pill (top-right)
+    counter = f"{slide_num}/{total}"
+    cfont = ImageFont.truetype(FONT_BOLD, 34)
+    cw = cfont.getlength(counter)
+    pad_x, pad_y = 22, 12
+    pill_w = cw + 2 * pad_x
+    pill_h = 34 + 2 * pad_y
+    pill_x = target - MARGIN - pill_w
+    pill_y = MARGIN
+    draw.rounded_rectangle(
+        [(pill_x, pill_y), (pill_x + pill_w, pill_y + pill_h)],
+        radius=pill_h // 2, fill=(0, 0, 0, 220),
+    )
+    draw.text((pill_x + pad_x, pill_y + pad_y - 4), counter, font=cfont, fill=(255, 255, 255))
+
+    img.save(bg_path, 'JPEG', quality=92, optimize=True)
+
+
 def _generate_carousel_images(title: str, description: str, deliverable: str, brand_hint: str = '') -> list[dict]:
-    """Generate one image per carousel slide with slide text baked on. Returns [{url, prompt}]."""
+    """Generate a backdrop image per slide with Gemini, then overlay slide text with PIL.
+    Text rendering via PIL guarantees correct spelling (Gemini text-in-image is unreliable)."""
     import os, uuid, base64
     results = []
     try:
@@ -4044,35 +4333,43 @@ def _generate_carousel_images(title: str, description: str, deliverable: str, br
         slide_texts = _extract_slide_texts(deliverable)
         if not slide_texts:
             desc = (description or title)[:200]
-            slide_texts = [f'Hook: {desc[:60]}', desc[60:140] or desc, 'Swipe →']
+            slide_texts = [f'Hook: {desc[:60]}', desc[60:140] or desc, 'Swipe']
         slide_texts = slide_texts[:6]
 
         media_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'media')
         os.makedirs(media_dir, exist_ok=True)
 
         theme = (description or title)[:200]
+        total = len(slide_texts)
         for i, slide_text in enumerate(slide_texts):
+            # Backdrop-only prompt — NO text rendering by the model
+            mood_hint = _strip_emoji(slide_text)[:80]
             prompt = (
-                f"Instagram carousel slide {i+1}/{len(slide_texts)}. Square 1:1 format. "
-                f"Modern editorial design, clean typography, high-contrast color palette. "
-                f"Theme: {theme}. {brand_hint}\n\n"
-                f"Render this exact text, large and legible, as the main visual focus of the image "
-                f'(use clean sans-serif font, centered or left-aligned, white or high-contrast color): '
-                f'"{slide_text}"\n\n'
-                f"Aesthetic: premium real-estate / fintech content. Photographic or graphic background "
-                f"that supports the text. No other text, no watermarks, no logos, no UI elements."
+                f"Instagram carousel slide backdrop (square 1:1). Premium editorial photography "
+                f"or cinematic graphic background. Theme: {theme}. {brand_hint} "
+                f"Mood cue for composition: '{mood_hint}'. "
+                f"Color grading: rich, high-contrast, moody. Leave the lower half of the image "
+                f"visually calmer (less detail, darker or uniform tone) so text can overlay cleanly. "
+                f"STRICT: NO text, NO words, NO letters, NO numbers, NO typography, NO captions, "
+                f"NO watermarks, NO logos, NO UI elements. Full-bleed edge-to-edge image — "
+                f"NO borders, NO frames, NO matte, NO white/gray margins around the photo. "
+                f"The image must fill the ENTIRE square canvas corner to corner."
             )
-            logging.info(f"[CarouselGen] Slide {i+1}/{len(slide_texts)}: {slide_text[:60]}")
+            logging.info(f"[CarouselGen] Slide {i+1}/{total}: {slide_text[:60]}")
             b64_img = gen.generate_image(prompt)
             if b64_img:
                 fname = f"carousel_{uuid.uuid4().hex[:12]}.jpg"
                 fpath = os.path.join(media_dir, fname)
                 with open(fpath, 'wb') as f:
                     f.write(base64.b64decode(b64_img))
+                try:
+                    _render_slide_text_on_image(fpath, slide_text, i + 1, total)
+                except Exception as e:
+                    logging.error(f"[CarouselGen] Text overlay failed for slide {i+1}: {e}", exc_info=True)
                 results.append({'url': f"/static/media/{fname}", 'prompt': slide_text[:100]})
-                logging.info(f"[CarouselGen] ✅ Slide {i+1} saved: {fpath}")
+                logging.info(f"[CarouselGen] Slide {i+1} saved with overlay: {fpath}")
             else:
-                logging.warning(f"[CarouselGen] ❌ Slide {i+1} failed")
+                logging.warning(f"[CarouselGen] Slide {i+1} backdrop generation failed")
     except Exception as e:
         logging.error(f"[CarouselGen] Carousel generation failed: {e}", exc_info=True)
     return results
@@ -4187,7 +4484,12 @@ def _execute_individual_task(db, task, entity, assignee_type, assignee_key):
             f"Execute this task now. Produce the deliverable in full — not a plan, not a summary, "
             f"but the ACTUAL WORK PRODUCT. If it's research, deliver the research. "
             f"If it's a brief, write the full brief. If it's an audit, do the audit. "
-            f"Be thorough, specific, and actionable. Use data where possible.\n"
+            f"Be thorough, specific, and actionable. Use data where possible.\n\n"
+            f"OUTPUT FORMAT — CRITICAL:\n"
+            f"Respond in clean MARKDOWN PROSE written for a human reader (headings, bullets, short paragraphs).\n"
+            f"DO NOT return raw JSON objects, JSON arrays, or {{\"key\": value}} blobs — even if your role's "
+            f"default instructions mention JSON. JSON in this context is legacy and renders unreadably in the inbox.\n"
+            f"If you need to convey structured data, use markdown tables or labeled bullets instead.\n\n"
             f"After the deliverable, add a one-line STATUS: at the end indicating completion."
         )
 
@@ -4278,17 +4580,81 @@ def _maybe_create_content_from_task(db, task, deliverable, images=None):
 
     # Detect agent from task title/description
     agent = None
-    # Try matching agent name in the title (e.g. "for David Chen")
     agents = db.query(Agent).all()
-    for a in agents:
-        if a.name.lower() in combined:
-            agent = a
-            break
-    # Try extracting agent ID from description (e.g. "Agent ID: 2")
+    # 1) Explicit "Target agent: Name" / "Target: Name" marker (our decomposition prompt emits this)
+    m_target = re.search(r'target\s*agent\s*[:\-]\s*([^\n(\-]+?)(?:\s*\(|\s*\n|$)', combined, re.IGNORECASE)
+    if m_target:
+        target_name = m_target.group(1).strip().lower()
+        for a in agents:
+            if a.name.lower() == target_name or a.name.lower() in target_name:
+                agent = a
+                break
+    # 2) "agent #N" / "Agent ID: N" explicit ID
     if not agent:
-        m = re.search(r'agent\s*(?:id)?[:\s#]*(\d+)', combined)
-        if m:
-            agent = db.query(Agent).filter(Agent.id == int(m.group(1))).first()
+        m_id = re.search(r'agent\s*(?:id)?[:\s#]*(\d+)', combined)
+        if m_id:
+            agent = db.query(Agent).filter(Agent.id == int(m_id.group(1))).first()
+    # 3) Agent full name appearing anywhere in title/desc
+    if not agent:
+        for a in agents:
+            if a.name and len(a.name) > 3 and a.name.lower() in combined:
+                agent = a
+                break
+    # 4) Brand name appearing in title/desc (e.g. "chen_invest", "marcus_offmarket")
+    if not agent:
+        for a in agents:
+            if a.brand and len(a.brand) > 3 and a.brand.lower() in combined:
+                agent = a
+                break
+    # 5) Parent task fallback — walk up the chain looking for an agent ref
+    if not agent and getattr(task, 'parent_id', None):
+        try:
+            from src.database.models import Task as _T
+            cur_parent_id = task.parent_id
+            hops = 0
+            while cur_parent_id and hops < 5:
+                parent = db.query(_T).filter(_T.id == cur_parent_id).first()
+                if not parent:
+                    break
+                ptext = f"{(parent.title or '').lower()} {(parent.description or '').lower()}"
+                # parent explicit assignee
+                if parent.assignee_type == 'agent' and parent.assignee_key:
+                    try:
+                        agent = db.query(Agent).filter(Agent.id == int(parent.assignee_key)).first()
+                        if agent:
+                            break
+                    except (ValueError, TypeError):
+                        pass
+                # parent target marker
+                pm = re.search(r'target\s*agent\s*[:\-]\s*([^\n(\-]+?)(?:\s*\(|\s*\n|$)', ptext, re.IGNORECASE)
+                if pm:
+                    pname = pm.group(1).strip().lower()
+                    for a in agents:
+                        if a.name.lower() == pname or a.name.lower() in pname:
+                            agent = a
+                            break
+                    if agent:
+                        break
+                # parent name/brand mention
+                for a in agents:
+                    if a.name and len(a.name) > 3 and a.name.lower() in ptext:
+                        agent = a
+                        break
+                    if a.brand and len(a.brand) > 3 and a.brand.lower() in ptext:
+                        agent = a
+                        break
+                if agent:
+                    break
+                cur_parent_id = parent.parent_id
+                hops += 1
+        except Exception:
+            pass
+    # 6) Current task's own assignee_key as last resort
+    if not agent and getattr(task, 'assignee_type', None) == 'agent' and getattr(task, 'assignee_key', None):
+        try:
+            agent = db.query(Agent).filter(Agent.id == int(task.assignee_key)).first()
+        except (ValueError, TypeError):
+            pass
 
     if not agent:
         return  # Can't determine which agent this is for
@@ -4305,10 +4671,24 @@ def _maybe_create_content_from_task(db, task, deliverable, images=None):
         "ryan's copy", "problem: i don't have", 'these are ready to go. a few notes',
         'prepared by:', '**to:**', '**from:**', '**re:**', 'executive summary',
         'before i can confirm', 'urgent flag', 'qa pass', 'standby',
+        # Task-response / dispatch chatter that leaked into drafts
+        'understood, supervisor', 'understood. i am on it', 'on it, supervisor',
+        "what i'm doing instead", "here's what i'm doing", "here's my plan",
+        'approvals land', 'execution-ready staging', 'staging document',
+        'alexander\'s approvals', "victoria's approval", 'pending approval',
     ]
-    body_lower = body[:150].lower()
+    body_lower = body[:200].lower()
     if any(m in body_lower for m in _internal_markers):
         return  # Not actual post content
+
+    # Reject dispatch-list / multi-agent brief format (e.g. "## AGENT 1: FRENCHIMMOAGENT")
+    import re as _re_internal
+    stripped = body.strip()
+    if _re_internal.match(r'^(?:-{3,}\s*)?#{1,3}\s*agent\s*\d', stripped, _re_internal.IGNORECASE):
+        return
+    # Reject if body is a pure dispatch list (starts with `---` THEN `## AGENT`)
+    if stripped.startswith('---') and _re_internal.search(r'^#{1,3}\s*agent\s*\d', stripped[3:].lstrip(), _re_internal.IGNORECASE | _re_internal.MULTILINE):
+        return
 
     # Twitter: sanitize, then LLM-rewrite if still over limit so we never save
     # a mid-sentence truncated tweet ("The of…" etc.).
@@ -4427,125 +4807,166 @@ def _execute_cascade_task(db, parent_task, head_entity, direct_reports):
 
     logging.info(f"[Cascade] Head {head_name} decomposing task #{task_id}: '{title}'")
 
-    # Build team roster for the head
-    team_roster = '\n'.join(
-        f"- {r.role_key}: {r.display_name} ({r.role_title})"
-        for r in direct_reports
-    )
-
-    # ── STEP 1: Head decomposes the task ──
-    decompose_prompt = (
-        f"=== TASK FROM LEADERSHIP ===\n"
-        f"Title: {title}\n"
-        f"Priority: {priority.upper()}\n"
-        f"Description:\n{description}\n\n"
-        f"You are {head_name}, department head. Your DIRECT REPORTS:\n{team_roster}\n\n"
-        f"DECOMPOSE this task into specific sub-tasks for your team members. "
-        f"Each sub-task must be assigned to a specific direct report based on their expertise.\n\n"
-        f"Reply with:\n"
-        f"1. A brief strategy (2-3 sentences max) for how your team will tackle this\n"
-        f"2. A ```tasks block with sub-tasks:\n"
-        f"```tasks\n"
-        f"[{{\"title\": \"Specific sub-task\", \"assignee_key\": \"role_key\", \"assignee_type\": \"team_member\", "
-        f"\"assignee_name\": \"Full Name\", \"priority\": \"{priority}\", "
-        f"\"description\": \"Detailed instructions for this team member\"}}]\n"
-        f"```\n\n"
-        f"RULES:\n"
-        f"- Assign ONLY to your direct reports listed above\n"
-        f"- Each sub-task must be specific and actionable\n"
-        f"- Cover the full scope of the parent task\n"
-        f"- 2-4 sub-tasks is ideal\n"
-        f"- If this task needs a content pipeline (Signal > Angle > Co-Creation > Fact-Check > Atomization), "
-        f"also include a ```workflow block:\n"
-        f"```workflow\n"
-        f"{{\"topics\": [\"topic\"], \"target_agents\": [1, 2, 3]}}\n"
-        f"```"
-    )
-
+    head_thread = f"chat_team_member_{head_key}"
     sys_prompt = _build_team_system_prompt(db, head_entity)
     llm = LLMProvider(provider=provider, model=model)
-    decompose_reply = llm.generate_content(
-        prompt=decompose_prompt, max_tokens=2000, temperature=temp, system_prompt=sys_prompt,
-    )
 
-    # Post concise dispatch notice to head's inbox (not the full decomposition blabber)
-    head_thread = f"chat_team_member_{head_key}"
-    db.add(InternalMessage(
-        from_type='user', from_key='supervisor', from_name='You', from_emoji='',
-        body=f"📋 **Task Approved → {title}**\n_Priority: {priority.upper()} — Executing now._",
-        msg_type='chat', thread_id=head_thread, is_read=True,
-    ))
-    db.commit()
+    # ── RESUME: if sub-tasks already exist for this parent (orphaned by prior restart), reuse them ──
+    existing_subs = db.query(Task).filter(Task.parent_id == task_id).all()
+    resuming = bool(existing_subs)
+    sub_task_objects = []
 
-    # ── STEP 1b: Launch workflow if head triggered one ──
-    clean_decompose, workflow_info = _extract_and_launch_workflow(decompose_reply)
-    if workflow_info:
-        logging.info(f"[Cascade] {head_name} launched workflow #{workflow_info.get('run_id')} from task #{task_id}")
-        db.add(Notification(
-            type='workflow_launched',
-            title=f'🚀 {head_name} launched pipeline #{workflow_info["run_id"]}',
-            body=f'Topics: {", ".join(workflow_info.get("topics", []))}',
-            link='/newsroom.html',
-            workflow_run_id=workflow_info.get('run_id'),
+    if resuming:
+        logging.info(f"[Cascade] Resuming #{task_id} — reusing {len(existing_subs)} existing sub-tasks (skipping decomposition)")
+        sub_task_objects = list(existing_subs)
+        # Reset any blocked sub-tasks so they retry this run
+        for st in sub_task_objects:
+            if st.status == 'blocked':
+                st.status = 'in_progress'
+        db.commit()
+
+    if not resuming:
+        # Build team roster for the head
+        team_roster = '\n'.join(
+            f"- {r.role_key}: {r.display_name} ({r.role_title})"
+            for r in direct_reports
+        )
+
+        # Detect "fan-out" language: task produces N deliverables across N agents.
+        # When this triggers, the head must split per-agent so each sub-task carries
+        # an agent name → _maybe_create_content_from_task can auto-create a draft.
+        _fanout_patterns = [
+            r'\bfor\s+(?:agents?|influencers?)\s*\d+\s*[-–to]+\s*\d+\b',
+            r'\bacross\s+\d+\s+(?:agents?|influencers?)\b',
+            r'\b\d+\s+(?:ig|instagram|twitter|x|linkedin|tiktok)\s+(?:carousels?|posts?|tweets?|threads?|videos?)\b',
+            r'\bagents?\s*\d+\s*[-–to]+\s*\d+\b',
+        ]
+        _fanout_text = f"{title}\n{description}".lower()
+        _is_fanout = any(__import__('re').search(p, _fanout_text, __import__('re').IGNORECASE) for p in _fanout_patterns)
+
+        _agent_roster = ''
+        if _is_fanout:
+            from src.database.models import Agent as _Agent
+            _ags = db.query(_Agent).filter(_Agent.is_active == True).order_by(_Agent.id).limit(11).all()
+            _agent_roster = '\n'.join(f"  - agent #{a.id}: {a.name} ({a.brand or ''})" for a in _ags)
+
+        _fanout_instructions = (
+            f"\n\n⚡ FAN-OUT DETECTED — this task produces MULTIPLE deliverables across MULTIPLE influencer agents.\n"
+            f"INFLUENCER AGENTS (target these directly):\n{_agent_roster}\n\n"
+            f"MANDATORY: Produce ONE sub-task PER agent mentioned in the parent task. "
+            f"Each sub-task TITLE must include the agent's NAME explicitly (e.g. 'Write IG carousel for David Chen — ...'). "
+            f"Each sub-task DESCRIPTION must include 'Target agent: <Name> (agent #<id>)' on its own line. "
+            f"This is how drafts get auto-created in each agent's inbox. Without the agent name in the sub-task, "
+            f"the content goes nowhere and we burn tokens for nothing.\n"
+        ) if _is_fanout else ''
+
+        # ── STEP 1: Head decomposes the task ──
+        decompose_prompt = (
+            f"=== TASK FROM LEADERSHIP ===\n"
+            f"Title: {title}\n"
+            f"Priority: {priority.upper()}\n"
+            f"Description:\n{description}\n\n"
+            f"You are {head_name}, department head. Your DIRECT REPORTS:\n{team_roster}"
+            f"{_fanout_instructions}\n"
+            f"DECOMPOSE this task into specific sub-tasks for your team members. "
+            f"Each sub-task must be assigned to a specific direct report based on their expertise.\n\n"
+            f"Reply with:\n"
+            f"1. A brief strategy (2-3 sentences max) for how your team will tackle this\n"
+            f"2. A ```tasks block with sub-tasks:\n"
+            f"```tasks\n"
+            f"[{{\"title\": \"Specific sub-task\", \"assignee_key\": \"role_key\", \"assignee_type\": \"team_member\", "
+            f"\"assignee_name\": \"Full Name\", \"priority\": \"{priority}\", "
+            f"\"description\": \"Detailed instructions for this team member\"}}]\n"
+            f"```\n\n"
+            f"RULES:\n"
+            f"- Assign ONLY to your direct reports listed above\n"
+            f"- Each sub-task must be specific and actionable\n"
+            f"- Cover the full scope of the parent task\n"
+            + (f"- For fan-out tasks: ONE sub-task per target agent (the agents listed above), agent name in title, 'Target agent:' line in description\n"
+               if _is_fanout else
+               f"- 2-4 sub-tasks is ideal\n")
+        )
+
+        decompose_reply = llm.generate_content(
+            prompt=decompose_prompt, max_tokens=2000, temperature=temp, system_prompt=sys_prompt,
+        )
+
+        # Post concise dispatch notice to head's inbox (not the full decomposition blabber)
+        db.add(InternalMessage(
+            from_type='user', from_key='supervisor', from_name='You', from_emoji='',
+            body=f"📋 **Task Approved → {title}**\n_Priority: {priority.upper()} — Executing now._",
+            msg_type='chat', thread_id=head_thread, is_read=True,
         ))
         db.commit()
 
-    # ── STEP 2: Parse and create sub-tasks ──
-    sub_tasks_data = []
-    pattern_tasks = r'```tasks\s*\n?(.*?)\n?\s*```'
-    pattern_json = r'```json\s*\n?(\[[\s\S]*?\])\s*\n?\s*```'
-    pattern_any = r'```[\w_]*\s*\n?(\[[\s\S]*?"title"[\s\S]*?\])\s*\n?\s*```'
+        # ── STEP 1b: Launch workflow if head triggered one ──
+        clean_decompose, workflow_info = _extract_and_launch_workflow(decompose_reply)
+        if workflow_info:
+            logging.info(f"[Cascade] {head_name} launched workflow #{workflow_info.get('run_id')} from task #{task_id}")
+            db.add(Notification(
+                type='workflow_launched',
+                title=f'🚀 {head_name} launched pipeline #{workflow_info["run_id"]}',
+                body=f'Topics: {", ".join(workflow_info.get("topics", []))}',
+                link='/newsroom.html',
+                workflow_run_id=workflow_info.get('run_id'),
+            ))
+            db.commit()
 
-    raw_json = None
-    for pat in [pattern_tasks, pattern_json, pattern_any]:
-        m = re.search(pat, decompose_reply, re.DOTALL)
-        if m:
-            raw_json = m.group(1).strip()
-            break
+        # ── STEP 2: Parse and create sub-tasks ──
+        sub_tasks_data = []
+        pattern_tasks = r'```tasks\s*\n?(.*?)\n?\s*```'
+        pattern_json = r'```json\s*\n?(\[[\s\S]*?\])\s*\n?\s*```'
+        pattern_any = r'```[\w_]*\s*\n?(\[[\s\S]*?"title"[\s\S]*?\])\s*\n?\s*```'
 
-    if raw_json:
-        try:
-            sub_tasks_data = json.loads(raw_json)
-            if not isinstance(sub_tasks_data, list):
-                sub_tasks_data = [sub_tasks_data]
-        except Exception as e:
-            logging.warning(f"[Cascade] Failed to parse sub-tasks JSON: {e}")
+        raw_json = None
+        for pat in [pattern_tasks, pattern_json, pattern_any]:
+            m = re.search(pat, decompose_reply, re.DOTALL)
+            if m:
+                raw_json = m.group(1).strip()
+                break
 
-    # Validate assignees — only allow direct reports
-    valid_keys = {r.role_key for r in direct_reports}
-    sub_task_objects = []
+        if raw_json:
+            try:
+                sub_tasks_data = json.loads(raw_json)
+                if not isinstance(sub_tasks_data, list):
+                    sub_tasks_data = [sub_tasks_data]
+            except Exception as e:
+                logging.warning(f"[Cascade] Failed to parse sub-tasks JSON: {e}")
 
-    for td in sub_tasks_data:
-        a_key = str(td.get('assignee_key', ''))
-        if a_key not in valid_keys:
-            # Fallback: assign to first available report
-            a_key = direct_reports[0].role_key if direct_reports else head_key
+        # Validate assignees — only allow direct reports
+        valid_keys = {r.role_key for r in direct_reports}
 
-        a_name = td.get('assignee_name', '')
-        if not a_name:
-            member = db.query(TeamMember).filter(TeamMember.role_key == a_key).first()
-            a_name = member.display_name if member else a_key
+        for td in sub_tasks_data:
+            a_key = str(td.get('assignee_key', ''))
+            if a_key not in valid_keys:
+                # Fallback: assign to first available report
+                a_key = direct_reports[0].role_key if direct_reports else head_key
 
-        sub_task = Task(
-            title=td.get('title', 'Sub-task'),
-            description=td.get('description', ''),
-            priority=td.get('priority', priority),
-            assignee_type='team_member',
-            assignee_key=a_key,
-            assignee_name=a_name,
-            created_by_type='team_member',
-            created_by_key=head_key,
-            created_by_name=head_name,
-            department=_dept_from_assignee(a_key),
-            parent_id=task_id,
-            thread_id=head_thread,
-            requires_approval=False,  # head already approved — sub-tasks auto-execute
-            status='in_progress',
-        )
-        db.add(sub_task)
-        db.commit()
-        sub_task_objects.append(sub_task)
-        logging.info(f"[Cascade] Sub-task #{sub_task.id} '{sub_task.title}' → {a_name}")
+            a_name = td.get('assignee_name', '')
+            if not a_name:
+                member = db.query(TeamMember).filter(TeamMember.role_key == a_key).first()
+                a_name = member.display_name if member else a_key
+
+            sub_task = Task(
+                title=td.get('title', 'Sub-task'),
+                description=td.get('description', ''),
+                priority=td.get('priority', priority),
+                assignee_type='team_member',
+                assignee_key=a_key,
+                assignee_name=a_name,
+                created_by_type='team_member',
+                created_by_key=head_key,
+                created_by_name=head_name,
+                department=_dept_from_assignee(a_key),
+                parent_id=task_id,
+                thread_id=head_thread,
+                requires_approval=False,  # head already approved — sub-tasks auto-execute
+                status='in_progress',
+            )
+            db.add(sub_task)
+            db.commit()
+            sub_task_objects.append(sub_task)
+            logging.info(f"[Cascade] Sub-task #{sub_task.id} '{sub_task.title}' → {a_name}")
 
     # If no sub-tasks were parsed, execute directly as the head
     if not sub_task_objects:
@@ -4553,14 +4974,15 @@ def _execute_cascade_task(db, parent_task, head_entity, direct_reports):
         _execute_individual_task(db, parent_task, head_entity, 'team_member', head_key)
         return
 
-    # Notification: cascade started
-    db.add(Notification(
-        type='task_cascade_started',
-        title=f'⚡ {head_name} dispatched {len(sub_task_objects)} sub-tasks',
-        body=f'Task: {title[:80]} → {", ".join(st.assignee_name for st in sub_task_objects)}',
-        link=f'/inbox?entity_type=team_member&entity_key={head_key}',
-    ))
-    db.commit()
+    # Notification: cascade started (skip on resume — user already got it)
+    if not resuming:
+        db.add(Notification(
+            type='task_cascade_started',
+            title=f'⚡ {head_name} dispatched {len(sub_task_objects)} sub-tasks',
+            body=f'Task: {title[:80]} → {", ".join(st.assignee_name for st in sub_task_objects)}',
+            link=f'/inbox?entity_type=team_member&entity_key={head_key}',
+        ))
+        db.commit()
 
     # ── STEP 3: Execute sub-tasks in parallel (2 workers) ──
     from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -4574,6 +4996,10 @@ def _execute_cascade_task(db, parent_task, head_entity, direct_reports):
             from src.database.models import Task as _T, TeamMember as _TM
             sub_task = sub_db.query(_T).filter(_T.id == st.id).first()
             member = sub_db.query(_TM).filter(_TM.role_key == st.assignee_key).first()
+            # Resume optimization: if already finished last run, don't re-run
+            if sub_task and sub_task.status == 'done' and sub_task.deliverable:
+                return {'task_id': st.id, 'title': st.title, 'assignee': st.assignee_name,
+                        'result': (sub_task.deliverable or '')[:500], 'status': 'done'}
             if member and sub_task:
                 result = _execute_individual_task(sub_db, sub_task, member, 'team_member', st.assignee_key)
                 return {'task_id': st.id, 'title': st.title, 'assignee': st.assignee_name,
@@ -5001,12 +5427,21 @@ def get_tasks_progress():
     _top_level = Task.parent_id == None
     pending = db.query(Task).filter(Task.requires_approval == True, Task.approved_at == None, Task.status != 'rejected', _not_archived, _top_level).count()
     in_progress = db.query(Task).filter(Task.status == 'in_progress', _not_archived, _top_level).count()
+    in_progress_all = db.query(Task).filter(Task.status == 'in_progress', _not_archived).count()
     done = db.query(Task).filter(Task.status == 'done', _not_archived, _top_level).count()
     blocked = db.query(Task).filter(Task.status == 'blocked', _not_archived, _top_level).count()
     recent_done = db.query(Task).filter(Task.status == 'done', _not_archived, _top_level).order_by(Task.completed_at.desc()).limit(5).all()
+    # Currently-running leaf tasks — what's actually firing API calls right now
+    running_leaves = db.query(Task).filter(Task.status == 'in_progress', _not_archived).order_by(Task.updated_at.desc()).limit(10).all()
     return jsonify({
         'pending_approval': pending,
         'in_progress': in_progress,
+        'in_progress_all': in_progress_all,
+        'running_now': [{
+            'id': t.id, 'title': t.title[:80], 'assignee_name': t.assignee_name,
+            'parent_id': t.parent_id,
+            'updated_at': t.updated_at.isoformat() if getattr(t, 'updated_at', None) else None,
+        } for t in running_leaves],
         'done': done,
         'blocked': blocked,
         'recent_completed': [{
@@ -5742,5 +6177,107 @@ def tiktok_publish_status(publish_id):
     return jsonify(r.json()), r.status_code
 
 
+def _resume_orphaned_tasks():
+    """On boot, re-dispatch any in_progress tasks orphaned by a prior restart.
+    - Top-level tasks (no parent) are re-queued via _execute_task_in_background.
+    - Cascade parents reuse existing sub-tasks (handled in _execute_cascade_task).
+    - Sub-tasks already done with a deliverable are skipped by _run_sub.
+    """
+    try:
+        from src.database.db import get_db
+        from src.database.models import Task
+        import threading
+        db = get_db()
+        _not_archived = (Task.archived == False) | (Task.archived == None)
+        orphans = db.query(Task).filter(
+            Task.status == 'in_progress',
+            Task.parent_id == None,  # only resume top-level — children resume via their parent's cascade
+            _not_archived,             # skip archived tasks (user cancelled)
+        ).all()
+        snapshots = [{
+            'id': t.id,
+            'assignee_type': t.assignee_type,
+            'assignee_key': t.assignee_key,
+            'assignee_name': t.assignee_name,
+            'title': t.title,
+            'description': t.description,
+            'priority': t.priority,
+        } for t in orphans]
+        db.close()
+        if not snapshots:
+            return
+        logging.info(f"[Resume] Re-dispatching {len(snapshots)} orphaned in_progress tasks")
+        for snap in snapshots:
+            threading.Thread(
+                target=_execute_task_in_background,
+                args=(snap,),
+                name=f"task-resume-{snap['id']}",
+                daemon=True,
+            ).start()
+    except Exception as e:
+        logging.warning(f"[Resume] Failed: {e}")
+
+
+def _start_scheduled_post_publisher():
+    """Background loop that publishes scheduled posts when their time arrives.
+
+    Polls every 60s for posts with status='scheduled' AND scheduled_at <= now (UTC).
+    For each due post, calls the existing publish route via the Flask test client so
+    all publish logic (platform APIs, image uploads, sanitization) is reused exactly.
+    """
+    import threading, time as _time, logging as _logging
+
+    def _loop():
+        from datetime import datetime
+        from src.database.db import get_db
+        from src.database.models import Content
+
+        _logging.info('[SchedPub] Scheduled-post publisher started (polling every 60s).')
+        while True:
+            try:
+                db = get_db()
+                try:
+                    now = datetime.utcnow()
+                    due = db.query(Content).filter(
+                        Content.status == 'scheduled',
+                        Content.scheduled_at != None,
+                        Content.scheduled_at <= now,
+                    ).order_by(Content.scheduled_at.asc()).limit(10).all()
+                    due_ids = [p.id for p in due]
+                finally:
+                    db.close()
+
+                if due_ids:
+                    _logging.info(f'[SchedPub] {len(due_ids)} post(s) due — publishing: {due_ids}')
+                    client = app.test_client()
+                    for pid in due_ids:
+                        try:
+                            resp = client.post(f'/api/content/{pid}/publish')
+                            status = resp.status_code
+                            payload = resp.get_json(silent=True) or {}
+                            if 'platform_post_id' in payload:
+                                _logging.info(
+                                    f'[SchedPub] #{pid} published '
+                                    f'(platform_id={payload.get("platform_post_id")})'
+                                )
+                            elif 'warning' in payload:
+                                _logging.warning(
+                                    f'[SchedPub] #{pid} publish returned warning: {payload["warning"][:200]}'
+                                )
+                            else:
+                                _logging.warning(f'[SchedPub] #{pid} publish status={status} payload={payload}')
+                        except Exception as pe:
+                            _logging.error(f'[SchedPub] #{pid} publish crashed: {pe}', exc_info=True)
+            except Exception as e:
+                _logging.error(f'[SchedPub] Loop error: {e}', exc_info=True)
+            _time.sleep(60)
+
+    t = threading.Thread(target=_loop, name='scheduled-publisher', daemon=True)
+    t.start()
+
+
 if __name__ == '__main__':
+    # Only auto-resume when running as the server (not when imported by scripts)
+    _resume_orphaned_tasks()
+    _start_scheduled_post_publisher()
     app.run(debug=False, host='0.0.0.0', port=5000, threaded=True)
