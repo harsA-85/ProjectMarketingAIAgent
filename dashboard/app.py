@@ -1435,6 +1435,71 @@ def publish_content_now(content_id):
 
             logging.warning(f"[Twitter] Sending tweet text ({len(tweet_text)} chars): {repr(tweet_text[:100])}")
 
+            # --- Resolve a first image (if any) to attach to the tweet ---
+            def _resolve_image_bytes(media_urls):
+                """Return raw image bytes for the first media item, or None.
+                Handles base64, data: URIs, /static local paths, and http(s) URLs."""
+                items = media_urls or []
+                if isinstance(items, str):
+                    try:
+                        items = jsonlib.loads(items)
+                    except Exception:
+                        items = [items]
+                if not items:
+                    return None
+                item = items[0]
+                if not item or not isinstance(item, str):
+                    return None
+                try:
+                    if item.startswith('data:'):
+                        return base64.b64decode(item.split(',', 1)[1])
+                    if item.startswith(('http://', 'https://')):
+                        with urllib.request.urlopen(item, timeout=15) as r:
+                            return r.read()
+                    if item.startswith('/static') or item.startswith('static'):
+                        rel = item.lstrip('/')
+                        fpath = os.path.join(os.path.dirname(os.path.abspath(__file__)), rel)
+                        if os.path.isfile(fpath):
+                            with open(fpath, 'rb') as f:
+                                return f.read()
+                        return None
+                    # Otherwise assume raw base64
+                    return base64.b64decode(item)
+                except Exception as _ie:
+                    logging.warning(f"[Twitter] could not resolve image bytes: {_ie}")
+                    return None
+
+            def _twitter_upload_media_bearer(img_bytes, tk):
+                """Upload an image via v1.1 media/upload using OAuth2 bearer
+                (needs media.write scope). Returns media_id_string or None."""
+                if not img_bytes:
+                    return None
+                try:
+                    b64 = base64.b64encode(img_bytes).decode()
+                    body = _urlencode({'media_data': b64, 'media_category': 'tweet_image'}).encode()
+                    req = urllib.request.Request(
+                        'https://upload.twitter.com/1.1/media/upload.json',
+                        data=body, method='POST'
+                    )
+                    req.add_header('Authorization', f'Bearer {tk}')
+                    req.add_header('Content-Type', 'application/x-www-form-urlencoded')
+                    with urllib.request.urlopen(req, timeout=30) as r:
+                        res = jsonlib.loads(r.read())
+                        mid = str(res.get('media_id_string') or res.get('media_id') or '')
+                        if mid:
+                            logging.info(f"[Twitter] media uploaded (id={mid})")
+                        return mid or None
+                except urllib.error.HTTPError as e:
+                    body = e.read().decode('utf-8', errors='replace')
+                    logging.warning(f"[Twitter] media upload failed {e.code}: {body[:200]} "
+                                    f"(tweet will post text-only). If 403/scope: reconnect the account to grant media.write.")
+                    return None
+                except Exception as _ue:
+                    logging.warning(f"[Twitter] media upload error: {_ue} (posting text-only)")
+                    return None
+
+            _img_bytes = _resolve_image_bytes(getattr(post, 'media_urls', None))
+
             # --- OAuth 1.0a signing (uses Consumer Key + Access Token from env) ---
             _api_key    = os.environ.get('TWITTER_API_KEY', '')
             _api_secret = os.environ.get('TWITTER_API_SECRET', '')
@@ -1483,7 +1548,13 @@ def publish_content_now(content_id):
 
             # --- OAuth 2.0 Bearer fallback ---
             def _bearer_do_tweet(tk, text):
-                payload = jsonlib.dumps({'text': text}).encode()
+                body_obj = {'text': text}
+                # Attach image if we have one and can upload it (media.write scope)
+                if _img_bytes:
+                    mid = _twitter_upload_media_bearer(_img_bytes, tk)
+                    if mid:
+                        body_obj['media'] = {'media_ids': [mid]}
+                payload = jsonlib.dumps(body_obj).encode()
                 req = urllib.request.Request(
                     'https://api.twitter.com/2/tweets',
                     data=payload,
@@ -1491,7 +1562,7 @@ def publish_content_now(content_id):
                 )
                 req.add_header('Authorization', f'Bearer {tk}')
                 req.add_header('Content-Type', 'application/json')
-                with urllib.request.urlopen(req, timeout=15) as r:
+                with urllib.request.urlopen(req, timeout=30) as r:
                     result = jsonlib.loads(r.read())
                     return result.get('data', {}).get('id', '')
 
@@ -5738,7 +5809,7 @@ import requests as _requests
 _TWITTER_CLIENT_ID     = os.environ.get('TWITTER_CLIENT_ID', '')
 _TWITTER_CLIENT_SECRET = os.environ.get('TWITTER_CLIENT_SECRET', '')
 _TWITTER_REDIRECT_URI  = os.environ.get('TWITTER_REDIRECT_URI', 'http://localhost:5000/auth/twitter/callback')
-_TWITTER_SCOPES        = 'tweet.read tweet.write users.read offline.access'
+_TWITTER_SCOPES        = 'tweet.read tweet.write users.read media.write offline.access'
 
 # In-memory store for PKCE verifiers keyed by state (single-server, dev only)
 _oauth_states: dict = {}
