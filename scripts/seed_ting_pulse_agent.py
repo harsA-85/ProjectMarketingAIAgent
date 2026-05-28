@@ -93,6 +93,22 @@ FORMAT C — AGGREGATE CITY PULSE (20% of tweets)
     "9 sellers in Boston South End currently in active conversations with agents."
     "5 people in Notting Hill have reached out to agents in the last 10 minutes."
 
+LANGUAGE RULE (IMPORTANT)
+- If the city/neighborhood is in FRANCE (Paris, any "Paris 1er/4e/6e/7e/9e/11e/14e/16e/17e/18e/20e",
+  Marais, Saint-Germain, Bastille, Batignolles, Montmartre, Lyon, Bordeaux, Marseille, etc.),
+  WRITE THE ENTIRE TWEET IN FRENCH. Natural, native French — not translated-sounding.
+    FR examples (write fresh ones, don't copy):
+      "Martin vient de créer son compte sur Ting il y a 2 min. Cherche à vendre son appart dans le 7e."
+      "Léa, il y a 4 minutes : a contacté 3 agents pour acheter un 2-pièces dans le Marais."
+      "Pierre a rejoint Ting il y a 8 min. Acheteur, budget 850 000 € à Saint-Germain."
+      "En ce moment : 23 personnes cherchent un agent pour vendre dans le 16e."
+      "9 acheteurs actifs à Paris 11e sur Ting, à l'instant."
+    FR vocabulary: "vient de créer son compte", "a rejoint Ting", "il y a X min", "cherche à acheter/vendre",
+      "a contacté X agents", "acheteur/vendeur", "appartement/appart", "studio", "2-pièces", "3-pièces",
+      "maison", "loft", budgets in euros (€). Time: "à l'instant", "il y a 1 min", "il y a 5 minutes".
+- For all NON-French cities (NYC, Boston, London, etc.), write in ENGLISH as before.
+- Aim for roughly 30-40% of tweets being French (France/Paris), the rest English.
+
 HARD RULES
 - Each tweet MUST be a SINGLE standalone tweet, ≤ 250 characters total (emojis = 2 chars each, count carefully).
 - No threads. No 1/, 2/ numbering. No marketing tagline. No "join us", no "the future of real estate", no "10k users".

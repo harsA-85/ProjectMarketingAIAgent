@@ -111,11 +111,35 @@ def _color_for_name(name: str):
     return _AVATAR_PALETTE[h % len(_AVATAR_PALETTE)]
 
 
+_FRENCH_CITY_TOKENS = [
+    'paris', 'marais', 'saint-germain', 'bastille', 'batignolles', 'montmartre',
+    'lyon', 'bordeaux', 'marseille', 'nantes', 'toulouse', 'lille',
+]
+
+
 def _extract_city(text: str) -> str | None:
     for kw in _CITY_KEYWORDS_SORTED:
         if kw.lower() in text.lower():
             return kw
     return None
+
+
+# French linguistic markers — catches tweets that reference an arrondissement
+# ("dans le 14e") or use French verbs without naming "Paris" explicitly.
+_FRENCH_MARKERS = [
+    'il y a', 'vient de', 'a rejoint', 'cherche à', 'cherche a', "à l'instant",
+    'en ce moment', 'agents pour', 'acheteur', 'vendeur', 'appartement', 'appart',
+    'pièces', 'pieces', 'son compte', 'personnes', 'maison', 'à vendre', 'à acheter',
+]
+
+
+def _is_french(text: str, city: str | None) -> bool:
+    """True if this tweet is French (→ French card labels). Detects both French
+    city tokens and French linguistic markers in the body."""
+    hay = f'{text} {city or ""}'.lower()
+    if any(tok in hay for tok in _FRENCH_CITY_TOKENS):
+        return True
+    return any(mk in hay for mk in _FRENCH_MARKERS)
 
 
 # Matches a leading first name (Latin extended), incl. accented chars
@@ -161,19 +185,21 @@ def _draw_chrome(draw, fonts, w):
 
 
 _TIME_RX = _re.compile(
-    r'(\d+\s*(?:s|sec|secs|second|seconds|m|min|mins|minute|minutes|h|hr|hrs|hour|hours)\s*ago'
+    r'(il\s+y\s+a\s+\d+\s*(?:s|sec|secondes?|min|minutes?|h|heures?)'   # FR: "il y a 5 min"
+    r'|à\s+l\'instant'                                                    # FR: "à l'instant"
+    r'|\d+\s*(?:s|sec|secs|second|seconds|m|min|mins|minute|minutes|h|hr|hrs|hour|hours)\s*ago'
     r'|just\s+now|just\s+signed\s+up|seconds?\s+ago|minutes?\s+ago)',
     _re.IGNORECASE,
 )
 
 
 def _extract_time_phrase(text: str) -> str | None:
-    """Pull a human time phrase out of the tweet — 'just now', '3 mins ago', etc."""
+    """Pull a human time phrase out of the tweet — 'just now', '3 mins ago',
+    'il y a 5 min', 'à l'instant', etc."""
     m = _TIME_RX.search(text)
     if not m:
         return None
     phrase = m.group(1).strip().lower()
-    # Normalize 'just signed up' → 'just now'
     if 'just signed up' in phrase:
         return 'just now'
     return phrase
@@ -200,6 +226,8 @@ def _build_person_card(name: str, city: str | None, body_text: str = '') -> str:
     lw = bbox[2] - bbox[0]; lh = bbox[3] - bbox[1]
     draw.text((cx - lw // 2, cy - lh // 2 - 20), initial, fill=text_color, font=fonts['huge'])
 
+    fr = _is_french(body_text or '', city)
+
     # Name below the circle
     _draw_centered(draw, name, fonts['title'], 740, size, (20, 22, 35))
 
@@ -207,12 +235,18 @@ def _build_person_card(name: str, city: str | None, body_text: str = '') -> str:
     if city:
         _draw_centered(draw, city, fonts['sub'], 835, size, (110, 116, 135))
 
-    # Time phrase if found, else "just joined ting"
+    # Time phrase if found, else default join line
     time_phrase = _extract_time_phrase(body_text or '')
-    if time_phrase:
-        footer = f'joined {time_phrase}' if 'now' in time_phrase or 'ago' in time_phrase else time_phrase
+    if fr:
+        if time_phrase:
+            footer = time_phrase if time_phrase.startswith(('il y a', 'à l')) else f'inscrit·e {time_phrase}'
+        else:
+            footer = 'vient de rejoindre ting'
     else:
-        footer = 'just joined ting'
+        if time_phrase:
+            footer = f'joined {time_phrase}' if ('now' in time_phrase or 'ago' in time_phrase) else time_phrase
+        else:
+            footer = 'just joined ting'
     _draw_centered(draw, footer, fonts['small'], 945, size, (160, 165, 180))
 
     buf = io.BytesIO()
@@ -237,8 +271,11 @@ def _build_city_pulse_card(n: int, city: str | None, body_text: str) -> str:
 
     _draw_chrome(draw, fonts, size)
 
-    # Sub-label: prefer extracted time phrase ("currently", "right now on ting")
-    _draw_centered(draw, 'right now on ting', fonts['small'], 160, size, (110, 116, 135))
+    fr = _is_french(body_text or '', city)
+
+    # Sub-label
+    _draw_centered(draw, 'en ce moment sur ting' if fr else 'right now on ting',
+                   fonts['small'], 160, size, (110, 116, 135))
 
     # Big number
     num_str = str(n)
@@ -246,22 +283,34 @@ def _build_city_pulse_card(n: int, city: str | None, body_text: str) -> str:
     nw = bbox[2] - bbox[0]
     draw.text(((size - nw) // 2, 200), num_str, fill=(20, 22, 35), font=fonts['big'])
 
-    # "people in <City>" or generic
+    # "people in <City>" / "personnes à <City>"
     if city:
-        line2 = f'people in {city}'
+        line2 = f'personnes à {city}' if fr else f'people in {city}'
     else:
-        # Fallback: try to extract "in <something>" from the body
-        m = _re.search(r'in ([A-ZÀ-Ý][\w \-\']+?)(?:\s(?:to|on|currently)|[.,])', body_text)
-        line2 = f'people in {m.group(1)}' if m else 'people active'
+        if fr:
+            m = _re.search(r'à ([A-ZÀ-Ý][\w \-\']+?)(?:\s(?:pour|sur)|[.,])', body_text)
+            line2 = f'personnes à {m.group(1)}' if m else 'personnes actives'
+        else:
+            m = _re.search(r'in ([A-ZÀ-Ý][\w \-\']+?)(?:\s(?:to|on|currently)|[.,])', body_text)
+            line2 = f'people in {m.group(1)}' if m else 'people active'
     _draw_centered(draw, line2, fonts['title'], 480, size, (40, 44, 60))
 
-    # Subline
-    if 'sell' in body_text.lower():
-        sub = 'looking for an agent to sell'
-    elif 'buy' in body_text.lower():
-        sub = 'looking for an agent to buy'
+    # Subline — intent
+    low = body_text.lower()
+    if fr:
+        if 'vendre' in low:
+            sub = 'cherchent un agent pour vendre'
+        elif 'achet' in low:  # acheter / acheteur
+            sub = 'cherchent un agent pour acheter'
+        else:
+            sub = 'en discussion avec des agents'
     else:
-        sub = 'active in agent conversations'
+        if 'sell' in low:
+            sub = 'looking for an agent to sell'
+        elif 'buy' in low:
+            sub = 'looking for an agent to buy'
+        else:
+            sub = 'active in agent conversations'
     _draw_centered(draw, sub, fonts['sub'], 610, size, (110, 116, 135))
 
     # Footer
