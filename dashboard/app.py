@@ -472,6 +472,18 @@ def ai_engage(account_id):
         if not account or not account.access_token:
             return jsonify({'error': 'Account not found or no token'}), 404
 
+        # Auto-engage (reply to comments) is implemented for Instagram only.
+        # Twitter/X comment-reading requires a paid API tier and isn't wired up,
+        # so return a clear message instead of failing with a cryptic 400.
+        _plat = (account.platform or '').lower()
+        if _plat not in ('instagram', 'ig'):
+            return jsonify({
+                'account_id': account_id,
+                'replied': 0,
+                'actions': [],
+                'message': f'Auto-engage (comment replies) is only available for Instagram right now — not {account.platform}.'
+            }), 200
+
         agent = orchestrator.db.query(Agent).filter(Agent.id == account.agent_id).first()
         token = account.access_token
 

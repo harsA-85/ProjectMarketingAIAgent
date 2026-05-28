@@ -2625,8 +2625,11 @@ async function runEngagement(accountId) {
                     ${res.actions.map(a => `<div style="font-size:11px;color:var(--text-3);margin-top:4px">💬 "${a.comment}" → "${a.reply}"</div>`).join('')}`;
                 toast(`🤖 AI engaged with ${res.replied} comments!`, 'success');
             } else {
-                resultEl.innerHTML = `<div style="font-size:12px;color:var(--text-2)">✓ No new comments to reply to right now.</div>`;
-                toast('No new comments found.', 'info');
+                const msg = res.message && /only available|not supported|not Instagram|not twitter/i.test(res.message)
+                    ? res.message
+                    : '✓ No new comments to reply to right now.';
+                resultEl.innerHTML = `<div style="font-size:12px;color:var(--text-2)">${msg}</div>`;
+                toast(res.message && /only available/i.test(res.message) ? res.message : 'No new comments found.', 'info');
             }
             resultEl.style.display = 'block';
         } else {
