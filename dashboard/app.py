@@ -5756,10 +5756,17 @@ def twitter_oauth_start():
         'state':                 state,
         'code_challenge':        challenge,
         'code_challenge_method': 'S256',
-        'force_login':           'true',   # always show login form — no pre-filled account
+        # force_login intentionally omitted: forcing a fresh X login loops on
+        # "you have to be logged in to X" when third-party cookies are strict.
+        # Using the browser's active X session goes straight to "Authorize app".
+        # → Log into the TARGET account (e.g. Ting Pulse) in this browser first.
     }
     from urllib.parse import urlencode
-    url = 'https://twitter.com/i/oauth2/authorize?' + urlencode(params)
+    # Use x.com (not twitter.com): post-rebrand the session cookie lives on the
+    # x.com domain, and the twitter.com authorize page often can't see it →
+    # loops on "you have to be logged in to X". x.com/i/oauth2/authorize shares
+    # the active session and goes straight to the Authorize screen.
+    url = 'https://x.com/i/oauth2/authorize?' + urlencode(params)
     from flask import redirect
     return redirect(url)
 
