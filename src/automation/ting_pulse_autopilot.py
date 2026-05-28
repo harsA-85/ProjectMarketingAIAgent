@@ -323,18 +323,23 @@ def _build_ting_card(text: str) -> str:
 
 
 # ─── Scheduling math ──────────────────────────────────────────────────────
-def _plan_bursts(n: int, day_start_utc: datetime) -> list:
+def _plan_bursts(n: int, day_start_utc: datetime, earliest_utc: datetime | None = None) -> list:
     """Distribute n tweets across the day with bursty cluster behavior.
-    Returns a sorted list of datetime objects (UTC), all within the active window."""
+    Returns a sorted list of datetime objects (UTC), all within the active window.
+    If earliest_utc is given, no tweet is scheduled before it (so a mid-day restart
+    or a fresh connect never backfills past timestamps)."""
     # Choose burst_count — fewer bursts for small days, more for big ones,
     # but ALWAYS at least one burst contains multiple tweets when n >= 2.
     # Aim ~ n / (random 2.0..3.8) so n=3 → 1, n=25 → 7-12
     target_bc = max(1, round(n / random.uniform(2.0, 3.8)))
     burst_count = min(target_bc, n)
 
-    # Active window seconds
+    # Active window — clamp the start forward if earliest_utc lands inside the day
     active_start_dt = day_start_utc + timedelta(hours=ACTIVE_HOUR_START)
-    active_span_s = (ACTIVE_HOUR_END - ACTIVE_HOUR_START) * 3600
+    if earliest_utc and earliest_utc > active_start_dt:
+        active_start_dt = earliest_utc
+    active_end_dt = day_start_utc + timedelta(hours=ACTIVE_HOUR_END)
+    active_span_s = max(60, int((active_end_dt - active_start_dt).total_seconds()))
 
     # Burst start offsets within active window (with a 30s tail margin)
     if burst_count == 1:
@@ -448,8 +453,11 @@ def _plan_day(day_utc: date | None = None):
             log.error('[TingPulse] No drafts available even after regen. Aborting day plan.')
             return
 
-        # Build the bursty schedule
-        times = _plan_bursts(len(chosen), day_start)
+        # Build the bursty schedule. If we're planning the current day, never
+        # schedule before "now + 2 min" so a mid-day (re)plan doesn't backfill.
+        now_utc = datetime.utcnow()
+        earliest = (now_utc + timedelta(minutes=2)) if day_utc == now_utc.date() else None
+        times = _plan_bursts(len(chosen), day_start, earliest_utc=earliest)
 
         # Apply scheduling + maybe attach a PIL card
         n_scheduled = 0

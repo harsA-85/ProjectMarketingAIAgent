@@ -6237,13 +6237,48 @@ def _start_scheduled_post_publisher():
             try:
                 db = get_db()
                 try:
+                    from src.database.models import SocialMediaAccount as _SMA
                     now = datetime.utcnow()
                     due = db.query(Content).filter(
                         Content.status == 'scheduled',
                         Content.scheduled_at != None,
                         Content.scheduled_at <= now,
-                    ).order_by(Content.scheduled_at.asc()).limit(10).all()
-                    due_ids = [p.id for p in due]
+                    ).order_by(Content.scheduled_at.asc()).limit(50).all()
+
+                    # Only publish posts whose agent has a connected account WITH a token
+                    # for that platform. Otherwise leave them 'scheduled' (paused) — no
+                    # futile retry loop, no burning. They go live the moment an account
+                    # is connected.
+                    def _plat_key(p):
+                        pl = (p.platform or '').lower()
+                        return 'twitter' if pl in ('twitter', 'x', 'twitter/x') else pl
+
+                    connected = {}  # (agent_id, platform_key) -> bool
+                    skipped = []
+                    due_ids = []
+                    for p in due:
+                        key = (p.agent_id, _plat_key(p))
+                        if key not in connected:
+                            accts = db.query(_SMA).filter(
+                                _SMA.agent_id == p.agent_id,
+                                _SMA.access_token.isnot(None),
+                            ).all()
+                            connected[key] = any(
+                                (a.platform or '').lower() in (key[1], 'x', 'twitter/x')
+                                if key[1] == 'twitter'
+                                else (a.platform or '').lower() == key[1]
+                                for a in accts
+                            )
+                        if connected[key]:
+                            due_ids.append(p.id)
+                        else:
+                            skipped.append(p.id)
+                    if skipped:
+                        _logging.info(
+                            f'[SchedPub] {len(skipped)} due post(s) paused — no connected '
+                            f'account yet (e.g. {skipped[:5]}). Will post once connected.'
+                        )
+                    due_ids = due_ids[:10]
                 finally:
                     db.close()
 
