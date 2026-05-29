@@ -18,16 +18,30 @@ log = logging.getLogger(__name__)
 
 TING_PULSE_AGENT_NAME = "Ting Pulse"
 
-# Search queries — FR + EN. -is:retweet to skip RTs. We keep them tight to avoid
-# burning credits on noise. Tweak freely.
+# Search queries — FR + EN. -is:retweet to skip RTs. Each query costs a little
+# API credit per scan, so keep the list focused on real buyer/seller intent.
 DEFAULT_QUERIES = [
-    # French
-    '("cherche un agent immobilier" OR "connaît un bon agent immobilier" OR "recommande un agent immobilier") -is:retweet lang:fr',
-    '("frais d\'agence" trop chers) -is:retweet lang:fr',
-    '("acheter un appartement" (Paris OR Lyon OR Bordeaux) (agent OR conseil)) -is:retweet lang:fr',
-    # English
+    # ── FRENCH — seeking an agent ────────────────────────────────
+    '("cherche un agent immobilier" OR "connais un bon agent immobilier" OR "connaît un bon agent immobilier") -is:retweet lang:fr',
+    '("recommande un agent immobilier" OR "recommandez un agent" OR "conseillez un agent immobilier") -is:retweet lang:fr',
+    '("bon agent immobilier" (Paris OR Lyon OR Bordeaux OR Marseille OR Nantes OR Lille)) -is:retweet lang:fr',
+    # ── FRENCH — fee / agency frustration ────────────────────────
+    '("frais d\'agence" (abusifs OR scandaleux OR "trop chers" OR exorbitants)) -is:retweet lang:fr',
+    '("marre des agences" OR "agent immobilier" (arnaque OR déçu OR nul)) -is:retweet lang:fr',
+    # ── FRENCH — buying / selling intent ─────────────────────────
+    '("je cherche à acheter" (appartement OR maison) (Paris OR Lyon OR Bordeaux)) -is:retweet lang:fr',
+    '("vendre mon appartement" OR "vendre ma maison" (agence OR agent OR comment)) -is:retweet lang:fr',
+    '("premier achat immobilier" OR "première fois" "acheter" appartement) -is:retweet lang:fr',
+    # ── ENGLISH — seeking an agent ───────────────────────────────
     '("looking for a real estate agent" OR "need a good realtor" OR "recommend a realtor") -is:retweet lang:en',
-    '("buyer\'s agent" (NYC OR Brooklyn OR Manhattan OR Boston) recommend) -is:retweet lang:en',
+    '("any realtor recommendations" OR "real estate agent recommendations" OR "recommend a real estate agent") -is:retweet lang:en',
+    '("buyer\'s agent" (NYC OR Brooklyn OR Manhattan OR Boston OR London) (recommend OR looking)) -is:retweet lang:en',
+    # ── ENGLISH — fee / agent frustration ────────────────────────
+    '(("realtor fees" OR "agent fees" OR "agent commission") (high OR ridiculous OR "too much" OR scam)) -is:retweet lang:en',
+    '("fed up with realtors" OR "realtor was useless" OR "bad real estate agent") -is:retweet lang:en',
+    # ── ENGLISH — buying / selling intent ────────────────────────
+    '("first time home buyer" (agent OR realtor) (advice OR help OR recommend)) -is:retweet lang:en',
+    '("selling my house" ("without an agent" OR "do I need an agent" OR realtor)) -is:retweet lang:en',
 ]
 
 MAX_PER_QUERY = 10          # tweets pulled per query
