@@ -150,6 +150,37 @@ class Analytics(Base):
         return f"<Analytics {self.agent_id}:{self.platform}>"
 
 
+class ReplyCandidate(Base):
+    """A tweet found by the outreach 'veille' that we *could* reply to.
+    Human-in-the-loop: a draft reply is generated, the supervisor approves
+    (send) or dismisses. Nothing is auto-posted."""
+    __tablename__ = 'reply_candidates'
+
+    id = Column(Integer, primary_key=True)
+    agent_id = Column(Integer, ForeignKey('agents.id'), nullable=False)   # which agent replies
+    account_id = Column(Integer, ForeignKey('social_media_accounts.id'), nullable=True)
+    platform = Column(String(50), default='twitter')
+
+    source_tweet_id = Column(String(64), nullable=False, index=True)      # tweet we'd reply to
+    source_author   = Column(String(255), nullable=True)                  # @handle (if resolvable)
+    source_author_id= Column(String(64), nullable=True)
+    source_text     = Column(Text, nullable=True)
+    source_url      = Column(String(500), nullable=True)
+    lang            = Column(String(8), nullable=True)                    # 'fr' | 'en'
+    matched_query   = Column(String(255), nullable=True)
+
+    draft_reply = Column(Text, nullable=True)
+    status      = Column(String(20), default='pending')                  # pending | sent | dismissed | failed
+    reply_tweet_id = Column(String(64), nullable=True)
+    error       = Column(Text, nullable=True)
+
+    created_at  = Column(DateTime, default=datetime.utcnow)
+    decided_at  = Column(DateTime, nullable=True)
+
+    def __repr__(self):
+        return f"<ReplyCandidate {self.id}:{self.status}:{self.source_tweet_id}>"
+
+
 class APIConfiguration(Base):
     __tablename__ = 'api_configurations'
 

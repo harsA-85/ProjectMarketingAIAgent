@@ -200,6 +200,14 @@ def agent_detail():
     return send_file(os.path.join(os.path.dirname(__file__), 'agent-detail.html'))
 
 
+@app.route('/outreach.html', methods=['GET'])
+def outreach_page():
+    """Serve the outreach (veille → reply approval) page"""
+    resp = send_file(os.path.join(os.path.dirname(__file__), 'outreach.html'))
+    resp.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+    return resp
+
+
 @app.route('/newsroom.html', methods=['GET'])
 def newsroom():
     """Serve the newsroom page"""
@@ -559,6 +567,137 @@ def ai_engage(account_id):
         }), 200
 
     except Exception as e:
+        return jsonify({'error': str(e)}), 400
+
+
+# ═══════════════════════════════════════════
+# OUTREACH — veille + manual-approval replies (Twitter)
+# ═══════════════════════════════════════════
+
+@app.route('/api/outreach/scan', methods=['POST'])
+def outreach_scan():
+    """Run one veille pass: search X for people seeking an agent, draft replies,
+    store as 'pending' ReplyCandidate rows. Does NOT post anything."""
+    try:
+        from src.automation.outreach import scan_outreach
+        data = request.get_json(silent=True) or {}
+        queries = data.get('queries')  # optional override
+        result = scan_outreach(queries if isinstance(queries, list) and queries else None)
+        code = 200 if 'error' not in result else 400
+        return jsonify(result), code
+    except Exception as e:
+        return jsonify({'error': str(e)}), 400
+
+
+@app.route('/api/outreach/candidates', methods=['GET'])
+def outreach_list():
+    from src.database.models import ReplyCandidate
+    status = request.args.get('status', 'pending')
+    q = orchestrator.db.query(ReplyCandidate)
+    if status and status != 'all':
+        q = q.filter(ReplyCandidate.status == status)
+    rows = q.order_by(ReplyCandidate.created_at.desc()).limit(200).all()
+    return jsonify({'candidates': [{
+        'id': c.id,
+        'source_author': c.source_author,
+        'source_text': c.source_text,
+        'source_url': c.source_url,
+        'lang': c.lang,
+        'matched_query': c.matched_query,
+        'draft_reply': c.draft_reply,
+        'status': c.status,
+        'reply_tweet_id': c.reply_tweet_id,
+        'created_at': c.created_at.isoformat() if c.created_at else None,
+    } for c in rows]}), 200
+
+
+@app.route('/api/outreach/candidates/<int:cid>', methods=['PATCH'])
+def outreach_edit(cid):
+    """Edit the draft reply text before sending."""
+    from src.database.models import ReplyCandidate
+    data = request.get_json(silent=True) or {}
+    c = orchestrator.db.query(ReplyCandidate).filter(ReplyCandidate.id == cid).first()
+    if not c:
+        return jsonify({'error': 'Not found'}), 404
+    if 'draft_reply' in data:
+        c.draft_reply = (data['draft_reply'] or '').strip()
+        orchestrator.db.commit()
+    return jsonify({'ok': True, 'draft_reply': c.draft_reply}), 200
+
+
+@app.route('/api/outreach/candidates/<int:cid>/dismiss', methods=['POST'])
+def outreach_dismiss(cid):
+    from src.database.models import ReplyCandidate
+    c = orchestrator.db.query(ReplyCandidate).filter(ReplyCandidate.id == cid).first()
+    if not c:
+        return jsonify({'error': 'Not found'}), 404
+    c.status = 'dismissed'
+    c.decided_at = datetime.utcnow()
+    orchestrator.db.commit()
+    return jsonify({'ok': True}), 200
+
+
+@app.route('/api/outreach/candidates/<int:cid>/send', methods=['POST'])
+def outreach_send(cid):
+    """Post the (possibly edited) reply to X as a reply to the source tweet."""
+    import json as _json, urllib.request, urllib.error
+    from src.database.models import ReplyCandidate, SocialMediaAccount
+    c = orchestrator.db.query(ReplyCandidate).filter(ReplyCandidate.id == cid).first()
+    if not c:
+        return jsonify({'error': 'Not found'}), 404
+    if c.status == 'sent':
+        return jsonify({'error': 'Already sent', 'reply_tweet_id': c.reply_tweet_id}), 400
+
+    # Allow last-minute edit passed in the request
+    data = request.get_json(silent=True) or {}
+    if data.get('draft_reply'):
+        c.draft_reply = data['draft_reply'].strip()
+    text = (c.draft_reply or '').strip()
+    if not text:
+        return jsonify({'error': 'Empty reply text'}), 400
+
+    acct = None
+    if c.account_id:
+        acct = orchestrator.db.query(SocialMediaAccount).filter(
+            SocialMediaAccount.id == c.account_id).first()
+    if not acct or not acct.access_token:
+        acct = orchestrator.db.query(SocialMediaAccount).filter(
+            SocialMediaAccount.agent_id == c.agent_id,
+            SocialMediaAccount.platform == 'twitter',
+            SocialMediaAccount.access_token.isnot(None),
+        ).first()
+    if not acct or not acct.access_token:
+        return jsonify({'error': 'No connected Twitter account with a token for this agent.'}), 400
+
+    # Post a reply via X API v2 (OAuth2 bearer = the connected account's user token)
+    try:
+        payload = _json.dumps({
+            'text': text,
+            'reply': {'in_reply_to_tweet_id': c.source_tweet_id},
+        }).encode()
+        req = urllib.request.Request('https://api.twitter.com/2/tweets', data=payload, method='POST')
+        req.add_header('Authorization', f'Bearer {acct.access_token}')
+        req.add_header('Content-Type', 'application/json')
+        with urllib.request.urlopen(req, timeout=20) as r:
+            res = _json.loads(r.read())
+        rid = res.get('data', {}).get('id', '')
+        c.status = 'sent'
+        c.reply_tweet_id = str(rid)
+        c.decided_at = datetime.utcnow()
+        c.error = None
+        orchestrator.db.commit()
+        logging.info(f'[Outreach] sent reply to {c.source_tweet_id} → {rid}')
+        return jsonify({'ok': True, 'reply_tweet_id': str(rid)}), 200
+    except urllib.error.HTTPError as e:
+        body = e.read().decode('utf-8', errors='replace')
+        c.status = 'failed'
+        c.error = f'HTTP {e.code}: {body[:300]}'
+        c.decided_at = datetime.utcnow()
+        orchestrator.db.commit()
+        logging.warning(f'[Outreach] send failed {e.code}: {body[:200]}')
+        return jsonify({'error': c.error}), 400
+    except Exception as e:
+        c.status = 'failed'; c.error = str(e); orchestrator.db.commit()
         return jsonify({'error': str(e)}), 400
 
 
