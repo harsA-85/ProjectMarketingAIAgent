@@ -220,11 +220,11 @@ def _build_person_card(name: str, city: str | None, body_text: str = '') -> str:
     cx, cy = size // 2, 440
     draw.ellipse([cx - radius, cy - radius, cx + radius, cy + radius], fill=circle_color)
 
-    # Initial (single letter — these tweets don't include last names)
+    # Initial (single letter — these tweets don't include last names).
+    # Use anchor='mm' (middle/middle) so PIL handles glyph bearing/baseline
+    # correctly — manual bbox-based centering is off by the left bearing.
     initial = name[0].upper()
-    bbox = draw.textbbox((0, 0), initial, font=fonts['huge'])
-    lw = bbox[2] - bbox[0]; lh = bbox[3] - bbox[1]
-    draw.text((cx - lw // 2, cy - lh // 2 - 20), initial, fill=text_color, font=fonts['huge'])
+    draw.text((cx, cy), initial, fill=text_color, font=fonts['huge'], anchor='mm')
 
     fr = _is_french(body_text or '', city)
 
