@@ -669,18 +669,66 @@ def outreach_send(cid):
     if not acct or not acct.access_token:
         return jsonify({'error': 'No connected Twitter account with a token for this agent.'}), 400
 
-    # Post a reply via X API v2 (OAuth2 bearer = the connected account's user token)
-    try:
+    # Refresh OAuth2 access token if expired (401). Same approach as SchedPub.
+    def _refresh_oauth2_token(a):
+        if not a.refresh_token:
+            return None
+        try:
+            import requests as _req
+            resp = _req.post(
+                'https://api.twitter.com/2/oauth2/token',
+                data={
+                    'grant_type': 'refresh_token',
+                    'refresh_token': a.refresh_token,
+                    'client_id': _TWITTER_CLIENT_ID,
+                },
+                auth=(_TWITTER_CLIENT_ID, _TWITTER_CLIENT_SECRET),
+                timeout=15,
+            )
+            if resp.status_code == 200:
+                tokens = resp.json()
+                a.access_token = tokens.get('access_token', a.access_token)
+                if tokens.get('refresh_token'):
+                    a.refresh_token = tokens['refresh_token']
+                orchestrator.db.commit()
+                logging.info(f"[Outreach] refreshed token for @{a.username}")
+                return a.access_token
+            logging.warning(f"[Outreach] token refresh failed {resp.status_code}: {resp.text[:200]}")
+            return None
+        except Exception as e:
+            logging.warning(f"[Outreach] token refresh error: {e}")
+            return None
+
+    def _post_reply(tk):
         payload = _json.dumps({
             'text': text,
             'reply': {'in_reply_to_tweet_id': c.source_tweet_id},
         }).encode()
         req = urllib.request.Request('https://api.twitter.com/2/tweets', data=payload, method='POST')
-        req.add_header('Authorization', f'Bearer {acct.access_token}')
+        req.add_header('Authorization', f'Bearer {tk}')
         req.add_header('Content-Type', 'application/json')
         with urllib.request.urlopen(req, timeout=20) as r:
             res = _json.loads(r.read())
-        rid = res.get('data', {}).get('id', '')
+        return res.get('data', {}).get('id', '')
+
+    # Post a reply via X API v2; on 401 → refresh once and retry.
+    try:
+        try:
+            rid = _post_reply(acct.access_token)
+        except urllib.error.HTTPError as e:
+            if e.code == 401:
+                logging.info("[Outreach] 401 on reply — refreshing token and retrying once")
+                new_tk = _refresh_oauth2_token(acct)
+                if not new_tk:
+                    c.status = 'failed'
+                    c.error = ('HTTP 401 — token expired and refresh failed. '
+                               f'Reconnect the Twitter account on agent #{c.agent_id}.')
+                    c.decided_at = datetime.utcnow()
+                    orchestrator.db.commit()
+                    return jsonify({'error': c.error}), 401
+                rid = _post_reply(new_tk)
+            else:
+                raise
         c.status = 'sent'
         c.reply_tweet_id = str(rid)
         c.decided_at = datetime.utcnow()
