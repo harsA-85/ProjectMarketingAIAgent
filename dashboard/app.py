@@ -1657,29 +1657,45 @@ def publish_content_now(content_id):
                     return None
 
             def _twitter_upload_media_bearer(img_bytes, tk):
-                """Upload an image via v1.1 media/upload using OAuth2 bearer
-                (needs media.write scope). Returns media_id_string or None."""
+                """Upload an image via the v2 media/upload endpoint using OAuth2 bearer
+                (needs media.write scope). The legacy v1.1 endpoint no longer accepts
+                OAuth2 user-context bearer tokens — must use api.x.com/2/media/upload.
+                Returns media_id string (or media_key for v2) or None."""
                 if not img_bytes:
                     return None
                 try:
-                    b64 = base64.b64encode(img_bytes).decode()
-                    body = _urlencode({'media_data': b64, 'media_category': 'tweet_image'}).encode()
+                    import uuid as _u
+                    boundary = '----' + _u.uuid4().hex
+                    parts = []
+                    # 'media' file field
+                    parts.append(f'--{boundary}\r\nContent-Disposition: form-data; name="media"; filename="img.jpg"\r\nContent-Type: image/jpeg\r\n\r\n'.encode())
+                    parts.append(img_bytes)
+                    # 'media_category' form field (required by v2)
+                    parts.append(f'\r\n--{boundary}\r\nContent-Disposition: form-data; name="media_category"\r\n\r\ntweet_image\r\n--{boundary}--\r\n'.encode())
+                    body = b''.join(parts)
                     req = urllib.request.Request(
-                        'https://upload.twitter.com/1.1/media/upload.json',
+                        'https://api.x.com/2/media/upload',
                         data=body, method='POST'
                     )
                     req.add_header('Authorization', f'Bearer {tk}')
-                    req.add_header('Content-Type', 'application/x-www-form-urlencoded')
+                    req.add_header('Content-Type', f'multipart/form-data; boundary={boundary}')
                     with urllib.request.urlopen(req, timeout=30) as r:
                         res = jsonlib.loads(r.read())
-                        mid = str(res.get('media_id_string') or res.get('media_id') or '')
+                        # v2 returns {"data": {"id": "...", "media_key": "..."}}
+                        data = res.get('data') if isinstance(res, dict) else None
+                        mid = ''
+                        if isinstance(data, dict):
+                            mid = str(data.get('id') or data.get('media_key') or '')
+                        # Some responses keep legacy keys
+                        if not mid:
+                            mid = str(res.get('media_id_string') or res.get('media_id') or '')
                         if mid:
                             logging.info(f"[Twitter] media uploaded (id={mid})")
                         return mid or None
                 except urllib.error.HTTPError as e:
                     body = e.read().decode('utf-8', errors='replace')
-                    logging.warning(f"[Twitter] media upload failed {e.code}: {body[:200]} "
-                                    f"(tweet will post text-only). If 403/scope: reconnect the account to grant media.write.")
+                    logging.warning(f"[Twitter] media upload failed {e.code}: {body[:300]} "
+                                    f"(tweet will post text-only).")
                     return None
                 except Exception as _ue:
                     logging.warning(f"[Twitter] media upload error: {_ue} (posting text-only)")
