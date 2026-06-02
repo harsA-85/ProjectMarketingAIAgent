@@ -221,10 +221,15 @@ def _build_person_card(name: str, city: str | None, body_text: str = '') -> str:
     draw.ellipse([cx - radius, cy - radius, cx + radius, cy + radius], fill=circle_color)
 
     # Initial (single letter — these tweets don't include last names).
-    # Use anchor='mm' (middle/middle) so PIL handles glyph bearing/baseline
-    # correctly — manual bbox-based centering is off by the left bearing.
+    # Center on the GLYPH INK bbox (not the font's metric box). anchor='mm'
+    # centers on the metric box which includes descender space, so capitals
+    # like "A" sit visually too low. Computing the ink bbox and offsetting
+    # from there gives true visual centering for any letter.
     initial = name[0].upper()
-    draw.text((cx, cy), initial, fill=text_color, font=fonts['huge'], anchor='mm')
+    ink_bbox = draw.textbbox((0, 0), initial, font=fonts['huge'])
+    ink_cx = (ink_bbox[0] + ink_bbox[2]) / 2
+    ink_cy = (ink_bbox[1] + ink_bbox[3]) / 2
+    draw.text((cx - ink_cx, cy - ink_cy), initial, fill=text_color, font=fonts['huge'])
 
     fr = _is_french(body_text or '', city)
 
