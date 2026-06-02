@@ -20,18 +20,20 @@ TING_PULSE_AGENT_NAME = "Ting Pulse"
 
 # Search queries — FR + EN. -is:retweet to skip RTs. Each query costs a little
 # API credit per scan, so keep the list focused on real buyer/seller intent.
+# NOTE: X recent-search only covers the LAST ~7 DAYS, and apostrophes inside
+# quoted phrases break matching (X tokenizes on '). So FR queries avoid quoted
+# apostrophes and combine an exact noun phrase (AND) with an OR-group of intent
+# words. Breadth is tuned to catch real buyer/seller intent without pure noise.
 DEFAULT_QUERIES = [
-    # ── FRENCH — seeking an agent ────────────────────────────────
-    '("cherche un agent immobilier" OR "connais un bon agent immobilier" OR "connaît un bon agent immobilier") -is:retweet lang:fr',
-    '("recommande un agent immobilier" OR "recommandez un agent" OR "conseillez un agent immobilier") -is:retweet lang:fr',
-    '("bon agent immobilier" (Paris OR Lyon OR Bordeaux OR Marseille OR Nantes OR Lille)) -is:retweet lang:fr',
+    # ── FRENCH — seeking / recommending an agent ─────────────────
+    '("agent immobilier" OR "agent immo") (cherche OR recherche OR recommande OR recommandation OR connait OR "connaît" OR conseille OR "quelqu un") -is:retweet lang:fr',
+    '("agence immobilière" OR "agent immobilier") (recommandation OR conseil OR "à conseiller" OR fiable OR sérieux) -is:retweet lang:fr',
     # ── FRENCH — fee / agency frustration ────────────────────────
-    '("frais d\'agence" (abusifs OR scandaleux OR "trop chers" OR exorbitants)) -is:retweet lang:fr',
-    '("marre des agences" OR "agent immobilier" (arnaque OR déçu OR nul)) -is:retweet lang:fr',
+    '("agent immobilier" OR "agence immobilière" OR "frais d agence") (galère OR arnaque OR nul OR "déçu" OR "trop cher" OR honteux OR abusif) -is:retweet lang:fr',
     # ── FRENCH — buying / selling intent ─────────────────────────
-    '("je cherche à acheter" (appartement OR maison) (Paris OR Lyon OR Bordeaux)) -is:retweet lang:fr',
-    '("vendre mon appartement" OR "vendre ma maison" (agence OR agent OR comment)) -is:retweet lang:fr',
-    '("premier achat immobilier" OR "première fois" "acheter" appartement) -is:retweet lang:fr',
+    '("acheter un appartement" OR "acheter une maison" OR "achat immobilier") (conseil OR aide OR agent OR agence OR comment OR "première fois") -is:retweet lang:fr',
+    '("vendre mon appartement" OR "vendre ma maison" OR "vendre mon bien") (agent OR agence OR comment OR conseil) -is:retweet lang:fr',
+    '("primo-accédant" OR "primo accédant" OR "premier achat") (immobilier OR appartement OR maison OR agent) -is:retweet lang:fr',
     # ── ENGLISH — seeking an agent ───────────────────────────────
     '("looking for a real estate agent" OR "need a good realtor" OR "recommend a realtor") -is:retweet lang:en',
     '("any realtor recommendations" OR "real estate agent recommendations" OR "recommend a real estate agent") -is:retweet lang:en',

@@ -738,9 +738,18 @@ def outreach_send(cid):
         return jsonify({'ok': True, 'reply_tweet_id': str(rid)}), 200
     except urllib.error.HTTPError as e:
         body = e.read().decode('utf-8', errors='replace')
+        c.decided_at = datetime.utcnow()
+        # 403 with "Reply to this conversation is not allowed" = the tweet's
+        # author restricted who can reply. Not our error — nothing to retry.
+        # Mark 'blocked' and surface a clear, non-alarming message.
+        if e.code == 403 and ('not allowed' in body.lower() or 'forbidden' in body.lower()):
+            c.status = 'blocked'
+            c.error = "L'auteur a restreint les réponses à ce tweet (réglage X). Impossible de répondre — passe au suivant."
+            orchestrator.db.commit()
+            logging.info(f'[Outreach] reply blocked by author settings on {c.source_tweet_id}')
+            return jsonify({'error': c.error, 'blocked': True}), 200
         c.status = 'failed'
         c.error = f'HTTP {e.code}: {body[:300]}'
-        c.decided_at = datetime.utcnow()
         orchestrator.db.commit()
         logging.warning(f'[Outreach] send failed {e.code}: {body[:200]}')
         return jsonify({'error': c.error}), 400

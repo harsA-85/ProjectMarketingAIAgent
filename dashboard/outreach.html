@@ -41,6 +41,7 @@
   .status-chip{font-size:10px;font-weight:700;padding:2px 9px;border-radius:6px;text-transform:uppercase}
   .status-sent{background:rgba(29,155,84,.12);color:var(--success)}
   .status-dismissed{background:rgba(0,0,0,.06);color:var(--text-3)}
+  .status-blocked{background:rgba(201,138,0,.14);color:var(--warning)}
   .status-failed{background:rgba(224,36,94,.12);color:var(--danger)}
   .spinner{display:inline-block;width:13px;height:13px;border:2px solid rgba(255,255,255,.4);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite;vertical-align:-2px}
   @keyframes spin{to{transform:rotate(360deg)}}
@@ -66,6 +67,7 @@
     <div class="tab active" data-status="pending" onclick="setTab('pending')">À valider</div>
     <div class="tab" data-status="sent" onclick="setTab('sent')">Envoyées</div>
     <div class="tab" data-status="dismissed" onclick="setTab('dismissed')">Ignorées</div>
+    <div class="tab" data-status="blocked" onclick="setTab('blocked')">🔒 Bloquées</div>
     <div class="tab" data-status="failed" onclick="setTab('failed')">Échecs</div>
   </div>
 
@@ -162,8 +164,15 @@ async function send(id){
       body: JSON.stringify({draft_reply:text})
     });
     const res = await r.json();
-    if(r.ok){ toast('✅ Réponse publiée'); document.getElementById(`card-${id}`).remove(); }
-    else{ toast('❌ '+(res.error||'Échec')); btn.disabled=false; btn.textContent='Envoyer la réponse'; }
+    if(res.blocked){
+      // X author restricted replies — not our error. Remove card, move on.
+      toast('🔒 '+(res.error||'Réponses restreintes par l\'auteur'));
+      document.getElementById(`card-${id}`).remove();
+    } else if(r.ok){
+      toast('✅ Réponse publiée'); document.getElementById(`card-${id}`).remove();
+    } else {
+      toast('❌ '+(res.error||'Échec')); btn.disabled=false; btn.textContent='Envoyer la réponse';
+    }
   }catch(e){ toast('Erreur : '+e.message); btn.disabled=false; btn.textContent='Envoyer la réponse'; }
 }
 
