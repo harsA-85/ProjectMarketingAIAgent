@@ -73,7 +73,12 @@ def _app_bearer() -> str | None:
 
 
 def _search_recent(bearer: str, query: str, limit: int) -> list:
-    """Return list of {id, text, author_id, lang, username} for a query."""
+    """Return list of {id, text, author_id, lang, username} for a query.
+    Forces -is:reply so we only get ORIGINAL tweets — replying to a tweet that
+    is itself inside someone else's conversation triggers X's conversation-level
+    reply restrictions (403). Original tweets allow replies by default."""
+    if '-is:reply' not in query:
+        query = query + ' -is:reply'
     params = urllib.parse.urlencode({
         'query': query,
         'max_results': max(10, min(limit, 100)),
@@ -185,6 +190,11 @@ def scan_outreach(queries: list | None = None) -> dict:
                     break
                 # Skip our own tweets
                 if (tw.get('username') or '').lower() in own_handles:
+                    skipped += 1
+                    continue
+                # Guard: skip tweets that are replies-in-thread (text starts with @).
+                # Replying to these hits conversation-level reply restrictions (403).
+                if (tw.get('text') or '').lstrip().startswith('@'):
                     skipped += 1
                     continue
                 # Dedupe — already have a candidate for this tweet?
