@@ -112,18 +112,21 @@ def _draft_reply(llm, tweet_text: str, lang: str, persona: str) -> str:
         instr = (
             "Tu réponds à ce tweet d'une personne qui cherche un agent immobilier ou se plaint "
             "des frais d'agence. Écris une réponse COURTE (1-2 phrases), humaine, utile, jamais "
-            "spam. Ton: serviable, pair-à-pair, pas commercial. Tu peux suggérer Ting (ting.co) "
-            "comme moyen de trouver des agents vérifiés qui travaillent VRAIMENT pour l'acheteur "
-            "— mais seulement si c'est naturel, sans hard-sell, sans emojis à outrance. "
-            "Pas de hashtags. N'invente pas de promesses. Si le lien n'a pas sa place, n'en mets pas."
+            "spam. Ton: serviable, pair-à-pair, pas commercial. Tu peux mentionner Ting (par son "
+            "nom, comme une plateforme qui aide à trouver des agents vérifiés travaillant VRAIMENT "
+            "pour l'acheteur) — seulement si c'est naturel, sans hard-sell, sans emojis à outrance. "
+            "IMPORTANT : n'écris JAMAIS d'URL, de lien ou de domaine (pas de ting.co, pas de .com, "
+            "pas de http). Mentionne juste le nom 'Ting' ou '@ting'. Pas de hashtags. N'invente pas de promesses."
         )
     else:
         instr = (
             "You're replying to someone looking for a real estate agent (or complaining about "
             "agent fees). Write a SHORT (1-2 sentence), human, genuinely helpful reply — never "
-            "spammy. Tone: peer-to-peer, not salesy. You may mention Ting (ting.co) as a way to "
-            "find vetted agents who actually work for the buyer — ONLY if it fits naturally, no "
-            "hard sell, no emoji spam, no hashtags. Don't over-promise. If a link doesn't fit, skip it."
+            "spammy. Tone: peer-to-peer, not salesy. You may mention Ting BY NAME (a platform that "
+            "helps find vetted agents who actually work for the buyer) — ONLY if it fits naturally, "
+            "no hard sell, no emoji spam, no hashtags. "
+            "IMPORTANT: NEVER write a URL, link, or domain (no ting.co, no .com, no http). Just say "
+            "the name 'Ting' or '@ting'. Don't over-promise."
         )
     prompt = (
         f"{instr}\n\nPersona of the account replying: {persona}\n\n"

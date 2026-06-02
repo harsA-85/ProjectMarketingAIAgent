@@ -319,7 +319,7 @@ def _build_city_pulse_card(n: int, city: str | None, body_text: str) -> str:
     _draw_centered(draw, sub, fonts['sub'], 610, size, (110, 116, 135))
 
     # Footer
-    _draw_centered(draw, 'ting.co', fonts['small'], 940, size, (140, 145, 165))
+    _draw_centered(draw, 'ting', fonts['small'], 940, size, (140, 145, 165))
 
     buf = io.BytesIO()
     img.save(buf, format='JPEG', quality=92)
@@ -359,7 +359,7 @@ def _build_generic_card(text: str) -> str:
         _draw_centered(draw, ln, fonts['word'], y, size, (25, 28, 42))
         y += line_h
 
-    _draw_centered(draw, 'ting.co', fonts['small'], size - 90, size, (160, 165, 180))
+    _draw_centered(draw, 'ting', fonts['small'], size - 90, size, (160, 165, 180))
 
     buf = io.BytesIO()
     img.save(buf, format='JPEG', quality=92)

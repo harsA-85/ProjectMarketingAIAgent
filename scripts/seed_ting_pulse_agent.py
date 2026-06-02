@@ -38,7 +38,8 @@ AGENT_DEFAULTS = {
     'tone_of_voice': (
         "Terse, factual, status-feed flat tone. No emoji unless functional. No slogans, no hype, no growth "
         "metrics, no exclamation points, no '10k users' announcements. Just one short concrete activity per "
-        "tweet. Sometimes adds the platform handle 'ting.co' or '@ting' at the end, but not always."
+        "tweet. Sometimes adds the @-handle '@ting' at the end, but not always. "
+        "NEVER write a URL, domain, or link (no ting.co, no ting.com, no http) — handle mentions only."
     ),
     'bio': (
         "Live signup & agent-request feed from Ting. Buyers, sellers, neighborhoods, minutes ago."
@@ -118,7 +119,7 @@ HARD RULES
 - Property types when used: studio, 1-bed, 2-bed, 3-bed, loft, townhouse, brownstone, co-op, condo, duplex, garden apartment, pied-à-terre, family apartment.
 - Vary the time phrasing: "just now", "30 seconds ago", "1 min ago", "2 mins ago", "4 minutes ago", "7 mins ago", "11 mins ago", "23 minutes ago", "an hour ago".
 - Vary the verb pattern. Do NOT start every tweet the same way.
-- Optional final tag at end (use on roughly 1 in 4 tweets, not more): "via @ting" or "ting.co" — never both. Most tweets should NOT have it.
+- Optional final tag (roughly 1 in 5 tweets): "via @ting" — the @-handle ONLY. NEVER put a URL, domain, or link (no ting.co, no ting.com, no http://). Most tweets should have NO tag at all.
 - NO hashtags inside the body. The hashtags array stays empty or has at most 1 functional tag like "RealEstate" — use sparingly.
 
 Respond with ONLY a valid JSON object, no markdown, no code fences:
