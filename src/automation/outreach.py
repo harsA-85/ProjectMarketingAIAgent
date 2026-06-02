@@ -82,7 +82,7 @@ def _search_recent(bearer: str, query: str, limit: int) -> list:
     params = urllib.parse.urlencode({
         'query': query,
         'max_results': max(10, min(limit, 100)),
-        'tweet.fields': 'lang,created_at,author_id',
+        'tweet.fields': 'lang,created_at,author_id,reply_settings',
         'expansions': 'author_id',
         'user.fields': 'username',
     })
@@ -102,12 +102,17 @@ def _search_recent(bearer: str, query: str, limit: int) -> list:
     users = {u['id']: u.get('username') for u in data.get('includes', {}).get('users', [])}
     out = []
     for t in data.get('data', [])[:limit]:
+        # Only keep tweets anyone can reply to. Skip 'mentionedUsers' /
+        # 'following' / 'subscribers' — we'd 403 on those.
+        if t.get('reply_settings', 'everyone') != 'everyone':
+            continue
         out.append({
             'id': t['id'],
             'text': t.get('text', ''),
             'author_id': t.get('author_id'),
             'username': users.get(t.get('author_id')),
             'lang': t.get('lang'),
+            'reply_settings': t.get('reply_settings'),
         })
     return out
 
