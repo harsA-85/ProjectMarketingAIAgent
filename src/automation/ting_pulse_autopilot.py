@@ -30,6 +30,12 @@ log = logging.getLogger(__name__)
 
 AGENT_NAME = "Ting Pulse"
 IMAGE_RATIO = 0.17           # ~1 in 6 tweets gets a card image
+HASHTAG_RATIO = 0.20         # ~1 in 5 tweets gets ONE thematic hashtag
+# Light-touch discoverability: a SINGLE topical tag, never a city, never stacked.
+# X de-prioritizes hashtags and treats stacks as spam — so we keep it rare and
+# minimal so it reads natural and doesn't hurt a fresh account's standing.
+HASHTAG_FR = "#immobilier"
+HASHTAG_EN = "#realEstate"
 MIN_POOL_AFTER_PLAN = 30     # if drafts left < this, regen
 TARGET_MIN = 3
 TARGET_MAX = 25
@@ -376,6 +382,27 @@ def _build_ting_card(text: str) -> str:
     return _build_generic_card(text)
 
 
+def _tw_weighted_len(s: str) -> int:
+    """Twitter-style length: chars beyond the BMP (most emoji) count as 2."""
+    return sum(2 if ord(ch) > 0xFFFF else 1 for ch in s)
+
+
+def _maybe_add_hashtag(body: str) -> str:
+    """Roughly 1 in 5 tweets gets ONE topical hashtag appended (FR #immobilier /
+    EN #realEstate). Skips if the body already has a '#', if it wouldn't fit in
+    260 weighted chars, or on the (4 in 5) no-tag roll. Never adds a city tag,
+    never stacks — that keeps it from looking spammy to X's filters."""
+    if not body or '#' in body:
+        return body
+    if random.random() >= HASHTAG_RATIO:
+        return body
+    tag = HASHTAG_FR if _is_french(body, _extract_city(body)) else HASHTAG_EN
+    candidate = f"{body.rstrip()} {tag}"
+    if _tw_weighted_len(candidate) > 260:
+        return body
+    return candidate
+
+
 # ─── Scheduling math ──────────────────────────────────────────────────────
 def _plan_bursts(n: int, day_start_utc: datetime, earliest_utc: datetime | None = None) -> list:
     """Distribute n tweets across the day with bursty cluster behavior.
@@ -516,6 +543,7 @@ def _plan_day(day_utc: date | None = None):
         # Apply scheduling + maybe attach a PIL card
         n_scheduled = 0
         n_with_img = 0
+        n_with_tag = 0
         for c, t in zip(chosen, times):
             c.status = 'scheduled'
             c.scheduled_at = t
@@ -533,10 +561,16 @@ def _plan_day(day_utc: date | None = None):
                     n_with_img += 1
                 except Exception as ie:
                     log.warning(f'[TingPulse] card build failed for draft #{c.id}: {ie}')
+            # Light-touch hashtag (after card build so the image stays clean).
+            new_body = _maybe_add_hashtag(c.body or '')
+            if new_body != c.body:
+                c.body = new_body
+                n_with_tag += 1
             db.add(c)
             n_scheduled += 1
         db.commit()
-        log.info(f'[TingPulse] ✅ Scheduled {n_scheduled} tweets for {day_utc} ({n_with_img} with card image).')
+        log.info(f'[TingPulse] ✅ Scheduled {n_scheduled} tweets for {day_utc} '
+                 f'({n_with_img} with card image, {n_with_tag} with hashtag).')
 
         # Top up the pool for tomorrow if we're now below threshold
         remaining = db.query(Content).filter(
