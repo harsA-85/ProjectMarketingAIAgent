@@ -2197,7 +2197,11 @@ function createIgPreview(post) {
 function createTwPreview(post) {
     const username = getUsername();
     const images   = _ensureArray(post.media_urls);
-    const dt = post.created_at ? new Date(post.created_at) : new Date();
+    // Show the REAL timestamp: published_at for published posts (when it actually
+    // went out), scheduled_at for scheduled ones, else created_at. Using created_at
+    // for everything made every card read the bulk-seed date (e.g. "Jun 2").
+    const tsRaw = post.published_at || (post.status === 'scheduled' ? post.scheduled_at : null) || post.created_at;
+    const dt = tsRaw ? new Date(tsRaw) : new Date();
     const timeStr  = dt.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
     const dateStr  = dt.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
 
