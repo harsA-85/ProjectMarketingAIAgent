@@ -1780,40 +1780,44 @@ def publish_content_now(content_id):
 
             _has_oauth1 = all([_api_key, _api_secret, _acc_token, _acc_secret])
 
-            # Try OAuth 2.0 Bearer first, fall back to OAuth 1.0a on 403
+            # Publish ONLY via the agent's own OAuth 2.0 user-context token.
+            #
+            # IMPORTANT: there is deliberately NO OAuth 1.0a fallback here. The
+            # OAuth1 app credentials (TWITTER_ACCESS_TOKEN/SECRET) belong to a
+            # SINGLE X account (the dev account, @marcus_offmark). Falling back to
+            # them published every other agent's failed tweet onto that one
+            # account — e.g. Ting Pulse posts (which 403 because the fresh account
+            # is reply/anti-spam restricted) ended up on Marcus's timeline. A
+            # failed publish must FAIL, never post under a different identity.
             try:
                 tweet_id = _bearer_do_tweet(token, tweet_text)
-                logging.info("[Twitter] Posted via OAuth 2.0 Bearer")
+                logging.info(f"[Twitter] Posted via OAuth2 as @{acct.username}")
                 return True, tweet_id
             except urllib.error.HTTPError as e:
                 body = e.read().decode('utf-8', errors='replace')
-                logging.error(f"[Twitter] Bearer error {e.code}: {body[:300]}")
+                logging.error(f"[Twitter] Bearer error {e.code} for @{acct.username}: {body[:300]}")
 
-                # 401 = expired token → try refresh
+                # 401 = expired token → refresh once and retry (same account only)
                 if e.code == 401 and acct.refresh_token:
-                    logging.info("[Twitter] Token expired (401), refreshing...")
+                    logging.info(f"[Twitter] Token expired (401) for @{acct.username}, refreshing...")
                     new_token = _refresh_twitter_token(acct)
                     if new_token:
                         try:
                             tweet_id = _bearer_do_tweet(new_token, tweet_text)
-                            logging.info("[Twitter] Posted via OAuth 2.0 Bearer (refreshed)")
+                            logging.info(f"[Twitter] Posted via OAuth2 as @{acct.username} (refreshed)")
                             return True, tweet_id
-                        except urllib.error.HTTPError:
-                            pass  # fall through to OAuth 1.0a
+                        except urllib.error.HTTPError as e1:
+                            b1 = e1.read().decode('utf-8', errors='replace')
+                            logging.error(f"[Twitter] Refreshed bearer still failed {e1.code} for @{acct.username}: {b1[:300]}")
+                            raise RuntimeError(f"Twitter API error {e1.code} for @{acct.username}: {b1[:200]}")
 
-                # 403 = permission issue → fall back to OAuth 1.0a
-                if _has_oauth1 and e.code in (401, 403):
-                    logging.info("[Twitter] Falling back to OAuth 1.0a...")
-                    try:
-                        tweet_id = _oauth1_do_tweet(tweet_text)
-                        logging.info("[Twitter] Posted via OAuth 1.0a")
-                        return True, tweet_id
-                    except urllib.error.HTTPError as e2:
-                        body2 = e2.read().decode('utf-8', errors='replace')
-                        logging.error(f"[Twitter] OAuth1.0a also failed {e2.code}: {body2[:300]}")
-                        raise RuntimeError(f"Twitter API error {e2.code}: {body2[:300]}")
+                if e.code == 403:
+                    raise RuntimeError(
+                        f"Twitter 403 for @{acct.username}: account is restricted from this action "
+                        f"(likely anti-spam on a new account). Not falling back to another account. {body[:160]}"
+                    )
 
-                raise RuntimeError(f"Twitter API error {e.code}: {body[:300]}")
+                raise RuntimeError(f"Twitter API error {e.code} for @{acct.username}: {body[:300]}")
 
         if account and account.access_token:
             try:
@@ -1846,7 +1850,15 @@ def publish_content_now(content_id):
                 'platform_post_id': str(platform_result)
             }), 200
         else:
-            # Failed — keep as draft so user can retry
+            # Failed. If it's a hard 403 / account-restriction, mark the post
+            # 'failed' so the 60s SchedPub poller stops re-attempting it every
+            # minute (which would hammer X and worsen anti-spam standing on a
+            # restricted account). Transient errors stay 'scheduled' for retry.
+            err_l = (platform_error or '').lower()
+            is_hard = ('403' in err_l) or ('restricted' in err_l) or ('401' in err_l and 'refresh' in err_l)
+            if is_hard and post.status == 'scheduled':
+                post.status = 'failed'
+                logging.warning(f"[Publish] #{content_id} marked 'failed' (hard error, no retry): {platform_error[:160]}")
             orchestrator.db.commit()
             return jsonify({
                 'content_id': content_id,
