@@ -1040,8 +1040,9 @@ def test_image_generation():
     """Smoke-test: generate one image and return its size."""
     import traceback
     try:
-        from src.api.image_generator import GeminiImageGenerator
-        gen = GeminiImageGenerator()
+        from src.api.image_generator import get_image_generator
+        provider = request.args.get('provider')  # 'openai' | 'gemini' | None
+        gen = get_image_generator(provider)
         img = gen.generate_image(
             "A beautiful sunny real estate property exterior, ultra realistic photography."
         )
@@ -4634,8 +4635,8 @@ def _generate_carousel_images(title: str, description: str, deliverable: str, br
     import os, uuid, base64
     results = []
     try:
-        from src.api.image_generator import GeminiImageGenerator
-        gen = GeminiImageGenerator()
+        from src.api.image_generator import get_image_generator
+        gen = get_image_generator()
 
         slide_texts = _extract_slide_texts(deliverable)
         if not slide_texts:
@@ -4686,8 +4687,8 @@ def _generate_task_images(title, description, reply_text):
     import re, uuid, base64
     results = []
     try:
-        from src.api.image_generator import GeminiImageGenerator
-        gen = GeminiImageGenerator()
+        from src.api.image_generator import get_image_generator
+        gen = get_image_generator()
 
         # Extract image prompts from the LLM reply (prompt engineers write prompts)
         prompts = []
